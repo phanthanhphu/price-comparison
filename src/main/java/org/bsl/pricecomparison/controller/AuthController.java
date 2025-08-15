@@ -1,0 +1,61 @@
+package org.bsl.pricecomparison.controller;
+
+import org.bsl.pricecomparison.model.User;
+import org.bsl.pricecomparison.security.JwtUtil;
+import org.bsl.pricecomparison.service.UserService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    private final UserService userService;
+    private final JwtUtil jwtUtil;
+
+    public AuthController(UserService userService, JwtUtil jwtUtil) {
+        this.userService = userService;
+        this.jwtUtil = jwtUtil;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+        Optional<User> userOpt = userService.findByEmail(loginRequest.getEmail());
+
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(401).body("Email hoặc mật khẩu không đúng");
+        }
+
+        User user = userOpt.get();
+
+        if (!user.getPassword().equals(loginRequest.getPassword())) {
+            return ResponseEntity.status(401).body("Email hoặc mật khẩu không đúng");
+        }
+
+        String token = jwtUtil.generateToken(user.getEmail(), user.getRole());
+
+        return ResponseEntity.ok(new LoginResponse(token));
+    }
+
+    public static class LoginRequest {
+        private String email;
+        private String password;
+
+        // getters và setters
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
+    }
+
+    public static class LoginResponse {
+        private String token;
+
+        public LoginResponse(String token) { this.token = token; }
+        public String getToken() { return token; }
+        public void setToken(String token) { this.token = token; }
+    }
+}
