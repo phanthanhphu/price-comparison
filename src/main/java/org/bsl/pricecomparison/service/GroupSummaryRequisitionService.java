@@ -5,6 +5,7 @@ import org.bsl.pricecomparison.model.SummaryRequisition;
 import org.bsl.pricecomparison.repository.GroupSummaryRequisitionRepository;
 import org.bsl.pricecomparison.repository.SummaryRequisitionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
 
@@ -28,9 +29,16 @@ public class GroupSummaryRequisitionService {
     }
 
     public Optional<GroupSummaryRequisition> updateGroupSummaryRequisition(String id, GroupSummaryRequisition groupSummaryRequisition) {
-        if (groupSummaryRequisitionRepository.existsById(id)) {
-            groupSummaryRequisition.setId(id);
-            return Optional.of(groupSummaryRequisitionRepository.save(groupSummaryRequisition));
+        Optional<GroupSummaryRequisition> existingGroup = groupSummaryRequisitionRepository.findById(id);
+        if (existingGroup.isPresent()) {
+            GroupSummaryRequisition updatedGroup = existingGroup.get();
+
+            updatedGroup.setName(groupSummaryRequisition.getName());
+            updatedGroup.setStatus(groupSummaryRequisition.getStatus());
+            updatedGroup.setCreatedBy(groupSummaryRequisition.getCreatedBy());
+            updatedGroup.setCreatedDate(groupSummaryRequisition.getCreatedDate());  // Nếu ngày được set trong controller
+
+            return Optional.of(groupSummaryRequisitionRepository.save(updatedGroup));
         }
         return Optional.empty();
     }
@@ -54,6 +62,10 @@ public class GroupSummaryRequisitionService {
 
     public List<GroupSummaryRequisition> getAllGroupSummaryRequisitions() {
         return groupSummaryRequisitionRepository.findAll();
+    }
+
+    public Page<GroupSummaryRequisition> getAllGroupSummaryRequisitions(Pageable pageable) {
+        return groupSummaryRequisitionRepository.findAll(pageable);
     }
 
     public List<GroupSummaryRequisition> searchGroupSummaryRequisitionsByName(String name) {

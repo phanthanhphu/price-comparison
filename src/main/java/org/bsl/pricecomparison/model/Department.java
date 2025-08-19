@@ -2,6 +2,9 @@ package org.bsl.pricecomparison.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.Indexed;
+
+import java.time.LocalDateTime;
 
 @Document(collection = "departments")
 public class Department {
@@ -12,12 +15,19 @@ public class Department {
     private String name;
     private String englishName;
 
-    public Department() {}
+    @Indexed
+    private LocalDateTime createdAt;
+
+    public Department() {
+        // Set createdAt when creating a new department
+        this.createdAt = LocalDateTime.now();
+    }
 
     public Department(String id, String name, String englishName) {
         this.id = id;
         this.name = name;
         this.englishName = englishName;
+        this.createdAt = LocalDateTime.now();
     }
 
     public String getId() {
@@ -42,5 +52,13 @@ public class Department {
 
     public void setEnglishName(String englishName) {
         this.englishName = englishName;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }
