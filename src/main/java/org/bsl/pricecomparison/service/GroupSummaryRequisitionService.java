@@ -25,8 +25,18 @@ public class GroupSummaryRequisitionService {
     private SummaryRequisitionRepository summaryRequisitionRepository;
 
     public GroupSummaryRequisition createGroupSummaryRequisition(GroupSummaryRequisition groupSummaryRequisition) {
+        boolean exists = groupSummaryRequisitionRepository
+                .findByNameContainingIgnoreCase(groupSummaryRequisition.getName())
+                .stream()
+                .anyMatch(g -> g.getName().equalsIgnoreCase(groupSummaryRequisition.getName()));
+
+        if (exists) {
+            throw new IllegalArgumentException("Group with name '" + groupSummaryRequisition.getName() + "' already exists");
+        }
+
         return groupSummaryRequisitionRepository.save(groupSummaryRequisition);
     }
+
 
     public Optional<GroupSummaryRequisition> updateGroupSummaryRequisition(String id, GroupSummaryRequisition groupSummaryRequisition) {
         Optional<GroupSummaryRequisition> existingGroup = groupSummaryRequisitionRepository.findById(id);
@@ -34,6 +44,7 @@ public class GroupSummaryRequisitionService {
             GroupSummaryRequisition updatedGroup = existingGroup.get();
 
             updatedGroup.setName(groupSummaryRequisition.getName());
+            updatedGroup.setType(groupSummaryRequisition.getType());
             updatedGroup.setStatus(groupSummaryRequisition.getStatus());
             updatedGroup.setCreatedBy(groupSummaryRequisition.getCreatedBy());
             updatedGroup.setCreatedDate(groupSummaryRequisition.getCreatedDate());  // Nếu ngày được set trong controller

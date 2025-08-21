@@ -12,16 +12,19 @@ public class GroupSummaryRequisition {
     private String id;
     private String name;
     private String status;
+    private String type;
     private LocalDateTime createdDate;
     private String createdBy;
 
     public GroupSummaryRequisition() {
     }
 
-    public GroupSummaryRequisition(String id, String name, String status, LocalDateTime createdDate, String createdBy) {
+    public GroupSummaryRequisition(String id, String name, String status, String type,
+                                   LocalDateTime createdDate, String createdBy) {
         this.id = id;
         this.name = name;
         this.status = status;
+        this.type = type;
         this.createdDate = createdDate;
         this.createdBy = createdBy;
     }
@@ -48,6 +51,14 @@ public class GroupSummaryRequisition {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getType() {   // getter
+        return type;
+    }
+
+    public void setType(String type) {   // setter
+        this.type = type;
     }
 
     public LocalDateTime getCreatedDate() {
