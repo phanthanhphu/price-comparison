@@ -3,6 +3,7 @@ package org.bsl.pricecomparison.model;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Document(collection = "summary_requisition")
@@ -26,14 +27,28 @@ public class SummaryRequisition {
     private String supplierId;
 
     private String groupId;
+    private String productType1Id;
+    private String productType2Id;
+
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+
+    private String fullDescription; // ✅ New field
+
+    // --- Constructors ---
 
     public SummaryRequisition() {
     }
 
-    public SummaryRequisition(String id, int no, String englishName, String vietnameseName, String oldSapCode,
-                              String newSapCode, Map<String, Double> departmentRequestQty,
+    public SummaryRequisition(String id, int no, String englishName, String vietnameseName,
+                              String oldSapCode, String newSapCode,
+                              Map<String, Double> departmentRequestQty,
                               double stock, double purchasingSuggest,
-                              String reason, String remark, String supplierId, String groupId) {
+                              String reason, String remark,
+                              String supplierId, String groupId,
+                              String productType1Id, String productType2Id,
+                              LocalDateTime createdAt, LocalDateTime updatedAt,
+                              String fullDescription) {
         this.id = id;
         this.no = no;
         this.englishName = englishName;
@@ -46,8 +61,15 @@ public class SummaryRequisition {
         this.reason = reason;
         this.remark = remark;
         this.supplierId = supplierId;
-        this.groupId = groupId;  // Gán giá trị cho groupId
+        this.groupId = groupId;
+        this.productType1Id = productType1Id;
+        this.productType2Id = productType2Id;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.fullDescription = fullDescription;
     }
+
+    // --- Getters and Setters ---
 
     public String getId() {
         return id;
@@ -152,6 +174,48 @@ public class SummaryRequisition {
     public void setGroupId(String groupId) {
         this.groupId = groupId;
     }
+
+    public String getProductType1Id() {
+        return productType1Id;
+    }
+
+    public void setProductType1Id(String productType1Id) {
+        this.productType1Id = productType1Id;
+    }
+
+    public String getProductType2Id() {
+        return productType2Id;
+    }
+
+    public void setProductType2Id(String productType2Id) {
+        this.productType2Id = productType2Id;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public String getFullDescription() {
+        return fullDescription;
+    }
+
+    public void setFullDescription(String fullDescription) {
+        this.fullDescription = fullDescription;
+    }
+
+    // --- Utility Methods ---
 
     public double calculateTotalRequestQty() {
         if (departmentRequestQty == null) return 0;

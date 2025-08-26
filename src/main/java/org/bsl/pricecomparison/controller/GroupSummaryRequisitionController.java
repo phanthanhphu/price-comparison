@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -83,5 +84,27 @@ public class GroupSummaryRequisitionController {
         Page<GroupSummaryRequisition> groupsPage = groupSummaryRequisitionService.getAllGroupSummaryRequisitions(pageable);
         return ResponseEntity.ok(groupsPage);
     }
+
+    @GetMapping("/filter")
+    public ResponseEntity<Page<GroupSummaryRequisition>> filterGroupSummaryRequisitions(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String createdBy,
+            @RequestParam(required = false) String type, // 👈 thêm dòng này
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdDate")));
+
+        Page<GroupSummaryRequisition> result = groupSummaryRequisitionService
+                .filterGroupSummaryRequisitions(name, status, createdBy, type, startDate, endDate, pageable);
+
+        return ResponseEntity.ok(result);
+    }
+
 
 }

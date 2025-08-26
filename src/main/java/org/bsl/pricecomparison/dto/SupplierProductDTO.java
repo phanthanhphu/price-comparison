@@ -1,57 +1,23 @@
-package org.bsl.pricecomparison.model;
+package org.bsl.pricecomparison.dto;
 
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.mongodb.core.mapping.Document;
-
-import java.time.LocalDateTime;
 import java.util.List;
 
-@Document(collection = "supplier_products")
-public class SupplierProduct {
-
-    @Id
+public class SupplierProductDTO {
     private String id;
-
     private String supplierCode;
     private String supplierName;
     private String sapCode;
     private String productFullName;
     private String productShortName;
     private String size;
-    private Double price;
+    private double price;
     private String unit;
-    private List<String> imageUrls; // Thay đổi từ String thành List<String>
-
+    private List<String> imageUrls; // Thay String imageUrl thành List<String> imageUrls
     private String productType1Id;
+    private String productType1Name;
     private String productType2Id;
+    private String productType2Name;
 
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-
-    public SupplierProduct() {
-    }
-
-    public SupplierProduct(String id, String supplierCode, String supplierName, String sapCode,
-                           String productFullName, String productShortName, String size,
-                           Double price, String unit, List<String> imageUrls,
-                           String productType1Id, String productType2Id) {
-        this.id = id;
-        this.supplierCode = supplierCode;
-        this.supplierName = supplierName;
-        this.sapCode = sapCode;
-        this.productFullName = productFullName;
-        this.productShortName = productShortName;
-        this.size = size;
-        this.price = price;
-        this.unit = unit;
-        this.imageUrls = imageUrls;
-        this.productType1Id = productType1Id;
-        this.productType2Id = productType2Id;
-    }
-
-    // Getters and Setters
     public String getId() {
         return id;
     }
@@ -108,11 +74,11 @@ public class SupplierProduct {
         this.size = size;
     }
 
-    public Double getPrice() {
+    public double getPrice() {
         return price;
     }
 
-    public void setPrice(Double price) {
+    public void setPrice(double price) {
         this.price = price;
     }
 
@@ -140,6 +106,14 @@ public class SupplierProduct {
         this.productType1Id = productType1Id;
     }
 
+    public String getProductType1Name() {
+        return productType1Name;
+    }
+
+    public void setProductType1Name(String productType1Name) {
+        this.productType1Name = productType1Name;
+    }
+
     public String getProductType2Id() {
         return productType2Id;
     }
@@ -148,19 +122,11 @@ public class SupplierProduct {
         this.productType2Id = productType2Id;
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+    public String getProductType2Name() {
+        return productType2Name;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public void setProductType2Name(String productType2Name) {
+        this.productType2Name = productType2Name;
     }
 }
