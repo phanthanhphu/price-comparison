@@ -1,8 +1,8 @@
 package org.bsl.pricecomparison.model;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
@@ -12,21 +12,20 @@ public class Department {
     @Id
     private String id;
 
-    private String name;
-    private String englishName;
+    private String division; // Tương ứng với cột "DIVISION"
+    private String departmentName; // Tương ứng với cột "DEPARTMENT (PER COST CENTER)"
 
     @Indexed
     private LocalDateTime createdAt;
 
     public Department() {
-        // Set createdAt when creating a new department
         this.createdAt = LocalDateTime.now();
     }
 
-    public Department(String id, String name, String englishName) {
+    public Department(String id, String division, String departmentName) {
         this.id = id;
-        this.name = name;
-        this.englishName = englishName;
+        this.division = division;
+        this.departmentName = departmentName;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -38,20 +37,20 @@ public class Department {
         this.id = id;
     }
 
-    public String getName() {
-        return name;
+    public String getDivision() {
+        return division;
     }
 
-    public void setName(String name) {
-        this.name = name;
+    public void setDivision(String division) {
+        this.division = division;
     }
 
-    public String getEnglishName() {
-        return englishName;
+    public String getDepartmentName() {
+        return departmentName;
     }
 
-    public void setEnglishName(String englishName) {
-        this.englishName = englishName;
+    public void setDepartmentName(String departmentName) {
+        this.departmentName = departmentName;
     }
 
     public LocalDateTime getCreatedAt() {

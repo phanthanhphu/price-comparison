@@ -159,22 +159,6 @@ public class SummaryRequisitionController {
                 .collect(Collectors.toList());
     }
 
-//    @GetMapping("/group/{groupId}")
-//    public ResponseEntity<List<SummaryRequisitionWithSupplierDTO>> getAllByGroupId(@PathVariable String groupId) {
-//        List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
-//
-//        List<SummaryRequisitionWithSupplierDTO> dtoList = requisitions.stream()
-//                .map(req -> {
-//                    SupplierProduct supplierProduct = null;
-//                    if (req.getSupplierId() != null) {
-//                        supplierProduct = supplierProductRepository.findById(req.getSupplierId()).orElse(null);
-//                    }
-//                    return new SummaryRequisitionWithSupplierDTO(req, supplierProduct);
-//                })
-//                .collect(Collectors.toList());
-//
-//        return ResponseEntity.ok(dtoList);
-//    }
 
     @GetMapping("/group/{groupId}")
     public ResponseEntity<List<SummaryRequisitionDTO>> getAllByGroupId(@PathVariable String groupId) {
@@ -201,7 +185,7 @@ public class SummaryRequisitionController {
                                 Double quantityDouble = entry.getValue();
                                 Integer quantity = quantityDouble != null ? quantityDouble.intValue() : 0;
                                 Department department = departmentRepository.findById(departmentId).orElse(null);
-                                String departmentName = department != null ? department.getName() : "Unknown";
+                                String departmentName = department != null ? department.getDepartmentName() : "Unknown";
                                 return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, quantity);
                             })
                             .collect(Collectors.toList());
@@ -258,7 +242,7 @@ public class SummaryRequisitionController {
                             .map(entry -> {
                                 String deptId = entry.getKey();
                                 Department dept = departmentRepository.findById(deptId).orElse(null);
-                                return dept != null ? dept.getName() : "Unknown";
+                                return dept != null ? dept.getDepartmentName() : "Unknown";
                             })
                             .collect(Collectors.toList());
 
@@ -314,7 +298,7 @@ public class SummaryRequisitionController {
                     Double quantityDouble = entry.getValue();
                     Integer quantity = quantityDouble != null ? quantityDouble.intValue() : 0;
                     Department department = departmentRepository.findById(departmentId).orElse(null);
-                    String departmentName = department != null ? department.getName() : "Unknown";
+                    String departmentName = department != null ? department.getDepartmentName() : "Unknown";
                     return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, quantity);
                 })
                 .collect(Collectors.toList());

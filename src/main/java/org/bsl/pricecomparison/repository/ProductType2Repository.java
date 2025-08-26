@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ProductType2Repository extends MongoRepository<ProductType2, String> {
@@ -16,4 +17,6 @@ public interface ProductType2Repository extends MongoRepository<ProductType2, St
     boolean existsByNameAndProductType1Id(String name, String productType1Id);
 
     Optional<ProductType2> findByNameAndProductType1Id(String name, String productType1Id);
+
+    List<ProductType2> findByNameContainingIgnoreCase(String name);
 }

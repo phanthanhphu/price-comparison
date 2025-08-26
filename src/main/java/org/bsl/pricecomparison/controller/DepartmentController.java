@@ -33,7 +33,7 @@ public class DepartmentController {
 
     @PostMapping
     public ResponseEntity<String> createDepartment(@RequestBody Department department) {
-        if (departmentRepository.findByName(department.getName()) != null) {
+        if (departmentRepository.findByDepartmentName(department.getDepartmentName()) != null) {
             return new ResponseEntity<>("Department with this name already exists", HttpStatus.BAD_REQUEST);
         }
         departmentRepository.save(department);
@@ -41,26 +41,31 @@ public class DepartmentController {
     }
 
     @PutMapping("/{id}")
-    public Department updateDepartment(@PathVariable String id, @RequestBody Department updated) {
+    public ResponseEntity<Department> updateDepartment(@PathVariable String id, @RequestBody Department updated) {
         Optional<Department> optional = departmentRepository.findById(id);
         if (optional.isPresent()) {
             Department dept = optional.get();
-            dept.setName(updated.getName());
-            dept.setEnglishName(updated.getEnglishName());
-            return departmentRepository.save(dept);
+            dept.setDivision(updated.getDivision());
+            dept.setDepartmentName(updated.getDepartmentName());
+            return ResponseEntity.ok(departmentRepository.save(dept));
         } else {
-            return null;
+            return ResponseEntity.notFound().build();
         }
     }
 
     @DeleteMapping("/{id}")
-    public void deleteDepartment(@PathVariable String id) {
-        departmentRepository.deleteById(id);
+    public ResponseEntity<Void> deleteDepartment(@PathVariable String id) {
+        if (departmentRepository.existsById(id)) {
+            departmentRepository.deleteById(id);
+            return ResponseEntity.noContent().build();
+        } else {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @GetMapping("/search")
-    public List<Department> searchDepartments(@RequestParam String name) {
-        return departmentRepository.findByNameContainingIgnoreCase(name);
+    public List<Department> searchDepartments(@RequestParam String keyword) {
+        return departmentRepository.findByDepartmentNameContainingIgnoreCase(keyword);
     }
 
     @GetMapping("/page")
@@ -69,9 +74,23 @@ public class DepartmentController {
             @RequestParam(defaultValue = "10") int limit) {
 
         Pageable pageable = PageRequest.of(page, limit, Sort.by(Sort.Order.desc("createdAt")));
-
         Page<Department> departmentsPage = departmentRepository.findAll(pageable);
 
         return ResponseEntity.ok(departmentsPage);
+    }
+
+    @GetMapping("/filter")
+    public ResponseEntity<Page<Department>> filterDepartments(
+            @RequestParam(defaultValue = "") String departmentName,
+            @RequestParam(defaultValue = "") String division,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt")));
+
+        Page<Department> result = departmentRepository
+                .searchByDepartmentNameAndDivision(departmentName, division, pageable);
+
+        return ResponseEntity.ok(result);
     }
 }
