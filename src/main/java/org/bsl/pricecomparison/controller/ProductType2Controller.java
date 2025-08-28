@@ -62,4 +62,15 @@ public class ProductType2Controller {
         Page<ProductType2> result = productType2Service.getByProductType1IdPaged(productType1Id, page, size);
         return ResponseEntity.ok(result);
     }
+
+    @GetMapping("/search")
+    public ResponseEntity<?> getByProductType1IdPaged(
+            @RequestParam(required = false) String productType1Id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String name) {
+
+        Page<ProductType2> result = productType2Service.getByProductType1IdPaged(productType1Id, page, size, name);
+        return ResponseEntity.ok(result);
+    }
 }

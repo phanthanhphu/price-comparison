@@ -17,13 +17,15 @@ public class SupplierProduct {
     private String supplierCode;
     private String supplierName;
     private String sapCode;
-    private String productFullName;
-    private String productShortName;
+    private String itemNo; // Renamed from productFullName
+    private String itemDescription; // Renamed from productShortName
+    private String fullDescription; // Added
+    private String materialGroupFullDescription; // Added
+    private String currency; // Added
     private String size;
     private Double price;
     private String unit;
-    private List<String> imageUrls; // Thay đổi từ String thành List<String>
-
+    private List<String> imageUrls;
     private String productType1Id;
     private String productType2Id;
 
@@ -33,16 +35,32 @@ public class SupplierProduct {
     public SupplierProduct() {
     }
 
-    public SupplierProduct(String id, String supplierCode, String supplierName, String sapCode,
-                           String productFullName, String productShortName, String size,
-                           Double price, String unit, List<String> imageUrls,
-                           String productType1Id, String productType2Id) {
+    public SupplierProduct(
+            String id,
+            String supplierCode,
+            String supplierName,
+            String sapCode,
+            String itemNo,
+            String itemDescription,
+            String fullDescription,
+            String materialGroupFullDescription,
+            String currency,
+            String size,
+            Double price,
+            String unit,
+            List<String> imageUrls,
+            String productType1Id,
+            String productType2Id
+    ) {
         this.id = id;
         this.supplierCode = supplierCode;
         this.supplierName = supplierName;
         this.sapCode = sapCode;
-        this.productFullName = productFullName;
-        this.productShortName = productShortName;
+        this.itemNo = itemNo;
+        this.itemDescription = itemDescription;
+        this.fullDescription = fullDescription;
+        this.materialGroupFullDescription = materialGroupFullDescription;
+        this.currency = currency;
         this.size = size;
         this.price = price;
         this.unit = unit;
@@ -84,20 +102,44 @@ public class SupplierProduct {
         this.sapCode = sapCode;
     }
 
-    public String getProductFullName() {
-        return productFullName;
+    public String getItemNo() {
+        return itemNo;
     }
 
-    public void setProductFullName(String productFullName) {
-        this.productFullName = productFullName;
+    public void setItemNo(String itemNo) {
+        this.itemNo = itemNo;
     }
 
-    public String getProductShortName() {
-        return productShortName;
+    public String getItemDescription() {
+        return itemDescription;
     }
 
-    public void setProductShortName(String productShortName) {
-        this.productShortName = productShortName;
+    public void setItemDescription(String itemDescription) {
+        this.itemDescription = itemDescription;
+    }
+
+    public String getFullDescription() {
+        return fullDescription;
+    }
+
+    public void setFullDescription(String fullDescription) {
+        this.fullDescription = fullDescription;
+    }
+
+    public String getMaterialGroupFullDescription() {
+        return materialGroupFullDescription;
+    }
+
+    public void setMaterialGroupFullDescription(String materialGroupFullDescription) {
+        this.materialGroupFullDescription = materialGroupFullDescription;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
     }
 
     public String getSize() {

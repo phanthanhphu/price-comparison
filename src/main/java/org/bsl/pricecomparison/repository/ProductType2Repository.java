@@ -18,5 +18,10 @@ public interface ProductType2Repository extends MongoRepository<ProductType2, St
 
     Optional<ProductType2> findByNameAndProductType1Id(String name, String productType1Id);
 
-    List<ProductType2> findByNameContainingIgnoreCase(String name);
+    Page<ProductType2> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+    Page<ProductType2> findByProductType1IdIn(List<String> productType1Ids, Pageable pageable);
+
+    Page<ProductType2> findByProductType1IdAndNameContaining(String productType1Id, String name, Pageable pageable);
+    Page<ProductType2> findByNameContaining(String name, Pageable pageable);
 }

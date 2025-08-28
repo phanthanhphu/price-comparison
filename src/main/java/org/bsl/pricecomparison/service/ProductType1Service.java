@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class ProductType1Service {
@@ -61,5 +62,27 @@ public class ProductType1Service {
     public Page<ProductType1> getAllPaged(int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         return productType1Repository.findAll(pageable);
+    }
+
+    public Page<ProductType1> getAllPaged(int page, int size, String name) {
+        Pageable pageable = PageRequest.of(page, size);
+        if (name != null && !name.isEmpty()) {
+            return productType1Repository.findByNameContaining(name, pageable);
+        }
+        return productType1Repository.findAll(pageable);
+    }
+
+    public Page<ProductType1> searchByName(String name, Pageable pageable) {
+        if (name == null || name.trim().isEmpty()) {
+            return productType1Repository.findAll(pageable);
+        }
+        return productType1Repository.findByNameContainingIgnoreCase(name, pageable);
+    }
+
+    public Page<ProductType1> getByIds(List<String> ids, Pageable pageable) {
+        if (ids == null || ids.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        return productType1Repository.findByIdIn(ids, pageable);
     }
 }

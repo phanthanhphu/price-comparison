@@ -11,7 +11,7 @@ public class CreateProductRequest {
     @ArraySchema(
             arraySchema = @Schema(description = "Product image files", type = "array"),
             minItems = 0,
-            maxItems = 10, // Optional: Set a reasonable limit
+            maxItems = 10,
             uniqueItems = false,
             schema = @Schema(type = "string", format = "binary")
     )
@@ -26,11 +26,20 @@ public class CreateProductRequest {
     @Schema(description = "SAP code", example = "SAP456")
     private String sapCode;
 
-    @Schema(description = "Product full name", example = "Sản phẩm XYZ")
-    private String productFullName;
+    @Schema(description = "Item number", example = "ITEM123")
+    private String itemNo;
 
-    @Schema(description = "Product short name", example = "XYZ")
-    private String productShortName;
+    @Schema(description = "Item description", example = "XYZ")
+    private String itemDescription;
+
+    @Schema(description = "Full description", example = "Sản phẩm XYZ chi tiết")
+    private String fullDescription;
+
+    @Schema(description = "Material group full description", example = "Nhóm vật liệu A")
+    private String materialGroupFullDescription;
+
+    @Schema(description = "Currency", example = "VND")
+    private String currency;
 
     @Schema(description = "Size", example = "500ml")
     private String size;
@@ -81,20 +90,44 @@ public class CreateProductRequest {
         this.sapCode = sapCode;
     }
 
-    public String getProductFullName() {
-        return productFullName;
+    public String getItemNo() {
+        return itemNo;
     }
 
-    public void setProductFullName(String productFullName) {
-        this.productFullName = productFullName;
+    public void setItemNo(String itemNo) {
+        this.itemNo = itemNo;
     }
 
-    public String getProductShortName() {
-        return productShortName;
+    public String getItemDescription() {
+        return itemDescription;
     }
 
-    public void setProductShortName(String productShortName) {
-        this.productShortName = productShortName;
+    public void setItemDescription(String itemDescription) {
+        this.itemDescription = itemDescription;
+    }
+
+    public String getFullDescription() {
+        return fullDescription;
+    }
+
+    public void setFullDescription(String fullDescription) {
+        this.fullDescription = fullDescription;
+    }
+
+    public String getMaterialGroupFullDescription() {
+        return materialGroupFullDescription;
+    }
+
+    public void setMaterialGroupFullDescription(String materialGroupFullDescription) {
+        this.materialGroupFullDescription = materialGroupFullDescription;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
     }
 
     public String getSize() {

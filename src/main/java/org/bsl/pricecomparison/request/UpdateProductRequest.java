@@ -1,32 +1,70 @@
-package org.bsl.pricecomparison.dto;
+package org.bsl.pricecomparison.request;
+
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
-public class SupplierProductDTO {
-    private String id;
-    private String supplierCode;
-    private String supplierName;
-    private String sapCode;
-    private String itemNo; // Renamed from productFullName
-    private String itemDescription; // Renamed from productShortName
-    private String fullDescription; // Added
-    private String materialGroupFullDescription; // Added
-    private String currency; // Added
-    private String size;
-    private double price;
-    private String unit;
-    private List<String> imageUrls;
-    private String productType1Id;
-    private String productType1Name;
-    private String productType2Id;
-    private String productType2Name;
+public class UpdateProductRequest {
 
-    public String getId() {
-        return id;
+    @ArraySchema(
+            arraySchema = @Schema(description = "Product image files", type = "array"),
+            minItems = 0,
+            maxItems = 10,
+            uniqueItems = false,
+            schema = @Schema(type = "string", format = "binary")
+    )
+    private List<String> imageUrls;
+
+    @Schema(description = "Supplier code", example = "SUP123")
+    private String supplierCode;
+
+    @Schema(description = "Supplier name", example = "Công ty ABC")
+    private String supplierName;
+
+    @Schema(description = "SAP code", example = "SAP456")
+    private String sapCode;
+
+    @Schema(description = "Item number", example = "ITEM123")
+    private String itemNo;
+
+    @Schema(description = "Item description", example = "XYZ")
+    private String itemDescription;
+
+    @Schema(description = "Full description", example = "Sản phẩm XYZ chi tiết")
+    private String fullDescription;
+
+    @Schema(description = "Material group full description", example = "Nhóm vật liệu A")
+    private String materialGroupFullDescription;
+
+    @Schema(description = "Currency", example = "VND")
+    private String currency;
+
+    @Schema(description = "Size", example = "500ml")
+    private String size;
+
+    @Schema(description = "Price", example = "12000")
+    private Double price;
+
+    @Schema(description = "Unit", example = "chai")
+    private String unit;
+
+    @Schema(description = "Product Type 1 ID (optional)", example = "1")
+    private String productType1Id;
+
+    @Schema(description = "Product Type 2 ID (optional)", example = "2")
+    private String productType2Id;
+
+    // === Getters and Setters ===
+
+
+    public List<String> getImageUrls() {
+        return imageUrls;
     }
 
-    public void setId(String id) {
-        this.id = id;
+    public void setImageUrls(List<String> imageUrls) {
+        this.imageUrls = imageUrls;
     }
 
     public String getSupplierCode() {
@@ -101,11 +139,11 @@ public class SupplierProductDTO {
         this.size = size;
     }
 
-    public double getPrice() {
+    public Double getPrice() {
         return price;
     }
 
-    public void setPrice(double price) {
+    public void setPrice(Double price) {
         this.price = price;
     }
 
@@ -117,14 +155,6 @@ public class SupplierProductDTO {
         this.unit = unit;
     }
 
-    public List<String> getImageUrls() {
-        return imageUrls;
-    }
-
-    public void setImageUrls(List<String> imageUrls) {
-        this.imageUrls = imageUrls;
-    }
-
     public String getProductType1Id() {
         return productType1Id;
     }
@@ -133,27 +163,11 @@ public class SupplierProductDTO {
         this.productType1Id = productType1Id;
     }
 
-    public String getProductType1Name() {
-        return productType1Name;
-    }
-
-    public void setProductType1Name(String productType1Name) {
-        this.productType1Name = productType1Name;
-    }
-
     public String getProductType2Id() {
         return productType2Id;
     }
 
     public void setProductType2Id(String productType2Id) {
         this.productType2Id = productType2Id;
-    }
-
-    public String getProductType2Name() {
-        return productType2Name;
-    }
-
-    public void setProductType2Name(String productType2Name) {
-        this.productType2Name = productType2Name;
     }
 }

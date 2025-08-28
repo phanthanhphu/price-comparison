@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import java.util.List;
 
 import java.time.LocalDateTime;
 
@@ -61,7 +62,44 @@ public class ProductType2Service {
     }
 
     public Page<ProductType2> getByProductType1IdPaged(String productType1Id, int page, int size) {
+        if (!productType1Repository.existsById(productType1Id)) {
+            throw new IllegalArgumentException("ProductType1 ID not found.");
+        }
         Pageable pageable = PageRequest.of(page, size);
         return productType2Repository.findByProductType1Id(productType1Id, pageable);
+    }
+
+    public Page<ProductType2> getByProductType1IdPaged(String productType1Id, int page, int size, String name) {
+        Pageable pageable = PageRequest.of(page, size);
+
+        if (productType1Id != null && !productType1Id.isEmpty()) {
+            if (name != null && !name.isEmpty()) {
+                return productType2Repository.findByProductType1IdAndNameContaining(productType1Id, name, pageable);
+            }
+            return productType2Repository.findByProductType1Id(productType1Id, pageable);
+        } else {
+            if (name != null && !name.isEmpty()) {
+                return productType2Repository.findByNameContaining(name, pageable);
+            }
+            return productType2Repository.findAll(pageable);
+        }
+    }
+    public Page<ProductType2> searchByName(String name, Pageable pageable) {
+        if (name == null || name.trim().isEmpty()) {
+            return productType2Repository.findAll(pageable);
+        }
+        return productType2Repository.findByNameContainingIgnoreCase(name, pageable);
+    }
+
+    public Page<ProductType2> getByProductType1Ids(List<String> productType1Ids, Pageable pageable) {
+        if (productType1Ids == null || productType1Ids.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        return productType2Repository.findByProductType1IdIn(productType1Ids, pageable);
+    }
+
+    public Page<ProductType2> getAllPaged(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return productType2Repository.findAll(pageable);
     }
 }

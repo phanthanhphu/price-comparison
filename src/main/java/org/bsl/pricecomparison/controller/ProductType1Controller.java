@@ -60,4 +60,14 @@ public class ProductType1Controller {
         Page<ProductType1> result = productType1Service.getAllPaged(page, size);
         return ResponseEntity.ok(result);
     }
+
+    @GetMapping("/search")
+    public ResponseEntity<?> getAllPaged(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String name) {
+
+        Page<ProductType1> result = productType1Service.getAllPaged(page, size, name);
+        return ResponseEntity.ok(result);
+    }
 }
