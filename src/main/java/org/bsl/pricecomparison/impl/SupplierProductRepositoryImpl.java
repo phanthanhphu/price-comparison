@@ -74,4 +74,34 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
 
         return new PageImpl<>(list, pageable, count);
     }
+
+    @Override
+    public Page<SupplierProduct> findBySapCodeWithPagination(String sapCode, String itemNo, String itemDescription, Pageable pageable) {
+        Criteria criteria = new Criteria();
+
+        List<Criteria> criteriaList = new java.util.ArrayList<>();
+
+        if (sapCode != null && !sapCode.isEmpty()) {
+            criteriaList.add(Criteria.where("sapCode").regex(sapCode, "i"));
+        }
+        if (itemNo != null && !itemNo.isEmpty()) {
+            criteriaList.add(Criteria.where("itemNo").regex(itemNo, "i"));
+        }
+        if (itemDescription != null && !itemDescription.isEmpty()) {
+            criteriaList.add(Criteria.where("itemDescription").regex(itemDescription, "i"));
+        }
+
+        // If no filter parameters are provided, don't apply any criteria (return all)
+        if (!criteriaList.isEmpty()) {
+            criteria.andOperator(criteriaList.toArray(new Criteria[0]));
+        }
+
+        Query query = new Query(criteria);
+        long count = mongoTemplate.count(query, SupplierProduct.class);
+        query.with(pageable);
+
+        List<SupplierProduct> list = mongoTemplate.find(query, SupplierProduct.class);
+
+        return new PageImpl<>(list, pageable, count);
+    }
 }

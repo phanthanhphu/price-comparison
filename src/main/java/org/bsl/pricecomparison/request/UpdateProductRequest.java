@@ -9,13 +9,21 @@ import java.util.List;
 public class UpdateProductRequest {
 
     @ArraySchema(
-            arraySchema = @Schema(description = "Product image files", type = "array"),
+            arraySchema = @Schema(description = "Product image files to upload", type = "array"),
             minItems = 0,
             maxItems = 10,
             uniqueItems = false,
             schema = @Schema(type = "string", format = "binary")
     )
-    private List<String> imageUrls;
+    private List<MultipartFile> files;
+
+    @ArraySchema(
+            arraySchema = @Schema(description = "List of existing image URLs to delete", type = "array"),
+            minItems = 0,
+            uniqueItems = true,
+            schema = @Schema(type = "string", example = "/uploads/image.jpg")
+    )
+    private List<String> imagesToDelete;
 
     @Schema(description = "Supplier code", example = "SUP123")
     private String supplierCode;
@@ -58,13 +66,20 @@ public class UpdateProductRequest {
 
     // === Getters and Setters ===
 
-
-    public List<String> getImageUrls() {
-        return imageUrls;
+    public List<MultipartFile> getFiles() {
+        return files;
     }
 
-    public void setImageUrls(List<String> imageUrls) {
-        this.imageUrls = imageUrls;
+    public void setFiles(List<MultipartFile> files) {
+        this.files = files;
+    }
+
+    public List<String> getImagesToDelete() {
+        return imagesToDelete;
+    }
+
+    public void setImagesToDelete(List<String> imagesToDelete) {
+        this.imagesToDelete = imagesToDelete;
     }
 
     public String getSupplierCode() {

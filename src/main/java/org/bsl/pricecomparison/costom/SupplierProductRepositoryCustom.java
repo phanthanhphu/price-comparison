@@ -16,4 +16,6 @@ public interface SupplierProductRepositoryCustom {
             String productType1Id,
             String productType2Id,
             Pageable pageable);
+
+    Page<SupplierProduct> findBySapCodeWithPagination(String sapCode, String itemNo, String itemDescription, Pageable pageable);
 }

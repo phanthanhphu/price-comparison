@@ -15,11 +15,12 @@ public class User {
     private String phone;
     private String email;
     private String role;
+    private String profileImageUrl; // Thêm thuộc tính ảnh đại diện
 
     public User() {
     }
 
-    public User(String id, String username, String password, String address, String phone, String email, String role) {
+    public User(String id, String username, String password, String address, String phone, String email, String role, String profileImageUrl) {
         this.id = id;
         this.username = username;
         this.password = password;
@@ -27,6 +28,7 @@ public class User {
         this.phone = phone;
         this.email = email;
         this.role = role;
+        this.profileImageUrl = profileImageUrl;
     }
 
     // getters và setters
@@ -81,5 +83,17 @@ public class User {
 
     public String getRole() {
         return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public String getProfileImageUrl() {
+        return profileImageUrl;
+    }
+
+    public void setProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
 }
