@@ -4,6 +4,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Document(collection = "summary_requisition")
@@ -33,7 +34,8 @@ public class SummaryRequisition {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    private String fullDescription; // ✅ New field
+    private String fullDescription;
+    private List<String> imageUrls; // New field for image URLs
 
     // --- Constructors ---
 
@@ -48,7 +50,7 @@ public class SummaryRequisition {
                               String supplierId, String groupId,
                               String productType1Id, String productType2Id,
                               LocalDateTime createdAt, LocalDateTime updatedAt,
-                              String fullDescription) {
+                              String fullDescription, List<String> imageUrls) {
         this.id = id;
         this.no = no;
         this.englishName = englishName;
@@ -67,6 +69,7 @@ public class SummaryRequisition {
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.fullDescription = fullDescription;
+        this.imageUrls = imageUrls;
     }
 
     // --- Getters and Setters ---
@@ -213,6 +216,14 @@ public class SummaryRequisition {
 
     public void setFullDescription(String fullDescription) {
         this.fullDescription = fullDescription;
+    }
+
+    public List<String> getImageUrls() {
+        return imageUrls;
+    }
+
+    public void setImageUrls(List<String> imageUrls) {
+        this.imageUrls = imageUrls;
     }
 
     // --- Utility Methods ---

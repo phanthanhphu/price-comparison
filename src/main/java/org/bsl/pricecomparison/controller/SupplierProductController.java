@@ -283,71 +283,122 @@ public class SupplierProductController {
         }
     }
 
-//    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-//    @Operation(
-//            summary = "Update a product with optional multiple image uploads",
-//            description = "Update product fields and optionally upload multiple images using multipart/form-data.",
-//            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
-//                    content = @Content(
-//                            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
-//                            schema = @Schema(implementation = UpdateProductRequest.class)
-//                    )
-//            )
-//    )
-//    public ResponseEntity<SupplierProduct> updateProduct(
-//            @PathVariable String id,
-//            @ModelAttribute UpdateProductRequest request
-//    ) {
-//        try {
-//            SupplierProduct existingProduct = repository.findById(id).orElse(null);
-//            if (existingProduct == null) {
-//                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
-//            }
-//
-//            if (checkDuplicate(existingProduct, id)) {
-//                return ResponseEntity.status(HttpStatus.CONFLICT).body(null);
-//            }
-//
-//            List<String> imageUrls = new ArrayList<>(existingProduct.getImageUrls() != null ? existingProduct.getImageUrls() : new ArrayList<>());
-//            List<String> files = request.getImageUrls();
-//            if (files != null && !files.isEmpty()) {
-//                for (String file : files) {
-//                    if (file != null && !file.isEmpty()) {
-//                        String imageUrl = saveImage(file);
-//                        imageUrls.add(imageUrl);
-//                    }
-//                }
-//            }
-//
-//            // Cập nhật các trường với xử lý null cho price
-//            existingProduct.setSupplierCode(request.getSupplierCode() != null ? request.getSupplierCode() : existingProduct.getSupplierCode());
-//            existingProduct.setSupplierName(request.getSupplierName() != null ? request.getSupplierName() : existingProduct.getSupplierName());
-//            existingProduct.setSapCode(request.getSapCode() != null ? request.getSapCode() : existingProduct.getSapCode());
-//            existingProduct.setItemNo(request.getItemNo() != null ? request.getItemNo() : existingProduct.getItemNo());
-//            existingProduct.setItemDescription(request.getItemDescription() != null ? request.getItemDescription() : existingProduct.getItemDescription());
-//            existingProduct.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : existingProduct.getFullDescription());
-//            existingProduct.setMaterialGroupFullDescription(request.getMaterialGroupFullDescription() != null ? request.getMaterialGroupFullDescription() : existingProduct.getMaterialGroupFullDescription());
-//            existingProduct.setCurrency(request.getCurrency() != null ? request.getCurrency() : existingProduct.getCurrency());
-//            existingProduct.setSize(request.getSize() != null ? request.getSize() : existingProduct.getSize());
-//            existingProduct.setPrice(request.getPrice() != null ? request.getPrice() : (existingProduct.getPrice() != null ? existingProduct.getPrice() : 0.0));
-//            existingProduct.setUnit(request.getUnit() != null ? request.getUnit() : existingProduct.getUnit());
-//            existingProduct.setImageUrls(imageUrls);
-//            existingProduct.setCreatedAt(LocalDateTime.now());
-//
-//            if (request.getProductType1Id() != null) {
-//                existingProduct.setProductType1Id(request.getProductType1Id());
-//            }
-//            if (request.getProductType2Id() != null) {
-//                existingProduct.setProductType2Id(request.getProductType2Id());
-//            }
-//
-//            SupplierProduct updatedProduct = repository.save(existingProduct);
-//            return ResponseEntity.ok(updatedProduct);
-//
-//        } catch (IOException e) {
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
-//        }
-//    }
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Update a product with optional multiple image uploads and deletions",
+            description = "Update product fields, optionally upload new images, and delete existing images using multipart/form-data.",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(
+                            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+                            schema = @Schema(implementation = UpdateProductRequest.class)
+                    )
+            )
+    )
+    public ResponseEntity<SupplierProduct> updateProduct(
+            @PathVariable String id,
+            @ModelAttribute UpdateProductRequest request
+    ) {
+        try {
+            SupplierProduct existingProduct = repository.findById(id).orElse(null);
+            if (existingProduct == null) {
+                logger.warn("Product with ID {} not found", id);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+            }
+
+            // Update fields for duplicate checking
+            SupplierProduct tempProduct = new SupplierProduct();
+            tempProduct.setSupplierCode(request.getSupplierCode() != null ? request.getSupplierCode() : existingProduct.getSupplierCode());
+            tempProduct.setSupplierName(request.getSupplierName() != null ? request.getSupplierName() : existingProduct.getSupplierName());
+            tempProduct.setSapCode(request.getSapCode() != null ? request.getSapCode() : existingProduct.getSapCode());
+            tempProduct.setItemNo(request.getItemNo() != null ? request.getItemNo() : existingProduct.getItemNo());
+            tempProduct.setItemDescription(request.getItemDescription() != null ? request.getItemDescription() : existingProduct.getItemDescription());
+            tempProduct.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : existingProduct.getFullDescription());
+            tempProduct.setMaterialGroupFullDescription(request.getMaterialGroupFullDescription() != null ? request.getMaterialGroupFullDescription() : existingProduct.getMaterialGroupFullDescription());
+            tempProduct.setCurrency(request.getCurrency() != null ? request.getCurrency() : existingProduct.getCurrency());
+            tempProduct.setSize(request.getSize() != null ? request.getSize() : existingProduct.getSize());
+            tempProduct.setPrice(request.getPrice() != null ? request.getPrice() : (existingProduct.getPrice() != null ? existingProduct.getPrice() : 0.0));
+            tempProduct.setUnit(request.getUnit() != null ? request.getUnit() : existingProduct.getUnit());
+
+            // Check for duplicates with updated values
+            if (checkDuplicate(tempProduct, id)) {
+                logger.warn("Duplicate product found for supplierCode: {}, sapCode: {}, price: {}",
+                        tempProduct.getSupplierCode(), tempProduct.getSapCode(), tempProduct.getPrice());
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(null);
+            }
+
+            // Handle image uploads and deletions
+            List<String> imageUrls = new ArrayList<>(existingProduct.getImageUrls() != null ? existingProduct.getImageUrls() : new ArrayList<>());
+
+            // Remove images specified in imagesToDelete
+            List<String> imagesToDelete = request.getImagesToDelete();
+            if (imagesToDelete != null && !imagesToDelete.isEmpty()) {
+                for (String imageUrl : imagesToDelete) {
+                    if (imageUrl != null && imageUrls.contains(imageUrl)) {
+                        imageUrls.remove(imageUrl);
+                        // Delete the physical file from the file system
+                        try {
+                            Path path = Paths.get(UPLOAD_DIR + imageUrl.replace("/uploads/", ""));
+                            Files.deleteIfExists(path);
+                            logger.info("Deleted image file: {}", path);
+                        } catch (IOException e) {
+                            logger.warn("Failed to delete image file {}: {}", imageUrl, e.getMessage());
+                            // Continue processing even if file deletion fails to avoid blocking the update
+                        }
+                    } else {
+                        logger.warn("Image URL {} not found in product or invalid", imageUrl);
+                    }
+                }
+            }
+
+            // Add new images
+            List<MultipartFile> files = request.getFiles();
+            if (files != null && !files.isEmpty()) {
+                for (MultipartFile file : files) {
+                    if (file != null && !file.isEmpty()) {
+                        String imageUrl = saveImage(file);
+                        imageUrls.add(imageUrl);
+                        logger.info("Uploaded new image: {}", imageUrl);
+                    }
+                }
+            }
+
+            // Validate image count
+            if (imageUrls.size() > 10) {
+                logger.warn("Too many images for product ID {}: {}", id, imageUrls.size());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+            }
+
+            // Update existing product fields
+            existingProduct.setSupplierCode(tempProduct.getSupplierCode());
+            existingProduct.setSupplierName(tempProduct.getSupplierName());
+            existingProduct.setSapCode(tempProduct.getSapCode());
+            existingProduct.setItemNo(tempProduct.getItemNo());
+            existingProduct.setItemDescription(tempProduct.getItemDescription());
+            existingProduct.setFullDescription(tempProduct.getFullDescription());
+            existingProduct.setMaterialGroupFullDescription(tempProduct.getMaterialGroupFullDescription());
+            existingProduct.setCurrency(tempProduct.getCurrency());
+            existingProduct.setSize(tempProduct.getSize());
+            existingProduct.setPrice(tempProduct.getPrice());
+            existingProduct.setUnit(tempProduct.getUnit());
+            existingProduct.setImageUrls(imageUrls);
+            existingProduct.setUpdatedAt(LocalDateTime.now()); // Use updatedAt for updates
+
+            if (request.getProductType1Id() != null) {
+                existingProduct.setProductType1Id(request.getProductType1Id());
+            }
+            if (request.getProductType2Id() != null) {
+                existingProduct.setProductType2Id(request.getProductType2Id());
+            }
+
+            SupplierProduct updatedProduct = repository.save(existingProduct);
+            logger.info("Successfully updated product with ID {}", id);
+            return ResponseEntity.ok(updatedProduct);
+
+        } catch (IOException e) {
+            logger.error("Error updating product with ID {}: {}", id, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
 
     private String saveImage(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
@@ -444,4 +495,66 @@ public class SupplierProductController {
         });
     }
 
+    @GetMapping("/filter-by-sapcode")
+    @Operation(
+            summary = "Filter supplier products by SAP code, item number, and item description",
+            description = "Retrieve a paginated list of supplier products filtered by SAP code, item number, and item description, sorted by price from low to high."
+    )
+    public Page<SupplierProductDTO> filterBySapCodeItemNoAndDescription(
+            @RequestParam(required = false, defaultValue = "") String sapCode,
+            @RequestParam(required = false, defaultValue = "") String itemNo,
+            @RequestParam(required = false, defaultValue = "") String itemDescription,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Order.asc("price")) // Sort by price in ascending order
+        );
+
+        Page<SupplierProduct> supplierProducts = supplierProductRepositoryCustom.findBySapCodeWithPagination(
+                sapCode,
+                itemNo,
+                itemDescription,
+                pageable
+        );
+
+        return supplierProducts.map(product -> {
+            SupplierProductDTO dto = new SupplierProductDTO();
+            dto.setId(Objects.toString(product.getId(), ""));
+            dto.setSupplierCode(Objects.toString(product.getSupplierCode(), ""));
+            dto.setSupplierName(Objects.toString(product.getSupplierName(), ""));
+            dto.setSapCode(Objects.toString(product.getSapCode(), ""));
+            dto.setItemNo(Objects.toString(product.getItemNo(), ""));
+            dto.setItemDescription(Objects.toString(product.getItemDescription(), ""));
+            dto.setFullDescription(Objects.toString(product.getFullDescription(), ""));
+            dto.setMaterialGroupFullDescription(Objects.toString(product.getMaterialGroupFullDescription(), ""));
+            dto.setCurrency(Objects.toString(product.getCurrency(), ""));
+            dto.setSize(Objects.toString(product.getSize(), ""));
+            dto.setPrice(product.getPrice() != null ? product.getPrice() : 0.0);
+            dto.setUnit(Objects.toString(product.getUnit(), ""));
+            dto.setImageUrls(product.getImageUrls() != null ? product.getImageUrls() : new ArrayList<>());
+            dto.setProductType1Id(Objects.toString(product.getProductType1Id(), ""));
+            dto.setProductType2Id(Objects.toString(product.getProductType2Id(), ""));
+
+            if (product.getProductType1Id() != null && !product.getProductType1Id().isEmpty()) {
+                productType1Repository.findById(product.getProductType1Id()).ifPresent(type1 -> {
+                    dto.setProductType1Name(Objects.toString(type1.getName(), ""));
+                });
+            } else {
+                dto.setProductType1Name("");
+            }
+
+            if (product.getProductType2Id() != null && !product.getProductType2Id().isEmpty()) {
+                productType2Repository.findById(product.getProductType2Id()).ifPresent(type2 -> {
+                    dto.setProductType2Name(Objects.toString(type2.getName(), ""));
+                });
+            } else {
+                dto.setProductType2Name("");
+            }
+
+            return dto;
+        });
+    }
 }
