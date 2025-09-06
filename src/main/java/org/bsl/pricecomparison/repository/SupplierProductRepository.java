@@ -28,4 +28,6 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
     @Query("{ 'sapCode': { $regex: ?0, $options: 'i' }, 'supplierCode': { $regex: ?1, $options: 'i' }, 'itemNo': { $regex: ?2, $options: 'i' }, 'supplierName': { $regex: ?3, $options: 'i' } }")
     Page<SupplierProduct> findBySapCodeContainingIgnoreCaseOrSupplierCodeContainingIgnoreCaseOrItemNoContainingIgnoreCaseOrSupplierNameContainingIgnoreCase(
             String sapCode, String supplierCode, String itemNo, String supplierName, Pageable pageable);
+
+    List<SupplierProduct> findBySapCode(String sapCode);
 }

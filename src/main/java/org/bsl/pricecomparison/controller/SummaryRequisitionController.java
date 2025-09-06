@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.*;
+import org.bsl.pricecomparison.dto.ComparisonRequisitionDTO;
 import org.bsl.pricecomparison.dto.SummaryRequisitionDTO;
 import org.bsl.pricecomparison.dto.SummaryRequisitionWithSupplierDTO;
 import org.bsl.pricecomparison.model.*;
@@ -599,91 +600,91 @@ public class SummaryRequisitionController {
                 .collect(Collectors.toList());
     }
 
-    @GetMapping("/search/comparison")
-    public ResponseEntity<Page<SummaryRequisitionDTO>> searchRequisitions(
-            @RequestParam String groupId,
-            @RequestParam(required = false) String productType1Name,
-            @RequestParam(required = false) String productType2Name,
-            @RequestParam(required = false) String englishName,
-            @RequestParam(required = false) String vietnameseName,
-            @RequestParam(required = false) String oldSapCode,
-            @RequestParam(required = false) String newSapCode,
-            @RequestParam(required = false) String unit,
-            @RequestParam(required = false) String departmentName,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
-
-        // Create Pageable object for pagination and sorting
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("updatedAt")));
-
-        // Fetch all requisitions for the groupId
-        List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
-
-        // Apply filtering
-        List<SummaryRequisitionDTO> filteredList = requisitions.stream()
-                .filter(req -> {
-                    boolean matches = true;
-
-                    // Fetch ProductType1 and ProductType2 Names for filtering
-                    String reqProductType1Name = req.getProductType1Id() != null ?
-                            (productType1Service.getById(req.getProductType1Id()) != null ?
-                                    productType1Service.getById(req.getProductType1Id()).getName() : "Unknown") : "Unknown";
-                    String reqProductType2Name = req.getProductType2Id() != null ?
-                            (productType2Service.getById(req.getProductType2Id()) != null ?
-                                    productType2Service.getById(req.getProductType2Id()).getName() : "Unknown") : "Unknown";
-
-                    // Fetch Department Names for filtering
-                    List<String> deptNames = req.getDepartmentRequestQty().entrySet().stream()
-                            .map(entry -> {
-                                String deptId = entry.getKey();
-                                Department dept = departmentRepository.findById(deptId).orElse(null);
-                                return dept != null ? dept.getDepartmentName() : "Unknown";
-                            })
-                            .collect(Collectors.toList());
-
-                    // Apply filters
-                    if (productType1Name != null && !productType1Name.isEmpty()) {
-                        matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
-                    }
-                    if (productType2Name != null && !productType2Name.isEmpty()) {
-                        matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
-                    }
-                    if (englishName != null && !englishName.isEmpty()) {
-                        matches = matches && req.getEnglishName() != null && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
-                    }
-                    if (vietnameseName != null && !vietnameseName.isEmpty()) {
-                        matches = matches && req.getVietnameseName() != null && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
-                    }
-                    if (oldSapCode != null && !oldSapCode.isEmpty()) {
-                        matches = matches && req.getOldSapCode() != null && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
-                    }
-                    if (newSapCode != null && !newSapCode.isEmpty()) {
-                        matches = matches && req.getNewSapCode() != null && req.getNewSapCode().toLowerCase().contains(newSapCode.toLowerCase());
-                    }
-                    if (unit != null && !unit.isEmpty()) {
-                        SupplierProduct supplierProduct = req.getSupplierId() != null ? supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
-                        String reqUnit = supplierProduct != null ? supplierProduct.getUnit() : "";
-                        matches = matches && reqUnit.toLowerCase().contains(unit.toLowerCase());
-                    }
-                    if (departmentName != null && !departmentName.isEmpty()) {
-                        matches = matches && deptNames.stream().anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
-                    }
-
-                    return matches;
-                })
-                .map(req -> convertToDto(req))
-                .collect(Collectors.toList());
-
-        // Apply pagination manually
-        int start = Math.min((int) pageable.getOffset(), filteredList.size());
-        int end = Math.min(start + pageable.getPageSize(), filteredList.size());
-        List<SummaryRequisitionDTO> pagedList = filteredList.subList(start, end);
-
-        // Create Page object
-        Page<SummaryRequisitionDTO> pagedResult = new PageImpl<>(pagedList, pageable, filteredList.size());
-
-        return ResponseEntity.ok(pagedResult);
-    }
+//    @GetMapping("/search/comparison")
+//    public ResponseEntity<Page<SummaryRequisitionDTO>> searchRequisitions(
+//            @RequestParam String groupId,
+//            @RequestParam(required = false) String productType1Name,
+//            @RequestParam(required = false) String productType2Name,
+//            @RequestParam(required = false) String englishName,
+//            @RequestParam(required = false) String vietnameseName,
+//            @RequestParam(required = false) String oldSapCode,
+//            @RequestParam(required = false) String newSapCode,
+//            @RequestParam(required = false) String unit,
+//            @RequestParam(required = false) String departmentName,
+//            @RequestParam(defaultValue = "0") int page,
+//            @RequestParam(defaultValue = "25") int size) {
+//
+//        // Create Pageable object for pagination and sorting
+//        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("updatedAt")));
+//
+//        // Fetch all requisitions for the groupId
+//        List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
+//
+//        // Apply filtering
+//        List<SummaryRequisitionDTO> filteredList = requisitions.stream()
+//                .filter(req -> {
+//                    boolean matches = true;
+//
+//                    // Fetch ProductType1 and ProductType2 Names for filtering
+//                    String reqProductType1Name = req.getProductType1Id() != null ?
+//                            (productType1Service.getById(req.getProductType1Id()) != null ?
+//                                    productType1Service.getById(req.getProductType1Id()).getName() : "Unknown") : "Unknown";
+//                    String reqProductType2Name = req.getProductType2Id() != null ?
+//                            (productType2Service.getById(req.getProductType2Id()) != null ?
+//                                    productType2Service.getById(req.getProductType2Id()).getName() : "Unknown") : "Unknown";
+//
+//                    // Fetch Department Names for filtering
+//                    List<String> deptNames = req.getDepartmentRequestQty().entrySet().stream()
+//                            .map(entry -> {
+//                                String deptId = entry.getKey();
+//                                Department dept = departmentRepository.findById(deptId).orElse(null);
+//                                return dept != null ? dept.getDepartmentName() : "Unknown";
+//                            })
+//                            .collect(Collectors.toList());
+//
+//                    // Apply filters
+//                    if (productType1Name != null && !productType1Name.isEmpty()) {
+//                        matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
+//                    }
+//                    if (productType2Name != null && !productType2Name.isEmpty()) {
+//                        matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
+//                    }
+//                    if (englishName != null && !englishName.isEmpty()) {
+//                        matches = matches && req.getEnglishName() != null && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
+//                    }
+//                    if (vietnameseName != null && !vietnameseName.isEmpty()) {
+//                        matches = matches && req.getVietnameseName() != null && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
+//                    }
+//                    if (oldSapCode != null && !oldSapCode.isEmpty()) {
+//                        matches = matches && req.getOldSapCode() != null && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
+//                    }
+//                    if (newSapCode != null && !newSapCode.isEmpty()) {
+//                        matches = matches && req.getNewSapCode() != null && req.getNewSapCode().toLowerCase().contains(newSapCode.toLowerCase());
+//                    }
+//                    if (unit != null && !unit.isEmpty()) {
+//                        SupplierProduct supplierProduct = req.getSupplierId() != null ? supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
+//                        String reqUnit = supplierProduct != null ? supplierProduct.getUnit() : "";
+//                        matches = matches && reqUnit.toLowerCase().contains(unit.toLowerCase());
+//                    }
+//                    if (departmentName != null && !departmentName.isEmpty()) {
+//                        matches = matches && deptNames.stream().anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
+//                    }
+//
+//                    return matches;
+//                })
+//                .map(req -> convertToDto(req))
+//                .collect(Collectors.toList());
+//
+//        // Apply pagination manually
+//        int start = Math.min((int) pageable.getOffset(), filteredList.size());
+//        int end = Math.min(start + pageable.getPageSize(), filteredList.size());
+//        List<SummaryRequisitionDTO> pagedList = filteredList.subList(start, end);
+//
+//        // Create Page object
+//        Page<SummaryRequisitionDTO> pagedResult = new PageImpl<>(pagedList, pageable, filteredList.size());
+//
+//        return ResponseEntity.ok(pagedResult);
+//    }
 
     @PostMapping(value = "/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload Requisition File", description = "Upload an Excel .xlsx file with data starting from row 13. Columns: STT (A), Description (B) [Vietnamese/English], (C empty), Ref. No. (D), Part. No. (E), OLD Sap Code (F), NEW Sap Code (G), Quantity (H), Unit (I), Inventory SAP (J), Inventory MED (K), Picture (L), Last order (M), Remarks (N)")
@@ -834,4 +835,123 @@ public class SummaryRequisitionController {
         }
     }
 
+    @GetMapping("/search/comparison")
+    public ResponseEntity<Page<ComparisonRequisitionDTO>> searchRequisitions(
+            @RequestParam String groupId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+
+        // Create Pageable object for pagination (without sorting initially, as we'll sort manually)
+        Pageable pageable = PageRequest.of(page, size);
+
+        // Fetch all requisitions for the groupId
+        List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
+
+        // Sort requisitions by updatedAt or createdAt (descending order)
+        requisitions.sort((r1, r2) -> {
+            LocalDateTime r1Time = r1.getUpdatedAt() != null ? r1.getUpdatedAt() : r1.getCreatedAt();
+            LocalDateTime r2Time = r2.getUpdatedAt() != null ? r2.getUpdatedAt() : r2.getCreatedAt();
+            return r2Time.compareTo(r1Time); // Descending order
+        });
+
+        // Convert to DTO
+        List<ComparisonRequisitionDTO> dtoList = requisitions.stream()
+                .map(this::convertToDtos)
+                .collect(Collectors.toList());
+
+        // Apply pagination manually
+        int start = Math.min((int) pageable.getOffset(), dtoList.size());
+        int end = Math.min(start + pageable.getPageSize(), dtoList.size());
+        List<ComparisonRequisitionDTO> pagedList = dtoList.subList(start, end);
+
+        // Create Page object
+        Page<ComparisonRequisitionDTO> pagedResult = new PageImpl<>(pagedList, pageable, dtoList.size());
+
+        return ResponseEntity.ok(pagedResult);
+    }
+
+    private ComparisonRequisitionDTO convertToDtos(SummaryRequisition req) {
+        // Initialize suppliers list
+        List<ComparisonRequisitionDTO.SupplierDTO> supplierDTOs;
+
+        // Get sapCode from requisition
+        String sapCode = req.getOldSapCode() != null && !req.getOldSapCode().isEmpty() ? req.getOldSapCode() : null;
+
+        // Get supplierId from requisition
+        String selectedSupplierId = req.getSupplierId();
+
+        // Fetch suppliers only if sapCode is valid (not null and length >= 3)
+        if (sapCode != null && sapCode.length() >= 3) {
+            List<SupplierProduct> suppliers = supplierProductRepository.findBySapCode(sapCode);
+            // Convert to SupplierDTO, mark selected supplier, and sort by price ascending
+            supplierDTOs = suppliers.stream()
+                    .map(sp -> new ComparisonRequisitionDTO.SupplierDTO(
+                            sp.getPrice(),
+                            sp.getSupplierName(),
+                            selectedSupplierId != null && selectedSupplierId.equals(sp.getId()) ? 1 : 0))
+                    .sorted(Comparator.comparing(ComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(Double::compareTo)))
+                    .collect(Collectors.toList());
+        } else {
+            // Return empty list if sapCode is null or too short
+            supplierDTOs = Collections.emptyList();
+        }
+
+        // Calculate total quantity from department requests
+        int totalQuantity = req.getDepartmentRequestQty().values().stream()
+                .mapToInt(Number::intValue)
+                .sum();
+
+        // Get price from selected supplier (isSelected = 1) and highest price only if selectedSupplierId is not null
+        Double selectedPrice = null;
+        Double highestPrice = null;
+        if (selectedSupplierId != null && !supplierDTOs.isEmpty()) {
+            selectedPrice = supplierDTOs.stream()
+                    .filter(dto -> dto.getIsSelected() == 1)
+                    .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
+                    .filter(price -> price != null)
+                    .findFirst()
+                    .orElse(null);
+
+            highestPrice = supplierDTOs.stream()
+                    .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
+                    .filter(price -> price != null)
+                    .max(Double::compareTo)
+                    .orElse(null);
+        }
+
+        // Calculate amtVnd (selected price * total quantity)
+        Double amtVnd = selectedPrice != null ? selectedPrice * totalQuantity : null;
+
+        // Calculate amtDifference (amtVnd - highest price * total quantity)
+        Double amtDifference = (amtVnd != null && highestPrice != null) ? amtVnd - (highestPrice * totalQuantity) : null;
+
+        // Calculate percentage ((amtDifference / amtVnd) * 100)
+        Double percentage = (amtVnd != null && amtDifference != null && amtVnd != 0) ? (amtDifference / amtVnd) * 100 : 0.0;
+
+        // Convert department requests
+        List<ComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty().entrySet().stream()
+                .map(entry -> {
+                    String deptId = entry.getKey();
+                    Department dept = departmentRepository.findById(deptId).orElse(null);
+                    String deptName = dept != null ? dept.getDepartmentName() : "Unknown";
+                    return new ComparisonRequisitionDTO.DepartmentRequestDTO(deptId, deptName, entry.getValue().intValue());
+                })
+                .collect(Collectors.toList());
+
+        // Create and return ComparisonRequisitionDTO
+        return new ComparisonRequisitionDTO(
+                req.getEnglishName(),
+                req.getVietnameseName(),
+                req.getOldSapCode(),
+                req.getNewSapCode(),
+                supplierDTOs,
+                req.getRemark(),
+                departmentRequests,
+                selectedPrice,
+                amtVnd,
+                amtDifference,
+                percentage,
+                highestPrice
+        );
+    }
 }
