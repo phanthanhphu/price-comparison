@@ -1,11 +1,15 @@
 package org.bsl.pricecomparison.impl;
 
+import org.bsl.pricecomparison.dto.UserDTO;
 import org.bsl.pricecomparison.model.User;
 import org.bsl.pricecomparison.repository.UserRepository;
 import org.bsl.pricecomparison.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -48,5 +52,36 @@ public class UserServiceImpl implements UserService {
         User existingUser = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
         userRepository.delete(existingUser);
+    }
+
+    @Override
+    public Page<UserDTO> filterUsers(
+            String username,
+            String address,
+            String phone,
+            String email,
+            String role,
+            Pageable pageable
+    ) {
+        Page<User> userPage = userRepository.filterUsers(
+                username,
+                address,
+                phone,
+                email,
+                role,
+                pageable
+        );
+
+        return userPage.map(user -> {
+            UserDTO dto = new UserDTO();
+            dto.setId(Objects.toString(user.getId(), ""));
+            dto.setUsername(Objects.toString(user.getUsername(), ""));
+            dto.setAddress(Objects.toString(user.getAddress(), ""));
+            dto.setPhone(Objects.toString(user.getPhone(), ""));
+            dto.setEmail(Objects.toString(user.getEmail(), ""));
+            dto.setRole(Objects.toString(user.getRole(), ""));
+            dto.setProfileImageUrl(Objects.toString(user.getProfileImageUrl(), ""));
+            return dto;
+        });
     }
 }

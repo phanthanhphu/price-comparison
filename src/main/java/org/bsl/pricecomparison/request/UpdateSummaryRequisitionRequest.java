@@ -2,16 +2,17 @@ package org.bsl.pricecomparison.request;
 
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 public class UpdateSummaryRequisitionRequest {
 
     @ArraySchema(
-            arraySchema = @Schema(description = "List of existing image URLs", type = "array"),
-            schema = @Schema(type = "string")
+            arraySchema = @Schema(description = "List of image files to upload", type = "array"),
+            schema = @Schema(type = "file")
     )
-    private List<String> imageUrls;
+    private List<MultipartFile> imageUrls;
 
     @ArraySchema(
             arraySchema = @Schema(description = "List of image URLs to delete", type = "array"),
@@ -68,11 +69,11 @@ public class UpdateSummaryRequisitionRequest {
     private Double totalPrice;
 
     // Getters and Setters
-    public List<String> getImageUrls() {
+    public List<MultipartFile> getImageUrls() {
         return imageUrls;
     }
 
-    public void setImageUrls(List<String> imageUrls) {
+    public void setImageUrls(List<MultipartFile> imageUrls) {
         this.imageUrls = imageUrls;
     }
 

@@ -16,10 +16,16 @@ public class ComparisonRequisitionDTO {
     private Double amtDifference; // amtVnd - (giá cao nhất * tổng quantity)
     private Double percentage; // (amtDifference / amtVnd) * 100
     private Double highestPrice; // Giá cao nhất trong danh sách suppliers
+    private String type1; // Product Type 1 ID
+    private String type2; // Product Type 2 ID
+    private String type1Name; // Product Type 1 Name
+    private String type2Name; // Product Type 2 Name
+    private String unit; // Unit of the selected supplier
 
     public ComparisonRequisitionDTO(String englishName, String vietnameseName, String oldSapCode, String newSapCode,
                                     List<SupplierDTO> suppliers, String remark, List<DepartmentRequestDTO> departmentRequests,
-                                    Double price, Double amtVnd, Double amtDifference, Double percentage, Double highestPrice) {
+                                    Double price, Double amtVnd, Double amtDifference, Double percentage, Double highestPrice,
+                                    String type1, String type2, String type1Name, String type2Name, String unit) {
         this.englishName = englishName;
         this.vietnameseName = vietnameseName;
         this.oldSapCode = oldSapCode;
@@ -32,6 +38,11 @@ public class ComparisonRequisitionDTO {
         this.amtDifference = amtDifference;
         this.percentage = percentage;
         this.highestPrice = highestPrice;
+        this.type1 = type1;
+        this.type2 = type2;
+        this.type1Name = type1Name;
+        this.type2Name = type2Name;
+        this.unit = unit;
     }
 
     // Getters and setters
@@ -131,15 +142,57 @@ public class ComparisonRequisitionDTO {
         this.highestPrice = highestPrice;
     }
 
+    public String getType1() {
+        return type1;
+    }
+
+    public void setType1(String type1) {
+        this.type1 = type1;
+    }
+
+    public String getType2() {
+        return type2;
+    }
+
+    public void setType2(String type2) {
+        this.type2 = type2;
+    }
+
+    public String getType1Name() {
+        return type1Name;
+    }
+
+    public void setType1Name(String type1Name) {
+        this.type1Name = type1Name;
+    }
+
+    public String getType2Name() {
+        return type2Name;
+    }
+
+    public void setType2Name(String type2Name) {
+        this.type2Name = type2Name;
+    }
+
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
+    }
+
     public static class SupplierDTO {
         private Double price;
         private String supplierName;
         private int isSelected; // 1 nếu nhà cung cấp được chọn, 0 nếu không
+        private String unit; // Unit of the supplier
 
-        public SupplierDTO(Double price, String supplierName, int isSelected) {
+        public SupplierDTO(Double price, String supplierName, int isSelected, String unit) {
             this.price = price;
             this.supplierName = supplierName;
             this.isSelected = isSelected;
+            this.unit = unit;
         }
 
         public Double getPrice() {
@@ -164,6 +217,14 @@ public class ComparisonRequisitionDTO {
 
         public void setIsSelected(int isSelected) {
             this.isSelected = isSelected;
+        }
+
+        public String getUnit() {
+            return unit;
+        }
+
+        public void setUnit(String unit) {
+            this.unit = unit;
         }
     }
 
