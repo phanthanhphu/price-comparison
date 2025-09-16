@@ -10,9 +10,9 @@ public interface SummaryRequisitionRepository extends MongoRepository<SummaryReq
 
     List<SummaryRequisition> findByGroupId(String groupId);
 
-    Optional<SummaryRequisition> findByProductType1IdAndProductType2IdAndNewSapCode(
+    Optional<SummaryRequisition> findByProductType1IdAndProductType2IdAndOldSapCode(
             String productType1Id,
             String productType2Id,
-            String newSapCode
+            String oldSapCode
     );
 }

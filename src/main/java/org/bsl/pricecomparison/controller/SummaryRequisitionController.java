@@ -53,6 +53,7 @@ public class SummaryRequisitionController {
 
     private static final String UPLOAD_DIR = "uploads/";
 
+
     @Autowired
     public SummaryRequisitionController(SummaryRequisitionRepository requisitionRepository,
                                         SupplierProductRepository supplierProductRepository) {
@@ -97,27 +98,6 @@ public class SummaryRequisitionController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-//    @PostMapping
-//    public ResponseEntity<?> create(@RequestBody SummaryRequisition summary) {
-//        Optional<SummaryRequisition> existing = requisitionRepository.findByProductType1IdAndProductType2IdAndNewSapCode(
-//                summary.getProductType1Id(),
-//                summary.getProductType2Id(),
-//                summary.getNewSapCode()
-//        );
-//
-//        if (existing.isPresent()) {
-//            return ResponseEntity
-//                    .badRequest()
-//                    .body("Duplicate entry: productType1Id, productType2Id, and newSapCode must be unique together.");
-//        }
-//
-//        summary.setCreatedAt(LocalDateTime.now());
-//        summary.setUpdatedAt(LocalDateTime.now());
-//
-//        SummaryRequisition saved = requisitionRepository.save(summary);
-//        return ResponseEntity.ok(saved);
-//    }
-
     @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "Create a new summary requisition with multiple image uploads",
@@ -134,7 +114,6 @@ public class SummaryRequisitionController {
             ObjectMapper mapper = new ObjectMapper();
             Map<String, Double> deptQty;
             try {
-                // Chuyển đổi departmentRequestQty từ chuỗi JSON thành Map
                 deptQty = request.getDepartmentRequestQty() != null
                         ? mapper.readValue(request.getDepartmentRequestQty(), new TypeReference<Map<String, Double>>() {})
                         : new HashMap<>();
@@ -143,11 +122,10 @@ public class SummaryRequisitionController {
                         .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
             }
 
-            // Kiểm tra trùng lặp
-            Optional<SummaryRequisition> existing = requisitionRepository.findByProductType1IdAndProductType2IdAndNewSapCode(
+            Optional<SummaryRequisition> existing = requisitionRepository.findByProductType1IdAndProductType2IdAndOldSapCode(
                     request.getProductType1Id(),
                     request.getProductType2Id(),
-                    request.getNewSapCode()
+                    request.getOldSapCode()
             );
 
             if (existing.isPresent()) {
@@ -155,7 +133,6 @@ public class SummaryRequisitionController {
                         .body("Duplicate entry: productType1Id, productType2Id, and newSapCode must be unique together.");
             }
 
-            // Xử lý file upload
             List<String> imageUrls = new ArrayList<>();
             List<MultipartFile> files = request.getFiles();
             if (files != null && !files.isEmpty()) {
@@ -167,13 +144,11 @@ public class SummaryRequisitionController {
                 }
             }
 
-            // Kiểm tra số lượng hình ảnh
             if (imageUrls.size() > 10) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body("Maximum 10 images allowed.");
             }
 
-            // Tạo SummaryRequisition
             SummaryRequisition summary = new SummaryRequisition();
             summary.setEnglishName(request.getEnglishName());
             summary.setVietnameseName(request.getVietnameseName());
@@ -225,100 +200,6 @@ public class SummaryRequisitionController {
         return "/uploads/" + fileName;
     }
 
-//    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-//    @Operation(
-//            summary = "Update an existing summary requisition with multiple image uploads",
-//            description = "Update a summary requisition and manage multiple images using multipart/form-data.",
-//            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
-//                    content = @Content(
-//                            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
-//                            schema = @Schema(implementation = CreateSummaryRequisitionRequest.class)
-//                    )
-//            )
-//    )
-//    public ResponseEntity<?> update(@PathVariable String id, @ModelAttribute CreateSummaryRequisitionRequest request) {
-//        try {
-//            Optional<SummaryRequisition> existingRequisition = requisitionRepository.findById(id);
-//            if (!existingRequisition.isPresent()) {
-//                return ResponseEntity
-//                        .status(HttpStatus.NOT_FOUND)
-//                        .body("Requisition with ID " + id + " not found.");
-//            }
-//
-//            // Kiểm tra trùng lặp (trừ chính bản ghi đang cập nhật)
-//            Optional<SummaryRequisition> duplicate = requisitionRepository.findByProductType1IdAndProductType2IdAndNewSapCode(
-//                    request.getProductType1Id(),
-//                    request.getProductType2Id(),
-//                    request.getNewSapCode()
-//            );
-//            if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
-//                return ResponseEntity
-//                        .status(HttpStatus.CONFLICT)
-//                        .body("Duplicate entry: productType1Id, productType2Id, and newSapCode must be unique together.");
-//            }
-//
-//            SummaryRequisition current = existingRequisition.get();
-//
-//            // Chuyển đổi departmentRequestQty từ chuỗi JSON thành Map
-//            ObjectMapper mapper = new ObjectMapper();
-//            Map<String, Double> deptQty = request.getDepartmentRequestQty() != null
-//                    ? mapper.readValue(request.getDepartmentRequestQty(), new TypeReference<Map<String, Double>>() {})
-//                    : current.getDepartmentRequestQty();
-//
-//            // Xử lý file upload và cập nhật imageUrls
-//            List<String> updatedImageUrls = new ArrayList<>(current.getImageUrls() != null ? current.getImageUrls() : new ArrayList<>());
-//            List<MultipartFile> files = request.getFiles();
-//            if (files != null && !files.isEmpty()) {
-//                for (MultipartFile file : files) {
-//                    if (file != null && !file.isEmpty()) {
-//                        String imageUrl = saveImage(file);
-//                        updatedImageUrls.add(imageUrl);
-//                    }
-//                }
-//            }
-//
-//            // Kiểm tra số lượng hình ảnh
-//            if (updatedImageUrls.size() > 10) {
-//                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-//                        .body("Maximum 10 images allowed.");
-//            }
-//
-//            // Cập nhật các trường
-//            current.setEnglishName(request.getEnglishName() != null ? request.getEnglishName() : current.getEnglishName());
-//            current.setVietnameseName(request.getVietnameseName() != null ? request.getVietnameseName() : current.getVietnameseName());
-//            current.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : current.getFullDescription());
-//            current.setOldSapCode(request.getOldSapCode() != null ? request.getOldSapCode() : current.getOldSapCode());
-//            current.setNewSapCode(request.getNewSapCode() != null ? request.getNewSapCode() : current.getNewSapCode());
-//            current.setDepartmentRequestQty(deptQty);
-//            current.setStock(request.getStock() != null ? request.getStock() : current.getStock());
-//            current.setPurchasingSuggest(request.getPurchasingSuggest() != null ? request.getPurchasingSuggest() : current.getPurchasingSuggest());
-//            current.setReason(request.getReason() != null ? request.getReason() : current.getReason());
-//            current.setRemark(request.getRemark() != null ? request.getRemark() : current.getRemark());
-//            current.setSupplierId(request.getSupplierId() != null && !request.getSupplierId().isEmpty()
-//                    ? request.getSupplierId()
-//                    : current.getSupplierId());
-//            current.setGroupId(request.getGroupId() != null ? request.getGroupId() : current.getGroupId());
-//            current.setProductType1Id(request.getProductType1Id() != null ? request.getProductType1Id() : current.getProductType1Id());
-//            current.setProductType2Id(request.getProductType2Id() != null ? request.getProductType2Id() : current.getProductType2Id());
-//            current.setImageUrls(updatedImageUrls);
-//            current.setUpdatedAt(LocalDateTime.now());
-//
-//            SummaryRequisition updated = requisitionRepository.save(current);
-//            return ResponseEntity.ok(updated);
-//
-//        } catch (JsonProcessingException e) {
-//            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-//                    .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
-//        } catch (IOException e) {
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-//                    .body("Error processing file: " + e.getMessage());
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-//                    .body("An error occurred while updating the requisition: " + e.getMessage());
-//        }
-//    }
-
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "Update an existing summary requisition",
@@ -345,37 +226,32 @@ public class SummaryRequisitionController {
                     ? objectMapper.readValue(request.getDepartmentRequestQty(), new TypeReference<Map<String, Double>>() {})
                     : current.getDepartmentRequestQty();
 
-            // Xử lý imageUrls (MultipartFile)
             List<String> newImageUrls = current.getImageUrls() != null ? new ArrayList<>(current.getImageUrls()) : new ArrayList<>();
             List<MultipartFile> uploadedFiles = request.getImageUrls() != null ? request.getImageUrls() : new ArrayList<>();
 
-            // Upload các file mới và lấy URL
             for (MultipartFile file : uploadedFiles) {
                 if (!file.isEmpty()) {
                     String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
                     Path filePath = Paths.get(UPLOAD_DIR, fileName);
                     Files.createDirectories(filePath.getParent());
                     Files.write(filePath, file.getBytes());
-                    newImageUrls.add("/uploads/" + fileName); // Thêm URL của file mới vào danh sách
+                    newImageUrls.add("/uploads/" + fileName);
                 }
             }
 
-            // Xử lý imagesToDelete
             List<String> imagesToDelete = request.getImagesToDelete() != null ? request.getImagesToDelete() : new ArrayList<>();
             for (String url : imagesToDelete) {
                 if (newImageUrls.contains(url)) {
-                    newImageUrls.remove(url); // Xóa URL khỏi danh sách
-                    deleteImage(url); // Xóa file vật lý trên server
+                    newImageUrls.remove(url);
+                    deleteImage(url);
                 }
             }
 
-            // Kiểm tra số lượng hình ảnh
             if (newImageUrls.size() > 10) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body("Maximum 10 images allowed.");
             }
 
-            // Cập nhật các trường
             current.setEnglishName(request.getEnglishName() != null ? request.getEnglishName() : current.getEnglishName());
             current.setVietnameseName(request.getVietnameseName() != null ? request.getVietnameseName() : current.getVietnameseName());
             current.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : current.getFullDescription());
@@ -411,11 +287,13 @@ public class SummaryRequisitionController {
         }
     }
 
-    // Hàm xóa file vật lý trên server
     private void deleteImage(String imageUrl) {
         try {
-            String filePath = UPLOAD_DIR + imageUrl; // Điều chỉnh theo cấu hình lưu trữ
-            Files.deleteIfExists(Paths.get(filePath));
+            String fileName = imageUrl.replace("/uploads/", "");
+            Path filePath = Paths.get(UPLOAD_DIR, fileName);
+            if (Files.exists(filePath)) {
+                Files.delete(filePath);
+            }
         } catch (IOException e) {
             System.err.println("Failed to delete image: " + imageUrl + ", error: " + e.getMessage());
         }
@@ -609,92 +487,6 @@ public class SummaryRequisitionController {
                 .collect(Collectors.toList());
     }
 
-//    @GetMapping("/search/comparison")
-//    public ResponseEntity<Page<SummaryRequisitionDTO>> searchRequisitions(
-//            @RequestParam String groupId,
-//            @RequestParam(required = false) String productType1Name,
-//            @RequestParam(required = false) String productType2Name,
-//            @RequestParam(required = false) String englishName,
-//            @RequestParam(required = false) String vietnameseName,
-//            @RequestParam(required = false) String oldSapCode,
-//            @RequestParam(required = false) String newSapCode,
-//            @RequestParam(required = false) String unit,
-//            @RequestParam(required = false) String departmentName,
-//            @RequestParam(defaultValue = "0") int page,
-//            @RequestParam(defaultValue = "25") int size) {
-//
-//        // Create Pageable object for pagination and sorting
-//        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("updatedAt")));
-//
-//        // Fetch all requisitions for the groupId
-//        List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
-//
-//        // Apply filtering
-//        List<SummaryRequisitionDTO> filteredList = requisitions.stream()
-//                .filter(req -> {
-//                    boolean matches = true;
-//
-//                    // Fetch ProductType1 and ProductType2 Names for filtering
-//                    String reqProductType1Name = req.getProductType1Id() != null ?
-//                            (productType1Service.getById(req.getProductType1Id()) != null ?
-//                                    productType1Service.getById(req.getProductType1Id()).getName() : "Unknown") : "Unknown";
-//                    String reqProductType2Name = req.getProductType2Id() != null ?
-//                            (productType2Service.getById(req.getProductType2Id()) != null ?
-//                                    productType2Service.getById(req.getProductType2Id()).getName() : "Unknown") : "Unknown";
-//
-//                    // Fetch Department Names for filtering
-//                    List<String> deptNames = req.getDepartmentRequestQty().entrySet().stream()
-//                            .map(entry -> {
-//                                String deptId = entry.getKey();
-//                                Department dept = departmentRepository.findById(deptId).orElse(null);
-//                                return dept != null ? dept.getDepartmentName() : "Unknown";
-//                            })
-//                            .collect(Collectors.toList());
-//
-//                    // Apply filters
-//                    if (productType1Name != null && !productType1Name.isEmpty()) {
-//                        matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
-//                    }
-//                    if (productType2Name != null && !productType2Name.isEmpty()) {
-//                        matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
-//                    }
-//                    if (englishName != null && !englishName.isEmpty()) {
-//                        matches = matches && req.getEnglishName() != null && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
-//                    }
-//                    if (vietnameseName != null && !vietnameseName.isEmpty()) {
-//                        matches = matches && req.getVietnameseName() != null && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
-//                    }
-//                    if (oldSapCode != null && !oldSapCode.isEmpty()) {
-//                        matches = matches && req.getOldSapCode() != null && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
-//                    }
-//                    if (newSapCode != null && !newSapCode.isEmpty()) {
-//                        matches = matches && req.getNewSapCode() != null && req.getNewSapCode().toLowerCase().contains(newSapCode.toLowerCase());
-//                    }
-//                    if (unit != null && !unit.isEmpty()) {
-//                        SupplierProduct supplierProduct = req.getSupplierId() != null ? supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
-//                        String reqUnit = supplierProduct != null ? supplierProduct.getUnit() : "";
-//                        matches = matches && reqUnit.toLowerCase().contains(unit.toLowerCase());
-//                    }
-//                    if (departmentName != null && !departmentName.isEmpty()) {
-//                        matches = matches && deptNames.stream().anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
-//                    }
-//
-//                    return matches;
-//                })
-//                .map(req -> convertToDto(req))
-//                .collect(Collectors.toList());
-//
-//        // Apply pagination manually
-//        int start = Math.min((int) pageable.getOffset(), filteredList.size());
-//        int end = Math.min(start + pageable.getPageSize(), filteredList.size());
-//        List<SummaryRequisitionDTO> pagedList = filteredList.subList(start, end);
-//
-//        // Create Page object
-//        Page<SummaryRequisitionDTO> pagedResult = new PageImpl<>(pagedList, pageable, filteredList.size());
-//
-//        return ResponseEntity.ok(pagedResult);
-//    }
-
     @PostMapping(value = "/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload Requisition File", description = "Upload an Excel .xlsx file with data starting from row 13. Columns: STT (A), Description (B) [Vietnamese/English], (C empty), Ref. No. (D), Part. No. (E), OLD Sap Code (F), NEW Sap Code (G), Quantity (H), Unit (I), Inventory SAP (J), Inventory MED (K), Picture (L), Last order (M), Remarks (N)")
     public ResponseEntity<List<SummaryRequisition>> uploadRequisitionFile(
@@ -857,17 +649,15 @@ public class SummaryRequisitionController {
             @RequestParam(required = false) String departmentName,
             @RequestParam(defaultValue = "false") Boolean filter) {
 
-        // Lấy tất cả yêu cầu theo groupId
+
         List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
 
-        // Áp dụng bộ lọc nếu tham số filter là true
         List<SummaryRequisition> filteredRequisitions = requisitions;
         if (Boolean.TRUE.equals(filter)) {
             filteredRequisitions = requisitions.stream()
                     .filter(req -> {
                         boolean matches = true;
 
-                        // Lấy type1Name và type2Name để lọc
                         String reqProductType1Name = req.getProductType1Id() != null
                                 ? productType1Repository.findById(req.getProductType1Id())
                                 .map(ProductType1::getName)
@@ -879,14 +669,12 @@ public class SummaryRequisitionController {
                                 .orElse("")
                                 : "";
 
-                        // Lấy tên phòng ban để lọc
                         List<String> deptNames = req.getDepartmentRequestQty().keySet().stream()
                                 .map(deptId -> departmentRepository.findById(deptId)
                                         .map(Department::getDepartmentName)
                                         .orElse("Unknown"))
                                 .collect(Collectors.toList());
 
-                        // Áp dụng các bộ lọc
                         if (productType1Name != null && !productType1Name.isEmpty()) {
                             matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
                         }
@@ -921,14 +709,12 @@ public class SummaryRequisitionController {
                     .collect(Collectors.toList());
         }
 
-        // Sắp xếp yêu cầu theo updatedAt hoặc createdAt (thứ tự giảm dần)
         filteredRequisitions.sort((req1, req2) -> {
             LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt() : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
             LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt() : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
-            return date2.compareTo(date1); // Thứ tự giảm dần (mới nhất trước)
+            return date2.compareTo(date1);
         });
 
-        // Chuyển đổi sang DTO và tính tổng trong một vòng lặp
         List<ComparisonRequisitionDTO> dtoList = new ArrayList<>();
         double totalAmtVnd = 0.0;
         double totalAmtDifference = 0.0;
@@ -937,7 +723,6 @@ public class SummaryRequisitionController {
         for (SummaryRequisition req : filteredRequisitions) {
             ComparisonRequisitionDTO dto = convertToDtos(req);
             dtoList.add(dto);
-            // Cộng dồn tổng với kiểm tra null
             if (dto.getAmtVnd() != null) {
                 totalAmtVnd += dto.getAmtVnd();
             }
@@ -949,7 +734,6 @@ public class SummaryRequisitionController {
             }
         }
 
-        // Tạo DTO phản hồi
         ComparisonRequisitionResponseDTO response = new ComparisonRequisitionResponseDTO(
                 dtoList,
                 totalAmtVnd,
@@ -961,20 +745,16 @@ public class SummaryRequisitionController {
     }
 
     private ComparisonRequisitionDTO convertToDtos(SummaryRequisition req) {
-        // Khởi tạo danh sách nhà cung cấp
         List<ComparisonRequisitionDTO.SupplierDTO> supplierDTOs;
 
-        // Lấy sapCode từ yêu cầu
         String sapCode = req.getOldSapCode() != null && !req.getOldSapCode().isEmpty() ? req.getOldSapCode() : null;
 
-        // Lấy supplierId từ yêu cầu
         String selectedSupplierId = req.getSupplierId();
 
-        // Lấy danh sách nhà cung cấp nếu sapCode hợp lệ (không null và độ dài >= 3)
         String unit = "";
         if (sapCode != null && sapCode.length() >= 3) {
             List<SupplierProduct> suppliers = supplierProductRepository.findBySapCode(sapCode);
-            // Chuyển đổi sang SupplierDTO, đánh dấu nhà cung cấp được chọn, và sắp xếp theo giá tăng dần
+
             supplierDTOs = suppliers.stream()
                     .map(sp -> new ComparisonRequisitionDTO.SupplierDTO(
                             sp.getPrice(),
@@ -984,7 +764,6 @@ public class SummaryRequisitionController {
                     .sorted(Comparator.comparing(ComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(Double::compareTo)))
                     .collect(Collectors.toList());
 
-            // Lấy đơn vị từ nhà cung cấp được chọn
             if (selectedSupplierId != null) {
                 unit = suppliers.stream()
                         .filter(sp -> sp.getId().equals(selectedSupplierId))
@@ -993,16 +772,13 @@ public class SummaryRequisitionController {
                         .orElse("");
             }
         } else {
-            // Trả về danh sách rỗng nếu sapCode null hoặc quá ngắn
             supplierDTOs = Collections.emptyList();
         }
 
-        // Tính tổng số lượng từ các yêu cầu phòng ban
         int totalQuantity = req.getDepartmentRequestQty().values().stream()
                 .mapToInt(Number::intValue)
                 .sum();
 
-        // Lấy giá từ nhà cung cấp được chọn (isSelected = 1) và giá cao nhất nếu selectedSupplierId không null
         Double selectedPrice = null;
         Double highestPrice = null;
         if (selectedSupplierId != null && !supplierDTOs.isEmpty()) {
