@@ -1,37 +1,88 @@
 package org.bsl.pricecomparison.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
+@Schema(description = "DTO for comparison requisition details")
 public class ComparisonRequisitionDTO {
 
+    @Schema(description = "English name", example = "Product XYZ")
     private String englishName;
-    private String vietnameseName;
-    private String oldSapCode;
-    private String newSapCode;
-    private List<SupplierDTO> suppliers;
-    private String remark;
-    private List<DepartmentRequestDTO> departmentRequests;
-    private Double price; // Giá của nhà cung cấp được chọn
-    private Double amtVnd; // Giá được chọn * tổng quantity
-    private Double amtDifference; // amtVnd - (giá cao nhất * tổng quantity)
-    private Double percentage; // (amtDifference / amtVnd) * 100
-    private Double highestPrice; // Giá cao nhất trong danh sách suppliers
-    private String type1; // Product Type 1 ID
-    private String type2; // Product Type 2 ID
-    private String type1Name; // Product Type 1 Name
-    private String type2Name; // Product Type 2 Name
-    private String unit; // Unit of the selected supplier
 
-    public ComparisonRequisitionDTO(String englishName, String vietnameseName, String oldSapCode, String newSapCode,
-                                    List<SupplierDTO> suppliers, String remark, List<DepartmentRequestDTO> departmentRequests,
-                                    Double price, Double amtVnd, Double amtDifference, Double percentage, Double highestPrice,
-                                    String type1, String type2, String type1Name, String type2Name, String unit) {
+    @Schema(description = "Vietnamese name", example = "Sản phẩm XYZ")
+    private String vietnameseName;
+
+    @Schema(description = "Old SAP code", example = "OLD123")
+    private String oldSapCode;
+
+    @Schema(description = "New SAP code", example = "NEW456")
+    private String newSapCode;
+
+    @Schema(description = "List of supplier details")
+    private List<SupplierDTO> suppliers;
+
+    @Schema(description = "Remark for comparison", example = "Comparison note")
+    private String remarkComparison;
+
+    @Schema(description = "List of department request details")
+    private List<DepartmentRequestDTO> departmentRequests;
+
+    @Schema(description = "Selected price", example = "100.0")
+    private Double price;
+
+    @Schema(description = "Total amount in VND", example = "1000.0")
+    private Double amtVnd;
+
+    @Schema(description = "Amount difference", example = "-200.0")
+    private Double amtDifference;
+
+    @Schema(description = "Percentage difference", example = "-20.0")
+    private Double percentage;
+
+    @Schema(description = "Highest price", example = "120.0")
+    private Double highestPrice;
+
+    @Schema(description = "Product Type 1 ID", example = "1")
+    private String type1;
+
+    @Schema(description = "Product Type 2 ID", example = "2")
+    private String type2;
+
+    @Schema(description = "Product Type 1 Name", example = "Electronics")
+    private String type1Name;
+
+    @Schema(description = "Product Type 2 Name", example = "Smartphones")
+    private String type2Name;
+
+    @Schema(description = "Unit", example = "pcs")
+    private String unit;
+
+    public ComparisonRequisitionDTO(
+            String englishName,
+            String vietnameseName,
+            String oldSapCode,
+            String newSapCode,
+            List<SupplierDTO> suppliers,
+            String remarkComparison,
+            List<DepartmentRequestDTO> departmentRequests,
+            Double price,
+            Double amtVnd,
+            Double amtDifference,
+            Double percentage,
+            Double highestPrice,
+            String type1,
+            String type2,
+            String type1Name,
+            String type2Name,
+            String unit
+    ) {
         this.englishName = englishName;
         this.vietnameseName = vietnameseName;
         this.oldSapCode = oldSapCode;
         this.newSapCode = newSapCode;
         this.suppliers = suppliers;
-        this.remark = remark;
+        this.remarkComparison = remarkComparison;
         this.departmentRequests = departmentRequests;
         this.price = price;
         this.amtVnd = amtVnd;
@@ -86,12 +137,12 @@ public class ComparisonRequisitionDTO {
         this.suppliers = suppliers;
     }
 
-    public String getRemark() {
-        return remark;
+    public String getRemarkComparison() {
+        return remarkComparison;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    public void setRemarkComparison(String remarkComparison) {
+        this.remarkComparison = remarkComparison;
     }
 
     public List<DepartmentRequestDTO> getDepartmentRequests() {
@@ -182,13 +233,21 @@ public class ComparisonRequisitionDTO {
         this.unit = unit;
     }
 
+    @Schema(description = "Supplier details")
     public static class SupplierDTO {
+        @Schema(description = "Price", example = "100.0")
         private Double price;
-        private String supplierName;
-        private int isSelected; // 1 nếu nhà cung cấp được chọn, 0 nếu không
-        private String unit; // Unit of the supplier
 
-        public SupplierDTO(Double price, String supplierName, int isSelected, String unit) {
+        @Schema(description = "Supplier name", example = "Supplier ABC")
+        private String supplierName;
+
+        @Schema(description = "Is selected (1 for selected, 0 for not selected)", example = "1")
+        private Integer isSelected;
+
+        @Schema(description = "Unit", example = "pcs")
+        private String unit;
+
+        public SupplierDTO(Double price, String supplierName, Integer isSelected, String unit) {
             this.price = price;
             this.supplierName = supplierName;
             this.isSelected = isSelected;
@@ -211,11 +270,11 @@ public class ComparisonRequisitionDTO {
             this.supplierName = supplierName;
         }
 
-        public int getIsSelected() {
+        public Integer getIsSelected() {
             return isSelected;
         }
 
-        public void setIsSelected(int isSelected) {
+        public void setIsSelected(Integer isSelected) {
             this.isSelected = isSelected;
         }
 
@@ -228,15 +287,25 @@ public class ComparisonRequisitionDTO {
         }
     }
 
+    @Schema(description = "Department request details")
     public static class DepartmentRequestDTO {
+        @Schema(description = "Department ID", example = "dept1")
         private String departmentId;
-        private String departmentName;
-        private int quantity;
 
-        public DepartmentRequestDTO(String departmentId, String departmentName, int quantity) {
+        @Schema(description = "Department name", example = "IT Department")
+        private String departmentName;
+
+        @Schema(description = "Requested quantity", example = "10")
+        private Integer qty;
+
+        @Schema(description = "Approved buy quantity", example = "8")
+        private Integer buy;
+
+        public DepartmentRequestDTO(String departmentId, String departmentName, Integer qty, Integer buy) {
             this.departmentId = departmentId;
             this.departmentName = departmentName;
-            this.quantity = quantity;
+            this.qty = qty;
+            this.buy = buy;
         }
 
         public String getDepartmentId() {
@@ -255,12 +324,20 @@ public class ComparisonRequisitionDTO {
             this.departmentName = departmentName;
         }
 
-        public int getQuantity() {
-            return quantity;
+        public Integer getQty() {
+            return qty;
         }
 
-        public void setQuantity(int quantity) {
-            this.quantity = quantity;
+        public void setQty(Integer qty) {
+            this.qty = qty;
+        }
+
+        public Integer getBuy() {
+            return buy;
+        }
+
+        public void setBuy(Integer buy) {
+            this.buy = buy;
         }
     }
 }

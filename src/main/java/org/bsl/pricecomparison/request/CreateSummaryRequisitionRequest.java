@@ -1,26 +1,16 @@
 package org.bsl.pricecomparison.request;
 
-import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+@Schema(description = "Request to create a new summary requisition")
 public class CreateSummaryRequisitionRequest {
-
-    @ArraySchema(
-            arraySchema = @Schema(description = "Requisition image files", type = "array"),
-            minItems = 0,
-            maxItems = 10,
-            uniqueItems = false,
-            schema = @Schema(type = "string", format = "binary")
-    )
-    private List<MultipartFile> files;
-
-    @Schema(description = "English name", example = "Product XYZ")
+    @Schema(description = "English name of the product", example = "Product XYZ")
     private String englishName;
 
-    @Schema(description = "Vietnamese name", example = "Sản phẩm XYZ")
+    @Schema(description = "Vietnamese name of the product", example = "Sản phẩm XYZ")
     private String vietnameseName;
 
     @Schema(description = "Old SAP code", example = "OLD123")
@@ -29,84 +19,44 @@ public class CreateSummaryRequisitionRequest {
     @Schema(description = "New SAP code", example = "NEW456")
     private String newSapCode;
 
-    @Schema(description = "Department request quantities as JSON string", example = "{\"dept1\": 10.0, \"dept2\": 20.0}")
-    private String departmentRequestQty;
+    @Schema(description = "Department request quantities (JSON string)",
+            example = "{\"quantities\": {\"dept1\": {\"qty\": 10.0, \"buy\": 8.0}}}")
+    private String departmentRequestQty; // Must be String, not DepartmentRequestQtyDTO
 
-    @Schema(description = "Stock quantity", example = "100.0")
-    private Double stock;
+    @Schema(description = "Stock quantity", example = "100")
+    private Integer stock;
 
-    @Schema(description = "Purchasing suggestion", example = "50.0")
-    private Double purchasingSuggest;
+    @Schema(description = "Purchasing suggestion", example = "50")
+    private Integer purchasingSuggest;
 
-    @Schema(description = "Reason", example = "Urgent restock")
+    @Schema(description = "Reason for requisition", example = "Urgent restock")
     private String reason;
 
     @Schema(description = "Remark", example = "High priority")
     private String remark;
 
-    @Schema(description = "Supplier ID", example = "SUP123")
+    @Schema(description = "Remark for comparison", example = "Comparison note")
+    private String remarkComparison;
+
+    @Schema(description = "Supplier ID", example = "689dbaddf1bf4d67a76ebae5")
     private String supplierId;
 
-    @Schema(description = "Group ID", example = "GRP456")
+    @Schema(description = "Group ID", example = "689dbaddf1bf4d67a76ebae5")
     private String groupId;
 
-    @Schema(description = "Product Type 1 ID", example = "1")
+    @Schema(description = "Product type 1 ID", example = "")
     private String productType1Id;
 
-    @Schema(description = "Product Type 2 ID", example = "2")
+    @Schema(description = "Product type 2 ID", example = "")
     private String productType2Id;
 
     @Schema(description = "Full description", example = "Detailed description of requisition")
     private String fullDescription;
 
-    @Schema(description = "Total request quantity", example = "30.0")
-    private Double totalRequestQty;
+    @Schema(description = "List of uploaded image files")
+    private List<MultipartFile> files;
 
-    @Schema(description = "Total price", example = "3000.0")
-    private Double totalPrice;
-
-    // --- Getters and Setters ---
-
-    public List<MultipartFile> getFiles() {
-        return files;
-    }
-
-    public void setFiles(List<MultipartFile> files) {
-        this.files = files;
-    }
-
-    public String getEnglishName() {
-        return englishName;
-    }
-
-    public void setEnglishName(String englishName) {
-        this.englishName = englishName;
-    }
-
-    public String getVietnameseName() {
-        return vietnameseName;
-    }
-
-    public void setVietnameseName(String vietnameseName) {
-        this.vietnameseName = vietnameseName;
-    }
-
-    public String getOldSapCode() {
-        return oldSapCode;
-    }
-
-    public void setOldSapCode(String oldSapCode) {
-        this.oldSapCode = oldSapCode;
-    }
-
-    public String getNewSapCode() {
-        return newSapCode;
-    }
-
-    public void setNewSapCode(String newSapCode) {
-        this.newSapCode = newSapCode;
-    }
-
+    // Getters and setters
     public String getDepartmentRequestQty() {
         return departmentRequestQty;
     }
@@ -115,91 +65,35 @@ public class CreateSummaryRequisitionRequest {
         this.departmentRequestQty = departmentRequestQty;
     }
 
-    public Double getStock() {
-        return stock;
-    }
-
-    public void setStock(Double stock) {
-        this.stock = stock;
-    }
-
-    public Double getPurchasingSuggest() {
-        return purchasingSuggest;
-    }
-
-    public void setPurchasingSuggest(Double purchasingSuggest) {
-        this.purchasingSuggest = purchasingSuggest;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public String getRemark() {
-        return remark;
-    }
-
-    public void setRemark(String remark) {
-        this.remark = remark;
-    }
-
-    public String getSupplierId() {
-        return supplierId;
-    }
-
-    public void setSupplierId(String supplierId) {
-        this.supplierId = supplierId;
-    }
-
-    public String getGroupId() {
-        return groupId;
-    }
-
-    public void setGroupId(String groupId) {
-        this.groupId = groupId;
-    }
-
-    public String getProductType1Id() {
-        return productType1Id;
-    }
-
-    public void setProductType1Id(String productType1Id) {
-        this.productType1Id = productType1Id;
-    }
-
-    public String getProductType2Id() {
-        return productType2Id;
-    }
-
-    public void setProductType2Id(String productType2Id) {
-        this.productType2Id = productType2Id;
-    }
-
-    public String getFullDescription() {
-        return fullDescription;
-    }
-
-    public void setFullDescription(String fullDescription) {
-        this.fullDescription = fullDescription;
-    }
-
-    public Double getTotalRequestQty() {
-        return totalRequestQty;
-    }
-
-    public void setTotalRequestQty(Double totalRequestQty) {
-        this.totalRequestQty = totalRequestQty;
-    }
-
-    public Double getTotalPrice() {
-        return totalPrice;
-    }
-
-    public void setTotalPrice(Double totalPrice) {
-        this.totalPrice = totalPrice;
-    }
+    // Other getters and setters (omitted for brevity, ensure they match your fields)
+    public String getEnglishName() { return englishName; }
+    public void setEnglishName(String englishName) { this.englishName = englishName; }
+    public String getVietnameseName() { return vietnameseName; }
+    public void setVietnameseName(String vietnameseName) { this.vietnameseName = vietnameseName; }
+    public String getOldSapCode() { return oldSapCode; }
+    public void setOldSapCode(String oldSapCode) { this.oldSapCode = oldSapCode; }
+    public String getNewSapCode() { return newSapCode; }
+    public void setNewSapCode(String newSapCode) { this.newSapCode = newSapCode; }
+    public Integer getStock() { return stock; }
+    public void setStock(Integer stock) { this.stock = stock; }
+    public Integer getPurchasingSuggest() { return purchasingSuggest; }
+    public void setPurchasingSuggest(Integer purchasingSuggest) { this.purchasingSuggest = purchasingSuggest; }
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+    public String getRemark() { return remark; }
+    public void setRemark(String remark) { this.remark = remark; }
+    public String getRemarkComparison() { return remarkComparison; }
+    public void setRemarkComparison(String remarkComparison) { this.remarkComparison = remarkComparison; }
+    public String getSupplierId() { return supplierId; }
+    public void setSupplierId(String supplierId) { this.supplierId = supplierId; }
+    public String getGroupId() { return groupId; }
+    public void setGroupId(String groupId) { this.groupId = groupId; }
+    public String getProductType1Id() { return productType1Id; }
+    public void setProductType1Id(String productType1Id) { this.productType1Id = productType1Id; }
+    public String getProductType2Id() { return productType2Id; }
+    public void setProductType2Id(String productType2Id) { this.productType2Id = productType2Id; }
+    public String getFullDescription() { return fullDescription; }
+    public void setFullDescription(String fullDescription) { this.fullDescription = fullDescription; }
+    public List<MultipartFile> getFiles() { return files; }
+    public void setFiles(List<MultipartFile> files) { this.files = files; }
 }

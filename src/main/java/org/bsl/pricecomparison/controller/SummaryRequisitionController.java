@@ -7,22 +7,19 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.*;
-import org.bsl.pricecomparison.dto.ComparisonRequisitionDTO;
-import org.bsl.pricecomparison.dto.ComparisonRequisitionResponseDTO;
-import org.bsl.pricecomparison.dto.SummaryRequisitionDTO;
-import org.bsl.pricecomparison.dto.SummaryRequisitionWithSupplierDTO;
+import org.bsl.pricecomparison.dto.*;
 import org.bsl.pricecomparison.model.*;
 import org.bsl.pricecomparison.repository.*;
-import org.bsl.pricecomparison.request.CreateSummaryRequisitionRequest;
-import org.bsl.pricecomparison.request.UpdateProductRequest;
-import org.bsl.pricecomparison.request.UpdateSummaryRequisitionRequest;
+import org.bsl.pricecomparison.request.*;
 import org.bsl.pricecomparison.service.ProductType1Service;
 import org.bsl.pricecomparison.service.ProductType2Service;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
+import org.apache.poi.xssf.usermodel.XSSFDrawing;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -92,11 +89,107 @@ public class SummaryRequisitionController {
                     if (req.getSupplierId() != null) {
                         supplierProduct = supplierProductRepository.findById(req.getSupplierId()).orElse(null);
                     }
-                    SummaryRequisitionWithSupplierDTO dto = new SummaryRequisitionWithSupplierDTO(req, supplierProduct);
+
+                    List<DepartmentQtyDTO> departmentQtyDTOs = req.getDepartmentRequestQty().entrySet().stream()
+                            .map(entry -> {
+                                String departmentId = entry.getKey();
+                                DepartmentQty deptQty = entry.getValue();
+                                // Tra cứu departmentName từ DepartmentRepository
+                                String departmentName = departmentRepository.findById(departmentId)
+                                        .map(Department::getDepartmentName)
+                                        .orElse("Unknown Department");
+                                return new DepartmentQtyDTO(departmentId, departmentName, deptQty.getQty(), deptQty.getBuy());
+                            })
+                            .collect(Collectors.toList());
+
+                    SummaryRequisitionWithSupplierDTO dto = new SummaryRequisitionWithSupplierDTO(req, supplierProduct, departmentQtyDTOs);
                     return ResponseEntity.ok(dto);
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
+
+//    @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+//    @Operation(
+//            summary = "Create a new summary requisition with multiple image uploads",
+//            description = "Create a summary requisition and upload multiple images using multipart/form-data.",
+//            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+//                    content = @Content(
+//                            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+//                            schema = @Schema(implementation = CreateSummaryRequisitionRequest.class)
+//                    )
+//            )
+//    )
+//    public ResponseEntity<?> create(@ModelAttribute CreateSummaryRequisitionRequest request) {
+//        try {
+//            ObjectMapper mapper = new ObjectMapper();
+//            Map<String, Double> deptQty;
+//            try {
+//                deptQty = request.getDepartmentRequestQty() != null
+//                        ? mapper.readValue(request.getDepartmentRequestQty(), new TypeReference<Map<String, Double>>() {})
+//                        : new HashMap<>();
+//            } catch (JsonProcessingException e) {
+//                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+//                        .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
+//            }
+//
+//            Optional<SummaryRequisition> existing = requisitionRepository.findByProductType1IdAndProductType2IdAndOldSapCode(
+//                    request.getProductType1Id(),
+//                    request.getProductType2Id(),
+//                    request.getOldSapCode()
+//            );
+//
+//            if (existing.isPresent()) {
+//                return ResponseEntity.status(HttpStatus.CONFLICT)
+//                        .body("Duplicate entry: productType1Id, productType2Id, and oldSapCode must be unique together.");
+//            }
+//
+//            List<String> imageUrls = new ArrayList<>();
+//            List<MultipartFile> files = request.getFiles();
+//            if (files != null && !files.isEmpty()) {
+//                for (MultipartFile file : files) {
+//                    if (file != null && !file.isEmpty()) {
+//                        String imageUrl = saveImage(file);
+//                        imageUrls.add(imageUrl);
+//                    }
+//                }
+//            }
+//
+//            if (imageUrls.size() > 10) {
+//                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+//                        .body("Maximum 10 images allowed.");
+//            }
+//
+//            SummaryRequisition summary = new SummaryRequisition();
+//            summary.setEnglishName(request.getEnglishName());
+//            summary.setVietnameseName(request.getVietnameseName());
+//            summary.setOldSapCode(request.getOldSapCode());
+//            summary.setNewSapCode(request.getNewSapCode());
+//            summary.setDepartmentRequestQty(deptQty);
+//            summary.setStock(request.getStock());
+//            summary.setPurchasingSuggest(request.getPurchasingSuggest());
+//            summary.setReason(request.getReason());
+//            summary.setRemark(request.getRemark());
+//            summary.setRemarkComparison(request.getRemarkComparison());
+//            summary.setSupplierId(request.getSupplierId());
+//            summary.setGroupId(request.getGroupId());
+//            summary.setProductType1Id(request.getProductType1Id());
+//            summary.setProductType2Id(request.getProductType2Id());
+//            summary.setFullDescription(request.getFullDescription());
+//            summary.setImageUrls(imageUrls);
+//            summary.setCreatedAt(LocalDateTime.now());
+//            summary.setUpdatedAt(LocalDateTime.now());
+//
+//            SummaryRequisition saved = requisitionRepository.save(summary);
+//            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+//
+//        } catch (IOException e) {
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+//                    .body("Error processing file: " + e.getMessage());
+//        } catch (Exception e) {
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+//                    .body("Unexpected error: " + e.getMessage());
+//        }
+//    }
 
     @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
@@ -111,17 +204,30 @@ public class SummaryRequisitionController {
     )
     public ResponseEntity<?> create(@ModelAttribute CreateSummaryRequisitionRequest request) {
         try {
+            // Log the received departmentRequestQty for debugging
+            System.out.println("Received departmentRequestQty: " + request.getDepartmentRequestQty());
+
+            // Handle department quantities
             ObjectMapper mapper = new ObjectMapper();
-            Map<String, Double> deptQty;
+            DepartmentRequestQtyDTO deptQtyDTO;
             try {
-                deptQty = request.getDepartmentRequestQty() != null
-                        ? mapper.readValue(request.getDepartmentRequestQty(), new TypeReference<Map<String, Double>>() {})
-                        : new HashMap<>();
+                if (request.getDepartmentRequestQty() != null && !request.getDepartmentRequestQty().isEmpty()) {
+                    deptQtyDTO = mapper.readValue(request.getDepartmentRequestQty(), DepartmentRequestQtyDTO.class);
+                } else {
+                    deptQtyDTO = new DepartmentRequestQtyDTO();
+                    deptQtyDTO.setQuantities(new HashMap<>());
+                }
             } catch (JsonProcessingException e) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
             }
 
+            // Extract quantities from DepartmentRequestQtyDTO
+            Map<String, DepartmentQty> deptQty = deptQtyDTO.getQuantities() != null
+                    ? deptQtyDTO.getQuantities()
+                    : new HashMap<>();
+
+            // Check for duplicate entry
             Optional<SummaryRequisition> existing = requisitionRepository.findByProductType1IdAndProductType2IdAndOldSapCode(
                     request.getProductType1Id(),
                     request.getProductType2Id(),
@@ -130,9 +236,10 @@ public class SummaryRequisitionController {
 
             if (existing.isPresent()) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body("Duplicate entry: productType1Id, productType2Id, and newSapCode must be unique together.");
+                        .body("Duplicate entry: productType1Id, productType2Id, and oldSapCode must be unique together.");
             }
 
+            // Handle image uploads
             List<String> imageUrls = new ArrayList<>();
             List<MultipartFile> files = request.getFiles();
             if (files != null && !files.isEmpty()) {
@@ -144,11 +251,13 @@ public class SummaryRequisitionController {
                 }
             }
 
+            // Validate image count
             if (imageUrls.size() > 10) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body("Maximum 10 images allowed.");
             }
 
+            // Create and populate SummaryRequisition
             SummaryRequisition summary = new SummaryRequisition();
             summary.setEnglishName(request.getEnglishName());
             summary.setVietnameseName(request.getVietnameseName());
@@ -159,6 +268,7 @@ public class SummaryRequisitionController {
             summary.setPurchasingSuggest(request.getPurchasingSuggest());
             summary.setReason(request.getReason());
             summary.setRemark(request.getRemark());
+            summary.setRemarkComparison(request.getRemarkComparison());
             summary.setSupplierId(request.getSupplierId());
             summary.setGroupId(request.getGroupId());
             summary.setProductType1Id(request.getProductType1Id());
@@ -168,11 +278,12 @@ public class SummaryRequisitionController {
             summary.setCreatedAt(LocalDateTime.now());
             summary.setUpdatedAt(LocalDateTime.now());
 
+            // Save to repository
             SummaryRequisition saved = requisitionRepository.save(summary);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
 
         } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Error processing file: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -203,7 +314,8 @@ public class SummaryRequisitionController {
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "Update an existing summary requisition",
-            description = "Update a summary requisition with updated fields and manage image files. The provided imageUrls list contains new image files to upload. Images specified in imagesToDelete are removed. Supports file uploads for new images.",
+            description = "Update a summary requisition with updated fields and manage image files. " +
+                    "The provided files list contains new image files to upload. Images specified in imagesToDelete (as a JSON string of URLs) are removed. Supports file uploads for new images.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     content = @Content(
                             mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
@@ -222,36 +334,71 @@ public class SummaryRequisitionController {
 
             SummaryRequisition current = existingRequisition.get();
 
-            Map<String, Double> deptQty = request.getDepartmentRequestQty() != null
-                    ? objectMapper.readValue(request.getDepartmentRequestQty(), new TypeReference<Map<String, Double>>() {})
-                    : current.getDepartmentRequestQty();
+            // Handle department quantities
+            Map<String, DepartmentQty> deptQty = current.getDepartmentRequestQty() != null ? new HashMap<>(current.getDepartmentRequestQty()) : new HashMap<>();
+            if (request.getDepartmentRequestQty() != null && !request.getDepartmentRequestQty().isEmpty()) {
+                try {
+                    DepartmentRequestQtyDTO deptQtyDTO = objectMapper.readValue(request.getDepartmentRequestQty(), DepartmentRequestQtyDTO.class);
+                    deptQty.clear();
+                    if (deptQtyDTO.getQuantities() != null) {
+                        deptQty.putAll(deptQtyDTO.getQuantities());
+                    }
+                } catch (JsonProcessingException e) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
+                }
+            }
 
+            // Handle image uploads
             List<String> newImageUrls = current.getImageUrls() != null ? new ArrayList<>(current.getImageUrls()) : new ArrayList<>();
-            List<MultipartFile> uploadedFiles = request.getImageUrls() != null ? request.getImageUrls() : new ArrayList<>();
-
-            for (MultipartFile file : uploadedFiles) {
-                if (!file.isEmpty()) {
-                    String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
-                    Path filePath = Paths.get(UPLOAD_DIR, fileName);
-                    Files.createDirectories(filePath.getParent());
-                    Files.write(filePath, file.getBytes());
-                    newImageUrls.add("/uploads/" + fileName);
+            List<MultipartFile> files = request.getFiles() != null ? request.getFiles() : new ArrayList<>();
+            for (MultipartFile file : files) {
+                if (file != null && !file.isEmpty()) {
+                    String imageUrl = saveImage(file);
+                    if (imageUrl != null) {
+                        newImageUrls.add(imageUrl);
+                    }
                 }
             }
 
-            List<String> imagesToDelete = request.getImagesToDelete() != null ? request.getImagesToDelete() : new ArrayList<>();
-            for (String url : imagesToDelete) {
-                if (newImageUrls.contains(url)) {
-                    newImageUrls.remove(url);
-                    deleteImage(url);
+            // Handle image deletions
+            List<String> imagesToDelete = new ArrayList<>();
+            String imagesToDeleteJson = request.getImagesToDelete();
+            if (imagesToDeleteJson != null && !imagesToDeleteJson.isEmpty()) {
+                try {
+                    imagesToDelete = objectMapper.readValue(imagesToDeleteJson, new TypeReference<List<String>>() {});
+                    if (imagesToDelete.size() > 10) {
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body("Cannot delete more than 10 images at once.");
+                    }
+                    List<String> imagesToDeleteCopy = new ArrayList<>(imagesToDelete);
+                    for (String url : imagesToDeleteCopy) {
+                        if (url != null && url.startsWith("/uploads/") && !url.contains("..")) {
+                            String normalizedUrl = url.split("\\?")[0].trim();
+                            if (newImageUrls.contains(normalizedUrl)) {
+                                newImageUrls.remove(normalizedUrl);
+                                deleteImage(normalizedUrl);
+                                System.out.println("Successfully processed deletion of: " + normalizedUrl);
+                            } else {
+                                System.out.println("Image URL not found in newImageUrls: " + normalizedUrl);
+                            }
+                        } else {
+                            System.out.println("Invalid image URL skipped: " + url);
+                        }
+                    }
+                } catch (JsonProcessingException e) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body("Invalid JSON format for imagesToDelete: " + e.getMessage());
                 }
             }
 
+            // Validate image count
             if (newImageUrls.size() > 10) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body("Maximum 10 images allowed.");
             }
 
+            // Update fields only if provided
             current.setEnglishName(request.getEnglishName() != null ? request.getEnglishName() : current.getEnglishName());
             current.setVietnameseName(request.getVietnameseName() != null ? request.getVietnameseName() : current.getVietnameseName());
             current.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : current.getFullDescription());
@@ -262,6 +409,7 @@ public class SummaryRequisitionController {
             current.setPurchasingSuggest(request.getPurchasingSuggest() != null ? request.getPurchasingSuggest() : current.getPurchasingSuggest());
             current.setReason(request.getReason() != null ? request.getReason() : current.getReason());
             current.setRemark(request.getRemark() != null ? request.getRemark() : current.getRemark());
+            current.setRemarkComparison(request.getRemarkComparison() != null ? request.getRemarkComparison() : current.getRemarkComparison());
             current.setSupplierId(request.getSupplierId() != null && !request.getSupplierId().isEmpty()
                     ? request.getSupplierId()
                     : current.getSupplierId());
@@ -271,21 +419,21 @@ public class SummaryRequisitionController {
             current.setImageUrls(newImageUrls);
             current.setUpdatedAt(LocalDateTime.now());
 
+            // Save to repository
             SummaryRequisition updated = requisitionRepository.save(current);
+            System.out.println("Updated imageUrls in database: " + updated.getImageUrls());
             return ResponseEntity.ok(updated);
 
-        } catch (JsonProcessingException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error processing image files: " + e.getMessage());
+                    .body("Error processing request: " + e.getMessage());
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("An error occurred while updating the requisition: " + e.getMessage());
         }
     }
+
 
     private void deleteImage(String imageUrl) {
         try {
@@ -310,23 +458,40 @@ public class SummaryRequisitionController {
 
         return requisitions.stream()
                 .map(req -> {
+                    // Tra cứu SupplierProduct
                     SupplierProduct supplierProduct = null;
                     if (req.getSupplierId() != null) {
                         supplierProduct = supplierProductRepository
                                 .findById(req.getSupplierId())
                                 .orElse(null);
                     }
-                    return new SummaryRequisitionWithSupplierDTO(req, supplierProduct);
+
+                    // Chuyển đổi departmentRequestQty thành List<DepartmentQtyDTO>
+                    List<DepartmentQtyDTO> departmentQtyDTOs = req.getDepartmentRequestQty().entrySet().stream()
+                            .map(entry -> {
+                                String departmentId = entry.getKey();
+                                DepartmentQty deptQty = entry.getValue();
+                                // Tra cứu departmentName từ DepartmentRepository
+                                String departmentName = departmentRepository.findById(departmentId)
+                                        .map(Department::getDepartmentName)
+                                        .orElse("Unknown Department");
+                                return new DepartmentQtyDTO(departmentId, departmentName, deptQty.getQty(), deptQty.getBuy());
+                            })
+                            .collect(Collectors.toList());
+
+                    // Tạo DTO với departmentRequestQuantities
+                    return new SummaryRequisitionWithSupplierDTO(req, supplierProduct, departmentQtyDTOs);
                 })
                 .collect(Collectors.toList());
     }
 
 
+
     @GetMapping("/group/{groupId}")
+    @Operation(summary = "Get all requisitions by group ID", description = "Retrieve a list of summary requisitions for a given group ID, sorted by updatedAt or createdAt in descending order.")
     public ResponseEntity<List<SummaryRequisitionDTO>> getAllByGroupId(@PathVariable String groupId) {
         List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
 
-        // Sort requisitions by updatedAt (if exists) and then createdAt (descending)
         List<SummaryRequisitionDTO> dtoList = requisitions.stream()
                 .sorted((req1, req2) -> {
                     LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt() : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
@@ -335,39 +500,71 @@ public class SummaryRequisitionController {
                 })
                 .map(req -> {
                     // Fetch SupplierProduct
-                    SupplierProduct supplierProduct = null;
-                    if (req.getSupplierId() != null) {
-                        supplierProduct = supplierProductRepository.findById(req.getSupplierId()).orElse(null);
+                    SupplierProduct supplierProduct = req.getSupplierId() != null ?
+                            supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
+
+                    // Calculate sumBuy
+                    int sumBuy = 0;
+                    if (req.getDepartmentRequestQty() != null) {
+                        for (Object value : req.getDepartmentRequestQty().values()) {
+                            if (value instanceof DepartmentQty deptQty) {
+                                sumBuy += deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                            } else if (value instanceof Double qty) {
+                                sumBuy += qty.intValue(); // Dữ liệu cũ: buy = qty
+                            }
+                        }
                     }
 
+                    // Calculate totalPrice
+                    double totalPrice = (req.getSupplierId() != null && supplierProduct != null && supplierProduct.getPrice() != null) ?
+                            supplierProduct.getPrice() * sumBuy : 0;
+
                     // Fetch Department Name for departmentRequestQty
-                    List<SummaryRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty().entrySet().stream()
-                            .map(entry -> {
-                                String departmentId = entry.getKey();
-                                Double quantityDouble = entry.getValue();
-                                Integer quantity = quantityDouble != null ? quantityDouble.intValue() : 0;
-                                Department department = departmentRepository.findById(departmentId).orElse(null);
-                                String departmentName = department != null ? department.getDepartmentName() : "Unknown";
-                                return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, quantity);
-                            })
-                            .collect(Collectors.toList());
+                    List<SummaryRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null ?
+                            req.getDepartmentRequestQty().entrySet().stream()
+                                    .map(entry -> {
+                                        String departmentId = entry.getKey();
+                                        Object value = entry.getValue();
+                                        Integer qty = 0;
+                                        Integer buy = 0;
+
+                                        if (value instanceof DepartmentQty deptQty) {
+                                            qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
+                                            buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                                        } else if (value instanceof Double doubleQty) {
+                                            qty = doubleQty.intValue();
+                                            buy = qty; // Mặc định buy bằng qty cho dữ liệu cũ
+                                        }
+
+                                        Department department = departmentRepository.findById(departmentId).orElse(null);
+                                        String departmentName = department != null ? department.getDepartmentName() : "Unknown";
+                                        return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, qty, buy);
+                                    })
+                                    .collect(Collectors.toList()) :
+                            new ArrayList<>();
 
                     // Fetch ProductType1 and ProductType2 Names
                     String productType1Name = null;
-                    if (req.getProductType1Id() != null) {
+                    if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
                         ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
                         productType1Name = productType1 != null ? productType1.getName() : "Unknown";
                     }
 
                     String productType2Name = null;
-                    if (req.getProductType2Id() != null) {
+                    if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
                         ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
                         productType2Name = productType2 != null ? productType2.getName() : "Unknown";
                     }
 
                     // Create DTO with all required fields
                     return new SummaryRequisitionDTO(
-                            req, supplierProduct, departmentRequests, productType1Name, productType2Name
+                            req,
+                            supplierProduct,
+                            departmentRequests,
+                            productType1Name,
+                            productType2Name,
+                            sumBuy,
+                            totalPrice
                     );
                 })
                 .collect(Collectors.toList());
@@ -375,7 +572,9 @@ public class SummaryRequisitionController {
         return ResponseEntity.ok(dtoList);
     }
 
+
     @GetMapping("/search")
+    @Operation(summary = "Search requisitions by group ID and optional filters", description = "Retrieve a list of summary requisitions for a given group ID with optional filters for product types, names, SAP codes, unit, and department name, sorted by updatedAt or createdAt in descending order.")
     public ResponseEntity<List<SummaryRequisitionDTO>> searchRequisitions(
             @RequestParam String groupId,
             @RequestParam(required = false) String productType1Name,
@@ -451,29 +650,64 @@ public class SummaryRequisitionController {
 
     private SummaryRequisitionDTO convertToDto(SummaryRequisition req) {
         // Fetch SupplierProduct
-        SupplierProduct supplierProduct = req.getSupplierId() != null ? supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
+        SupplierProduct supplierProduct = req.getSupplierId() != null ?
+                supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
 
-        // Fetch Department Name for departmentRequestQty
-        List<SummaryRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty().entrySet().stream()
-                .map(entry -> {
-                    String departmentId = entry.getKey();
-                    Double quantityDouble = entry.getValue();
-                    Integer quantity = quantityDouble != null ? quantityDouble.intValue() : 0;
-                    Department department = departmentRepository.findById(departmentId).orElse(null);
-                    String departmentName = department != null ? department.getDepartmentName() : "Unknown";
-                    return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, quantity);
-                })
-                .collect(Collectors.toList());
+        // Calculate sumBuy
+        int sumBuy = 0;
+        if (req.getDepartmentRequestQty() != null) {
+            for (Object value : req.getDepartmentRequestQty().values()) {
+                if (value instanceof DepartmentQty deptQty) {
+                    sumBuy += deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                } else if (value instanceof Double qty) {
+                    sumBuy += qty.intValue(); // Dữ liệu cũ: buy = qty
+                }
+            }
+        }
+
+        // Calculate totalPrice
+        double totalPrice = (req.getSupplierId() != null && supplierProduct != null && supplierProduct.getPrice() != null) ?
+                supplierProduct.getPrice() * sumBuy : 0;
+
+        // Fetch DepartmentRequestQty
+        List<SummaryRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null ?
+                req.getDepartmentRequestQty().entrySet().stream()
+                        .map(entry -> {
+                            String departmentId = entry.getKey();
+                            Object value = entry.getValue();
+                            Integer qty = 0;
+                            Integer buy = 0;
+
+                            if (value instanceof DepartmentQty deptQty) {
+                                qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
+                                buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                            } else if (value instanceof Double doubleQty) {
+                                qty = doubleQty.intValue();
+                                buy = qty; // Mặc định buy bằng qty cho dữ liệu cũ
+                            }
+
+                            Department department = departmentRepository.findById(departmentId).orElse(null);
+                            String departmentName = department != null ? department.getDepartmentName() : "Unknown";
+                            return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, qty, buy);
+                        })
+                        .collect(Collectors.toList()) :
+                new ArrayList<>();
 
         // Fetch ProductType1 and ProductType2 Names
-        String productType1Name = req.getProductType1Id() != null ?
-                (productType1Service.getById(req.getProductType1Id()) != null ?
-                        productType1Service.getById(req.getProductType1Id()).getName() : "Unknown") : "Unknown";
-        String productType2Name = req.getProductType2Id() != null ?
-                (productType2Service.getById(req.getProductType2Id()) != null ?
-                        productType2Service.getById(req.getProductType2Id()).getName() : "Unknown") : "Unknown";
+        String productType1Name = null;
+        if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
+            ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
+            productType1Name = productType1 != null ? productType1.getName() : "Unknown";
+        }
 
-        return new SummaryRequisitionDTO(req, supplierProduct, departmentRequests, productType1Name, productType2Name);
+        String productType2Name = null;
+        if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
+            ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
+            productType2Name = productType2 != null ? productType2.getName() : "Unknown";
+        }
+
+        // Create DTO with all required fields
+        return new SummaryRequisitionDTO(req, supplierProduct, departmentRequests, productType1Name, productType2Name, sumBuy, totalPrice);
     }
 
     private List<SummaryRequisitionDTO> convertToDtoList(List<SummaryRequisition> requisitions) {
@@ -488,34 +722,63 @@ public class SummaryRequisitionController {
     }
 
     @PostMapping(value = "/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload Requisition File", description = "Upload an Excel .xlsx file with data starting from row 13. Columns: STT (A), Description (B) [Vietnamese/English], (C empty), Ref. No. (D), Part. No. (E), OLD Sap Code (F), NEW Sap Code (G), Quantity (H), Unit (I), Inventory SAP (J), Inventory MED (K), Picture (L), Last order (M), Remarks (N)")
+    @Operation(
+            summary = "Upload Requisition File",
+            description = "Upload an Excel .xlsx file with data starting from row 4. Columns: No (A), Item (B) [VN/EN with /], SAP code (C), Last times (D) [Price], Sup (E), Q'ty Request (F), Inhand (G), Buy (H), U/Price (I), Sup (J), Amount (K), Dept request (L), Reason (M), Picture (N)"
+    )
     public ResponseEntity<List<SummaryRequisition>> uploadRequisitionFile(
             @Parameter(description = "Excel .xlsx file containing requisition data")
             @RequestPart("file") MultipartFile file,
-            @Parameter(description = "ID of the department")
-            @RequestParam(value = "idPhongBan", required = true) String idPhongBan,
-            @Parameter(description = "Group ID")
+            @Parameter(description = "Group ID", required = true)
             @RequestParam(value = "groupId", required = true) String groupId) {
 
         List<SummaryRequisition> requisitions = new ArrayList<>();
         Map<String, Integer> descriptionMap = new HashMap<>();
 
+        // Validate file
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Collections.singletonList(new SummaryRequisition() {{
+                        setRemark("No file uploaded.");
+                    }}));
+        }
+        if (!file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
+            return ResponseEntity.badRequest()
+                    .body(Collections.singletonList(new SummaryRequisition() {{
+                        setRemark("Only .xlsx files are allowed.");
+                    }}));
+        }
+
         try (InputStream is = file.getInputStream()) {
             XSSFWorkbook workbook = new XSSFWorkbook(is);
             Sheet sheet = workbook.getSheetAt(0);
+            if (sheet == null) {
+                return ResponseEntity.badRequest()
+                        .body(Collections.singletonList(new SummaryRequisition() {{
+                            setRemark("Sheet not found in the uploaded file.");
+                        }}));
+            }
 
-            for (int i = 12; i <= sheet.getLastRowNum(); i++) {
+            XSSFDrawing drawing = (XSSFDrawing) sheet.createDrawingPatriarch();
+            List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
+
+            for (int i = 3; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
 
-                Cell sttCell = row.getCell(0);
-                if (sttCell == null || !isValidStt(sttCell)) {
+                Cell noCell = getMergedCellValue(sheet, i, 0, mergedRegions);
+                if (noCell == null || !isValidNo(noCell)) {
                     break;
                 }
 
                 SummaryRequisition req = new SummaryRequisition();
+                req.setCreatedAt(LocalDateTime.now());
+                req.setUpdatedAt(LocalDateTime.now());
+                req.setGroupId(groupId);
 
-                String description = getCellValue(row.getCell(1));
+                // Parse Item description (Column B - index 1)
+                Cell descriptionCell = getMergedCellValue(sheet, i, 1, mergedRegions);
+                String description = descriptionCell != null ? getCellValue(descriptionCell) : null;
                 String vietnameseName = null;
                 String englishName = null;
                 if (description != null && description.contains("/")) {
@@ -525,51 +788,94 @@ public class SummaryRequisitionController {
                         englishName = parts[1].trim();
                     }
                 } else {
-                    vietnameseName = description;
+                    vietnameseName = description != null ? description.trim() : null;
                 }
                 req.setVietnameseName(vietnameseName);
                 req.setEnglishName(englishName);
 
+                // Check for duplicates
                 String key = (vietnameseName != null ? vietnameseName.toLowerCase() : "null") + "|" +
                         (englishName != null ? englishName.toLowerCase() : "null");
                 if (descriptionMap.containsKey(key)) {
-                    String finalVietnameseName = vietnameseName;
-                    String finalEnglishName = englishName;
-                    int finalI = i;
                     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                             .body(Collections.singletonList(new SummaryRequisition() {{
-                                setRemark(String.format("Duplicate entry found at row %d and row %d: Vietnamese='%s', English='%s'",
-                                        descriptionMap.get(key) + 1, finalI + 1, finalVietnameseName, finalEnglishName));
+                                setRemark(String.format("Duplicate entry found "));
                             }}));
+                }
+                descriptionMap.put(key, i + 1);
+
+                // Parse SAP code (Column C - index 2)
+                Cell sapCell = getMergedCellValue(sheet, i, 2, mergedRegions);
+                String sapCode = sapCell != null ? getCellValue(sapCell) : null;
+                if (sapCode != null) {
+                    if ("New".equalsIgnoreCase(sapCode.trim())) {
+                        req.setNewSapCode(sapCode);
+                    } else {
+                        req.setOldSapCode(sapCode);
+                    }
+                }
+
+                // Parse Reason (Column M - index 12)
+                Cell reasonCell = getMergedCellValue(sheet, i, 12, mergedRegions);
+                req.setReason(reasonCell != null ? getCellValue(reasonCell) : null);
+
+                // Parse Dept request (Column L - index 11) and find department ID, handling merge
+                Cell deptCell = getMergedCellValue(sheet, i, 11, mergedRegions);
+                String deptName = deptCell != null ? getCellValue(deptCell) : null;
+                String deptId = null;
+                if (deptName != null && !deptName.trim().isEmpty()) { // Kiểm tra deptName không rỗng
+                    Department dept = departmentRepository.findByDepartmentName(deptName.trim());
+                    deptId = dept != null ? dept.getId() : null;
+                    if (deptId == null) {
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(Collections.singletonList(new SummaryRequisition() {{
+                                    setRemark(String.format("Department '%s' not found at row %d", deptName,  1));
+                                }}));
+                    }
+                }
+
+                // Parse Request qty (Column F - index 5), default to 0.0 if null or invalid
+                Cell requestQtyCell = getMergedCellValue(sheet, i, 5, mergedRegions);
+                Double requestQty = parseDouble(requestQtyCell) != null ? parseDouble(requestQtyCell) : 0.0;
+
+                // Parse Inhand (Column G - index 6), default to 0.0 if null or invalid
+                Cell inhandCell = getMergedCellValue(sheet, i, 6, mergedRegions);
+                Double inhand = parseDouble(inhandCell) != null ? parseDouble(inhandCell) : 0.0;
+
+                // Parse Buy (Column H - index 7), handle formula case
+                Cell buyCell = getMergedCellValue(sheet, i, 7, mergedRegions);
+                Double buy = 0.0;
+                if (buyCell != null && buyCell.getCellType() == CellType.FORMULA) {
+                    // If formula, calculate Buy as Request qty - Inhand
+                    buy = requestQty - inhand;
                 } else {
-                    descriptionMap.put(key, i + 1);
+                    // If direct number, parse the value
+                    buy = parseDouble(buyCell) != null ? parseDouble(buyCell) : 0.0;
                 }
 
-                req.setOldSapCode(getCellValue(row.getCell(5)));     // col F (index 5): OLD Sap Code
-                req.setNewSapCode(getCellValue(row.getCell(6)));     // col G (index 6): NEW Sap Code
-                Double quantity = parseDouble(row.getCell(7));       // col H (index 7): Quantity (numeric)
-                req.setRemark(getCellValue(row.getCell(13)));        // col N (index 13): Remarks
-
-                if (quantity != null) {
-                    Map<String, Double> deptQtyMap = new HashMap<>();
-                    deptQtyMap.put(idPhongBan, quantity);
+                // Set department quantity if valid
+                if (deptId != null) {
+                    Map<String, DepartmentQty> deptQtyMap = new HashMap<>();
+                    DepartmentQty deptQty = new DepartmentQty();
+                    deptQty.setQty(requestQty);
+                    deptQty.setBuy(buy);
+                    deptQtyMap.put(deptId, deptQty);
                     req.setDepartmentRequestQty(deptQtyMap);
+                } else {
+                    req.setDepartmentRequestQty(new HashMap<>());
                 }
 
-                req.setGroupId(groupId);
-                req.setCreatedAt(LocalDateTime.now());
-                req.setUpdatedAt(LocalDateTime.now());
-
+                // Handle Picture (Column N - index 13)
                 List<String> imageUrls = new ArrayList<>();
-                XSSFDrawing drawing = workbook.getSheetAt(0).createDrawingPatriarch();
                 List<XSSFShape> shapes = drawing.getShapes();
                 for (XSSFShape shape : shapes) {
                     if (shape instanceof XSSFPicture) {
                         XSSFPicture picture = (XSSFPicture) shape;
                         XSSFClientAnchor anchor = picture.getClientAnchor();
-                        if (anchor.getCol1() == 11 && anchor.getRow1() == i) {
+                        // Kiểm tra nếu anchor thuộc row hiện tại (cột N - index 13)
+                        if (anchor.getCol1() == 13 && anchor.getRow1() <= i && anchor.getRow2() >= i) {
                             byte[] imageBytes = picture.getPictureData().getData();
-                            String imagePath = saveImage(imageBytes, "image_" + i + ".png");
+                            String imagePath = saveImage(imageBytes, "image_" + i + "_" + System.currentTimeMillis() + ".png");
                             if (imagePath != null) {
                                 imageUrls.add(imagePath);
                             }
@@ -577,7 +883,15 @@ public class SummaryRequisitionController {
                     }
                 }
                 req.setImageUrls(imageUrls.isEmpty() ? null : imageUrls);
+
                 requisitions.add(req);
+            }
+
+            if (requisitions.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Collections.singletonList(new SummaryRequisition() {{
+                            setRemark("No valid data found in the file starting from row 4.");
+                        }}));
             }
 
             List<SummaryRequisition> savedRequisitions = requisitionRepository.saveAll(requisitions);
@@ -589,6 +903,57 @@ public class SummaryRequisitionController {
                         setRemark("Error processing file: " + e.getMessage());
                     }}));
         }
+    }
+
+    // Helper method to validate No (STT) (only accept numeric, break if not number)
+    private boolean isValidNo(Cell noCell) {
+        if (noCell == null) return false;
+        return noCell.getCellType() == CellType.NUMERIC; // Chỉ chấp nhận số, break nếu không phải số
+    }
+
+    // Helper method to get cell value, handling merge cells
+    private String getCellValue(Cell cell) {
+        if (cell == null) return null;
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue().trim();
+            case NUMERIC:
+                return String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            default:
+                return null;
+        }
+    }
+
+    // Helper method to parse Double value, handling merge cells
+    private Double parseDouble(Cell cell) {
+        if (cell == null) return null;
+        if (cell.getCellType() == CellType.NUMERIC) {
+            return cell.getNumericCellValue();
+        } else if (cell.getCellType() == CellType.STRING) {
+            try {
+                return Double.parseDouble(cell.getStringCellValue().trim());
+            } catch (NumberFormatException e) {
+                return null; // Trả null nếu không parse được
+            }
+        }
+        return null;
+    }
+
+    // Helper method to get value from cell, handling if it's part of a merged region
+    private Cell getMergedCellValue(Sheet sheet, int rowIndex, int colIndex, List<CellRangeAddress> mergedRegions) {
+        for (CellRangeAddress range : mergedRegions) {
+            if (range.isInRange(rowIndex, colIndex)) {
+                // Lấy cell đầu tiên (top-left) của merge region
+                Row firstRow = sheet.getRow(range.getFirstRow());
+                return firstRow.getCell(range.getFirstColumn(), Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
+            }
+        }
+        // Nếu không phải merge, lấy cell bình thường
+        Row row = sheet.getRow(rowIndex);
+        if (row == null) return null;
+        return row.getCell(colIndex, Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
     }
 
     private String saveImage(byte[] imageBytes, String originalFileName) throws IOException {
@@ -621,20 +986,20 @@ public class SummaryRequisitionController {
         }
     }
 
-    private String getCellValue(Cell cell) {
-        if (cell == null) return null;
-        cell.setCellType(CellType.STRING);
-        return cell.getStringCellValue().trim();
-    }
-
-    private Double parseDouble(Cell cell) {
-        if (cell == null) return null;
-        try {
-            return cell.getNumericCellValue();
-        } catch (Exception e) {
-            return null;
-        }
-    }
+//    private String getCellValue(Cell cell) {
+//        if (cell == null) return null;
+//        cell.setCellType(CellType.STRING);
+//        return cell.getStringCellValue().trim();
+//    }
+//
+//    private Double parseDouble(Cell cell) {
+//        if (cell == null) return null;
+//        try {
+//            return cell.getNumericCellValue();
+//        } catch (Exception e) {
+//            return null;
+//        }
+//    }
 
     @GetMapping("/search/comparison")
     public ResponseEntity<ComparisonRequisitionResponseDTO> searchRequisitions(
@@ -649,7 +1014,6 @@ public class SummaryRequisitionController {
             @RequestParam(required = false) String departmentName,
             @RequestParam(defaultValue = "false") Boolean filter) {
 
-
         List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
 
         List<SummaryRequisition> filteredRequisitions = requisitions;
@@ -658,18 +1022,22 @@ public class SummaryRequisitionController {
                     .filter(req -> {
                         boolean matches = true;
 
-                        String reqProductType1Name = req.getProductType1Id() != null
-                                ? productType1Repository.findById(req.getProductType1Id())
-                                .map(ProductType1::getName)
-                                .orElse("")
-                                : "";
-                        String reqProductType2Name = req.getProductType2Id() != null
-                                ? productType2Repository.findById(req.getProductType2Id())
-                                .map(ProductType2::getName)
-                                .orElse("")
-                                : "";
+                        String reqProductType1Name = "";
+                        if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
+                            reqProductType1Name = productType1Repository.findById(req.getProductType1Id())
+                                    .map(ProductType1::getName)
+                                    .orElse("");
+                        }
+
+                        String reqProductType2Name = "";
+                        if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
+                            reqProductType2Name = productType2Repository.findById(req.getProductType2Id())
+                                    .map(ProductType2::getName)
+                                    .orElse("");
+                        }
 
                         List<String> deptNames = req.getDepartmentRequestQty().keySet().stream()
+                                .filter(deptId -> deptId != null && !deptId.isEmpty())
                                 .map(deptId -> departmentRepository.findById(deptId)
                                         .map(Department::getDepartmentName)
                                         .orElse("Unknown"))
@@ -694,10 +1062,11 @@ public class SummaryRequisitionController {
                             matches = matches && req.getNewSapCode() != null && req.getNewSapCode().toLowerCase().contains(newSapCode.toLowerCase());
                         }
                         if (unit != null && !unit.isEmpty()) {
-                            SupplierProduct supplierProduct = req.getSupplierId() != null
-                                    ? supplierProductRepository.findById(req.getSupplierId()).orElse(null)
-                                    : null;
-                            String reqUnit = supplierProduct != null ? supplierProduct.getUnit() : "";
+                            String reqUnit = "";
+                            if (req.getSupplierId() != null && !req.getSupplierId().isEmpty()) {
+                                SupplierProduct supplierProduct = supplierProductRepository.findById(req.getSupplierId()).orElse(null);
+                                reqUnit = supplierProduct != null ? supplierProduct.getUnit() : "";
+                            }
                             matches = matches && reqUnit.toLowerCase().contains(unit.toLowerCase());
                         }
                         if (departmentName != null && !departmentName.isEmpty()) {
@@ -759,12 +1128,12 @@ public class SummaryRequisitionController {
                     .map(sp -> new ComparisonRequisitionDTO.SupplierDTO(
                             sp.getPrice(),
                             sp.getSupplierName(),
-                            selectedSupplierId != null && selectedSupplierId.equals(sp.getId()) ? 1 : 0,
+                            selectedSupplierId != null && !selectedSupplierId.isEmpty() && selectedSupplierId.equals(sp.getId()) ? 1 : 0,
                             sp.getUnit()))
                     .sorted(Comparator.comparing(ComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(Double::compareTo)))
                     .collect(Collectors.toList());
 
-            if (selectedSupplierId != null) {
+            if (selectedSupplierId != null && !selectedSupplierId.isEmpty()) {
                 unit = suppliers.stream()
                         .filter(sp -> sp.getId().equals(selectedSupplierId))
                         .map(SupplierProduct::getUnit)
@@ -775,13 +1144,14 @@ public class SummaryRequisitionController {
             supplierDTOs = Collections.emptyList();
         }
 
-        int totalQuantity = req.getDepartmentRequestQty().values().stream()
-                .mapToInt(Number::intValue)
-                .sum();
+        int totalBuy = req.getDepartmentRequestQty() != null ?
+                req.getDepartmentRequestQty().values().stream()
+                        .mapToInt(deptQty -> deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0)
+                        .sum() : 0;
 
         Double selectedPrice = null;
         Double highestPrice = null;
-        if (selectedSupplierId != null && !supplierDTOs.isEmpty()) {
+        if (selectedSupplierId != null && !selectedSupplierId.isEmpty() && !supplierDTOs.isEmpty()) {
             selectedPrice = supplierDTOs.stream()
                     .filter(dto -> dto.getIsSelected() == 1)
                     .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
@@ -796,51 +1166,46 @@ public class SummaryRequisitionController {
                     .orElse(null);
         }
 
-        // Tính amtVnd (giá được chọn * tổng số lượng)
-        Double amtVnd = selectedPrice != null ? selectedPrice * totalQuantity : null;
+        Double amtVnd = selectedPrice != null ? selectedPrice * totalBuy : null;
 
-        // Tính amtDifference (amtVnd - giá cao nhất * tổng số lượng)
-        Double amtDifference = (amtVnd != null && highestPrice != null) ? amtVnd - (highestPrice * totalQuantity) : null;
+        Double amtDifference = (amtVnd != null && highestPrice != null) ? amtVnd - (highestPrice * totalBuy) : null;
 
-        // Tính phần trăm ((amtDifference / amtVnd) * 100)
         Double percentage = (amtVnd != null && amtDifference != null && amtVnd != 0) ? (amtDifference / amtVnd) * 100 : 0.0;
 
-        // Chuyển đổi yêu cầu phòng ban
-        List<ComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty().entrySet().stream()
-                .map(entry -> {
-                    String deptId = entry.getKey();
-                    Department dept = departmentRepository.findById(deptId).orElse(null);
-                    String deptName = dept != null ? dept.getDepartmentName() : "Unknown";
-                    return new ComparisonRequisitionDTO.DepartmentRequestDTO(deptId, deptName, entry.getValue().intValue());
-                })
-                .collect(Collectors.toList());
+        List<ComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null ?
+                req.getDepartmentRequestQty().entrySet().stream()
+                        .filter(entry -> entry.getKey() != null && !entry.getKey().isEmpty())
+                        .map(entry -> {
+                            String deptId = entry.getKey();
+                            DepartmentQty deptQty = entry.getValue();
+                            Integer qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
+                            Integer buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                            Department dept = departmentRepository.findById(deptId).orElse(null);
+                            String deptName = dept != null ? dept.getDepartmentName() : "Unknown";
+                            return new ComparisonRequisitionDTO.DepartmentRequestDTO(deptId, deptName, qty, buy);
+                        })
+                        .collect(Collectors.toList()) :
+                Collections.emptyList();
 
-        // Lấy type1Name và type2Name
-        String type1Name = "";
-        String type2Name = "";
-
-        // Lấy tên ProductType1
-        if (req.getProductType1Id() != null) {
-            type1Name = productType1Repository.findById(req.getProductType1Id())
-                    .map(ProductType1::getName)
-                    .orElse("");
+        String type1Name = null;
+        if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
+            ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
+            type1Name = productType1 != null ? productType1.getName() : "Unknown";
         }
 
-        // Lấy tên ProductType2
-        if (req.getProductType2Id() != null) {
-            type2Name = productType2Repository.findById(req.getProductType2Id())
-                    .map(ProductType2::getName)
-                    .orElse("");
+        String type2Name = null;
+        if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
+            ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
+            type2Name = productType2 != null ? productType2.getName() : "Unknown";
         }
 
-        // Tạo và trả về ComparisonRequisitionDTO với type1, type2, type1Name, type2Name, và unit
         return new ComparisonRequisitionDTO(
                 req.getEnglishName(),
                 req.getVietnameseName(),
                 req.getOldSapCode(),
                 req.getNewSapCode(),
                 supplierDTOs,
-                req.getRemark(),
+                req.getRemarkComparison(),
                 departmentRequests,
                 selectedPrice,
                 amtVnd,

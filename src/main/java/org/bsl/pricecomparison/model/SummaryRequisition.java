@@ -1,5 +1,6 @@
 package org.bsl.pricecomparison.model;
 
+import org.bsl.pricecomparison.request.DepartmentQty;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -19,12 +20,14 @@ public class SummaryRequisition {
     private String oldSapCode;
     private String newSapCode;
 
-    private Map<String, Double> departmentRequestQty;
+    private Map<String, DepartmentQty> departmentRequestQty;
 
     private double stock;
+    private LocalDateTime dateStock;
     private double purchasingSuggest;
     private String reason;
     private String remark;
+    private String remarkComparison;
     private String supplierId;
 
     private String groupId;
@@ -35,21 +38,17 @@ public class SummaryRequisition {
     private LocalDateTime updatedAt;
 
     private String fullDescription;
-    private List<String> imageUrls; // New field for image URLs
+    private List<String> imageUrls;
 
-    // --- Constructors ---
-
+    // Constructors
     public SummaryRequisition() {
     }
 
-    public SummaryRequisition(String id, int no, String englishName, String vietnameseName,
-                              String oldSapCode, String newSapCode,
-                              Map<String, Double> departmentRequestQty,
-                              double stock, double purchasingSuggest,
-                              String reason, String remark,
-                              String supplierId, String groupId,
-                              String productType1Id, String productType2Id,
-                              LocalDateTime createdAt, LocalDateTime updatedAt,
+    public SummaryRequisition(String id, int no, String englishName, String vietnameseName, String oldSapCode,
+                              String newSapCode, Map<String, DepartmentQty> departmentRequestQty, double stock,
+                              LocalDateTime dateStock, double purchasingSuggest, String reason, String remark,
+                              String remarkComparison, String supplierId, String groupId, String productType1Id,
+                              String productType2Id, LocalDateTime createdAt, LocalDateTime updatedAt,
                               String fullDescription, List<String> imageUrls) {
         this.id = id;
         this.no = no;
@@ -59,9 +58,11 @@ public class SummaryRequisition {
         this.newSapCode = newSapCode;
         this.departmentRequestQty = departmentRequestQty;
         this.stock = stock;
+        this.dateStock = dateStock;
         this.purchasingSuggest = purchasingSuggest;
         this.reason = reason;
         this.remark = remark;
+        this.remarkComparison = remarkComparison;
         this.supplierId = supplierId;
         this.groupId = groupId;
         this.productType1Id = productType1Id;
@@ -72,8 +73,7 @@ public class SummaryRequisition {
         this.imageUrls = imageUrls;
     }
 
-    // --- Getters and Setters ---
-
+    // Getters and Setters
     public String getId() {
         return id;
     }
@@ -122,11 +122,11 @@ public class SummaryRequisition {
         this.newSapCode = newSapCode;
     }
 
-    public Map<String, Double> getDepartmentRequestQty() {
+    public Map<String, DepartmentQty> getDepartmentRequestQty() {
         return departmentRequestQty;
     }
 
-    public void setDepartmentRequestQty(Map<String, Double> departmentRequestQty) {
+    public void setDepartmentRequestQty(Map<String, DepartmentQty> departmentRequestQty) {
         this.departmentRequestQty = departmentRequestQty;
     }
 
@@ -136,6 +136,14 @@ public class SummaryRequisition {
 
     public void setStock(double stock) {
         this.stock = stock;
+    }
+
+    public LocalDateTime getDateStock() {
+        return dateStock;
+    }
+
+    public void setDateStock(LocalDateTime dateStock) {
+        this.dateStock = dateStock;
     }
 
     public double getPurchasingSuggest() {
@@ -160,6 +168,14 @@ public class SummaryRequisition {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public String getRemarkComparison() {
+        return remarkComparison;
+    }
+
+    public void setRemarkComparison(String remarkComparison) {
+        this.remarkComparison = remarkComparison;
     }
 
     public String getSupplierId() {
@@ -224,16 +240,5 @@ public class SummaryRequisition {
 
     public void setImageUrls(List<String> imageUrls) {
         this.imageUrls = imageUrls;
-    }
-
-    // --- Utility Methods ---
-
-    public double calculateTotalRequestQty() {
-        if (departmentRequestQty == null) return 0;
-        return departmentRequestQty.values().stream().mapToDouble(Double::doubleValue).sum();
-    }
-
-    public double calculateAmount(double unitPrice) {
-        return unitPrice * calculateTotalRequestQty();
     }
 }

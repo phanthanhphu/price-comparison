@@ -15,18 +15,20 @@ public class GroupSummaryRequisition {
     private String type;
     private LocalDateTime createdDate;
     private String createdBy;
+    private LocalDateTime stockDate; // New field added
 
     public GroupSummaryRequisition() {
     }
 
     public GroupSummaryRequisition(String id, String name, String status, String type,
-                                   LocalDateTime createdDate, String createdBy) {
+                                   LocalDateTime createdDate, String createdBy, LocalDateTime stockDate) {
         this.id = id;
         this.name = name;
         this.status = status;
         this.type = type;
         this.createdDate = createdDate;
         this.createdBy = createdBy;
+        this.stockDate = stockDate; // Updated constructor
     }
 
     public String getId() {
@@ -53,11 +55,11 @@ public class GroupSummaryRequisition {
         this.status = status;
     }
 
-    public String getType() {   // getter
+    public String getType() {
         return type;
     }
 
-    public void setType(String type) {   // setter
+    public void setType(String type) {
         this.type = type;
     }
 
@@ -75,5 +77,15 @@ public class GroupSummaryRequisition {
 
     public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
+    }
+
+    // New getter for stockDate
+    public LocalDateTime getStockDate() {
+        return stockDate;
+    }
+
+    // New setter for stockDate
+    public void setStockDate(LocalDateTime stockDate) {
+        this.stockDate = stockDate;
     }
 }

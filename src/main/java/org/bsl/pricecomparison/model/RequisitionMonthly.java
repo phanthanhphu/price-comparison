@@ -1,36 +1,92 @@
 package org.bsl.pricecomparison.model;
 
-import java.math.BigDecimal;
-import java.util.List;
+import org.springframework.data.annotation.Id;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class RequisitionMonthly {
-
+    @Id
+    @Schema(description = "Unique identifier for the requisition", example = "1")
     private int id;
-    private String itemDescriptionEN;
-    private String itemDescriptionVN;
-    private String oldSAPCode;
-    private String sapCodeNewSAP;
-    private String unit;
-    private List<DepartmentRequisitionMonthly> departmentRequisitions;  // Đổi tên từ 'departments' thành 'departmentRequisitions'
-    private BigDecimal totalNotIssuedQty;
-    private BigDecimal inHand;
-    private BigDecimal actualInHand;
-    private BigDecimal purchasing;
-    private BigDecimal amount;
-    private int supplierId;
-    private int productType1Id;
-    private int productType2Id;
-    private LocalDateTime createdDate;   // Ngày tạo
-    private LocalDateTime updatedDate;   // Ngày cập nhật
 
-    // Constructor
-    public RequisitionMonthly(int id, String itemDescriptionEN, String itemDescriptionVN,
-                              String oldSAPCode, String sapCodeNewSAP, String unit, List<DepartmentRequisitionMonthly> departmentRequisitions,
-                              BigDecimal totalNotIssuedQty, BigDecimal inHand, BigDecimal actualInHand,
-                              BigDecimal purchasing, BigDecimal amount, int supplierId, int productType1Id,
-                              int productType2Id, LocalDateTime createdDate, LocalDateTime updatedDate) {
+    @Schema(description = "Group ID for the requisition", example = "GROUP123")
+    private String groupId;
+
+    @Schema(description = "English item description", example = "Product XYZ")
+    private String itemDescriptionEN;
+
+    @Schema(description = "Vietnamese item description", example = "Sản phẩm XYZ")
+    private String itemDescriptionVN;
+
+    @Schema(description = "Old SAP code", example = "OLD123")
+    private String oldSAPCode;
+
+    @Schema(description = "New SAP code", example = "NEW456")
+    private String sapCodeNewSAP;
+
+    @Schema(description = "Unit of measurement", example = "Piece")
+    private String unit;
+
+    @ArraySchema(
+            arraySchema = @Schema(description = "List of department requisitions", type = "array"),
+            schema = @Schema(description = "Department requisition details", type = "object")
+    )
+    private List<DepartmentRequisitionMonthly> departmentRequisitions;
+
+    @Schema(description = "Total not issued quantity", example = "50.0")
+    private Double totalNotIssuedQty;
+
+    @Schema(description = "Total requested quantity", example = "30.0")
+    private Double totalRequestQty;
+
+    @Schema(description = "In-hand quantity", example = "100.0")
+    private Double inHand;
+
+    @Schema(description = "Actual in-hand quantity", example = "95.0")
+    private Double actualInHand;
+
+    @Schema(description = "Order quantity", example = "50.0")
+    private Double orderQty;
+
+    @Schema(description = "Total amount", example = "3000.0")
+    private Double amount;
+
+    @Schema(description = "Price", example = "100.0")
+    private Double price;
+
+    @Schema(description = "Supplier ID", example = "1")
+    private String supplierId;
+
+    @Schema(description = "Supplier name", example = "Supplier ABC")
+    private String supplierName;
+
+    @Schema(description = "Product Type 1 ID", example = "1")
+    private String productType1Id;
+
+    @Schema(description = "Product Type 2 ID", example = "2")
+    private String productType2Id;
+
+    @Schema(description = "Created date", example = "2025-09-18T15:07:00")
+    private LocalDateTime createdDate;
+
+    @Schema(description = "Updated date", example = "2025-09-18T15:07:00")
+    private LocalDateTime updatedDate;
+
+    @ArraySchema(
+            arraySchema = @Schema(description = "List of image URLs", type = "array"),
+            schema = @Schema(type = "string", example = "http://example.com/image.jpg")
+    )
+    private List<String> imageUrls;
+
+    public RequisitionMonthly() {
+    }
+
+    public RequisitionMonthly(int id, String groupId, String itemDescriptionEN, String itemDescriptionVN, String oldSAPCode, String sapCodeNewSAP, String unit, List<DepartmentRequisitionMonthly> departmentRequisitions, Double totalNotIssuedQty, Double totalRequestQty, Double inHand, Double actualInHand, Double orderQty, Double amount, Double price, String supplierId, String supplierName, String productType1Id, String productType2Id, LocalDateTime createdDate, LocalDateTime updatedDate, List<String> imageUrls) {
         this.id = id;
+        this.groupId = groupId;
         this.itemDescriptionEN = itemDescriptionEN;
         this.itemDescriptionVN = itemDescriptionVN;
         this.oldSAPCode = oldSAPCode;
@@ -38,24 +94,35 @@ public class RequisitionMonthly {
         this.unit = unit;
         this.departmentRequisitions = departmentRequisitions;
         this.totalNotIssuedQty = totalNotIssuedQty;
+        this.totalRequestQty = totalRequestQty;
         this.inHand = inHand;
         this.actualInHand = actualInHand;
-        this.purchasing = purchasing;
+        this.orderQty = orderQty;
         this.amount = amount;
+        this.price = price;
         this.supplierId = supplierId;
+        this.supplierName = supplierName;
         this.productType1Id = productType1Id;
         this.productType2Id = productType2Id;
         this.createdDate = createdDate;
         this.updatedDate = updatedDate;
+        this.imageUrls = imageUrls;
     }
 
-    // Getters and Setters
     public int getId() {
         return id;
     }
 
     public void setId(int id) {
         this.id = id;
+    }
+
+    public String getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId;
     }
 
     public String getItemDescriptionEN() {
@@ -106,67 +173,91 @@ public class RequisitionMonthly {
         this.departmentRequisitions = departmentRequisitions;
     }
 
-    public BigDecimal getTotalNotIssuedQty() {
+    public Double getTotalNotIssuedQty() {
         return totalNotIssuedQty;
     }
 
-    public void setTotalNotIssuedQty(BigDecimal totalNotIssuedQty) {
+    public void setTotalNotIssuedQty(Double totalNotIssuedQty) {
         this.totalNotIssuedQty = totalNotIssuedQty;
     }
 
-    public BigDecimal getInHand() {
+    public Double getTotalRequestQty() {
+        return totalRequestQty;
+    }
+
+    public void setTotalRequestQty(Double totalRequestQty) {
+        this.totalRequestQty = totalRequestQty;
+    }
+
+    public Double getInHand() {
         return inHand;
     }
 
-    public void setInHand(BigDecimal inHand) {
+    public void setInHand(Double inHand) {
         this.inHand = inHand;
     }
 
-    public BigDecimal getActualInHand() {
+    public Double getActualInHand() {
         return actualInHand;
     }
 
-    public void setActualInHand(BigDecimal actualInHand) {
+    public void setActualInHand(Double actualInHand) {
         this.actualInHand = actualInHand;
     }
 
-    public BigDecimal getPurchasing() {
-        return purchasing;
+    public Double getOrderQty() {
+        return orderQty;
     }
 
-    public void setPurchasing(BigDecimal purchasing) {
-        this.purchasing = purchasing;
+    public void setOrderQty(Double orderQty) {
+        this.orderQty = orderQty;
     }
 
-    public BigDecimal getAmount() {
+    public Double getAmount() {
         return amount;
     }
 
-    public void setAmount(BigDecimal amount) {
+    public void setAmount(Double amount) {
         this.amount = amount;
     }
 
-    public int getSupplierId() {
+    public Double getPrice() {
+        return price;
+    }
+
+    public void setPrice(Double price) {
+        this.price = price;
+    }
+
+    public String getSupplierId() {
         return supplierId;
     }
 
-    public void setSupplierId(int supplierId) {
+    public void setSupplierId(String supplierId) {
         this.supplierId = supplierId;
     }
 
-    public int getProductType1Id() {
+    public String getSupplierName() {
+        return supplierName;
+    }
+
+    public void setSupplierName(String supplierName) {
+        this.supplierName = supplierName;
+    }
+
+    public String getProductType1Id() {
         return productType1Id;
     }
 
-    public void setProductType1Id(int productType1Id) {
+    public void setProductType1Id(String productType1Id) {
         this.productType1Id = productType1Id;
     }
 
-    public int getProductType2Id() {
+    public String getProductType2Id() {
         return productType2Id;
     }
 
-    public void setProductType2Id(int productType2Id) {
+    public void setProductType2Id(String productType2Id) {
         this.productType2Id = productType2Id;
     }
 
@@ -184,5 +275,13 @@ public class RequisitionMonthly {
 
     public void setUpdatedDate(LocalDateTime updatedDate) {
         this.updatedDate = updatedDate;
+    }
+
+    public List<String> getImageUrls() {
+        return imageUrls;
+    }
+
+    public void setImageUrls(List<String> imageUrls) {
+        this.imageUrls = imageUrls;
     }
 }

@@ -32,34 +32,34 @@ public class RequisitionMonthlyService {
         return requisition;
     }
 
-    public RequisitionMonthly updateRequisition(int id, RequisitionMonthly updatedRequisition) {
-        if (isDuplicate(updatedRequisition)) {
-            throw new RuntimeException("Requisition with the same SAP code, descriptions, and product types already exists.");
-        }
-
-        RequisitionMonthly existingRequisition = requisitions.stream()
-                .filter(r -> r.getId() == id)
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Requisition not found"));
-
-        existingRequisition.setUpdatedDate(LocalDateTime.now());
-        existingRequisition.setItemDescriptionEN(updatedRequisition.getItemDescriptionEN());
-        existingRequisition.setItemDescriptionVN(updatedRequisition.getItemDescriptionVN());
-        existingRequisition.setOldSAPCode(updatedRequisition.getOldSAPCode());
-        existingRequisition.setSapCodeNewSAP(updatedRequisition.getSapCodeNewSAP());
-        existingRequisition.setUnit(updatedRequisition.getUnit());
-        existingRequisition.setDepartmentRequisitions(updatedRequisition.getDepartmentRequisitions());
-        existingRequisition.setTotalNotIssuedQty(updatedRequisition.getTotalNotIssuedQty());
-        existingRequisition.setInHand(updatedRequisition.getInHand());
-        existingRequisition.setActualInHand(updatedRequisition.getActualInHand());
-        existingRequisition.setPurchasing(updatedRequisition.getPurchasing());
-        existingRequisition.setAmount(updatedRequisition.getAmount());
-        existingRequisition.setSupplierId(updatedRequisition.getSupplierId());
-        existingRequisition.setProductType1Id(updatedRequisition.getProductType1Id());
-        existingRequisition.setProductType2Id(updatedRequisition.getProductType2Id());
-
-        return existingRequisition;
-    }
+//    public RequisitionMonthly updateRequisition(int id, RequisitionMonthly updatedRequisition) {
+//        if (isDuplicate(updatedRequisition)) {
+//            throw new RuntimeException("Requisition with the same SAP code, descriptions, and product types already exists.");
+//        }
+//
+//        RequisitionMonthly existingRequisition = requisitions.stream()
+//                .filter(r -> r.getId() == id)
+//                .findFirst()
+//                .orElseThrow(() -> new RuntimeException("Requisition not found"));
+//
+//        existingRequisition.setUpdatedDate(LocalDateTime.now());
+//        existingRequisition.setItemDescriptionEN(updatedRequisition.getItemDescriptionEN());
+//        existingRequisition.setItemDescriptionVN(updatedRequisition.getItemDescriptionVN());
+//        existingRequisition.setOldSAPCode(updatedRequisition.getOldSAPCode());
+//        existingRequisition.setSapCodeNewSAP(updatedRequisition.getSapCodeNewSAP());
+//        existingRequisition.setUnit(updatedRequisition.getUnit());
+//        existingRequisition.setDepartmentRequisitions(updatedRequisition.getDepartmentRequisitions());
+//        existingRequisition.setTotalNotIssuedQty(updatedRequisition.getTotalNotIssuedQty());
+//        existingRequisition.setInHand(updatedRequisition.getInHand());
+//        existingRequisition.setActualInHand(updatedRequisition.getActualInHand());
+//        existingRequisition.setOrderQty(updatedRequisition.getOrderQty());
+//        existingRequisition.setAmount(updatedRequisition.getAmount());
+//        existingRequisition.setSupplierId(updatedRequisition.getSupplierId());
+//        existingRequisition.setProductType1Id(updatedRequisition.getProductType1Id());
+//        existingRequisition.setProductType2Id(updatedRequisition.getProductType2Id());
+//
+//        return existingRequisition;
+//    }
 
     public void deleteRequisition(int id) {
         requisitions.removeIf(r -> r.getId() == id);

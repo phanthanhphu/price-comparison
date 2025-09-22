@@ -13,6 +13,7 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -33,16 +34,38 @@ public class GroupSummaryRequisitionService {
     private MongoTemplate mongoTemplate;
 
     public GroupSummaryRequisition createGroupSummaryRequisition(GroupSummaryRequisition groupSummaryRequisition) {
-        boolean exists = groupSummaryRequisitionRepository
+        // Check for duplicate name and createdDate (date part only)
+        LocalDate createdDate = groupSummaryRequisition.getCreatedDate() != null
+                ? groupSummaryRequisition.getCreatedDate().toLocalDate()
+                : LocalDate.now();
+        boolean existsByNameAndDate = existsByNameAndCreatedDate(groupSummaryRequisition.getName(), createdDate);
+
+        if (existsByNameAndDate) {
+            throw new IllegalArgumentException("Group with name '" + groupSummaryRequisition.getName() + "' and created date '" + createdDate + "' already exists");
+        }
+
+        // Existing duplicate name check
+        boolean existsByName = groupSummaryRequisitionRepository
                 .findByNameContainingIgnoreCase(groupSummaryRequisition.getName())
                 .stream()
                 .anyMatch(g -> g.getName().equalsIgnoreCase(groupSummaryRequisition.getName()));
 
-        if (exists) {
+        if (existsByName) {
             throw new IllegalArgumentException("Group with name '" + groupSummaryRequisition.getName() + "' already exists");
         }
 
         return groupSummaryRequisitionRepository.save(groupSummaryRequisition);
+    }
+
+    public boolean existsByNameAndCreatedDate(String name, LocalDate createdDate) {
+        LocalDateTime startOfDay = createdDate.atStartOfDay();
+        LocalDateTime endOfDay = createdDate.atTime(23, 59, 59, 999999999);
+
+        Query query = new Query();
+        query.addCriteria(Criteria.where("name").is(name));
+        query.addCriteria(Criteria.where("createdDate").gte(startOfDay).lte(endOfDay));
+
+        return mongoTemplate.exists(query, GroupSummaryRequisition.class);
     }
 
     public Optional<GroupSummaryRequisition> updateGroupSummaryRequisition(String id, GroupSummaryRequisition groupSummaryRequisition) {
@@ -54,7 +77,8 @@ public class GroupSummaryRequisitionService {
             updatedGroup.setType(groupSummaryRequisition.getType());
             updatedGroup.setStatus(groupSummaryRequisition.getStatus());
             updatedGroup.setCreatedBy(groupSummaryRequisition.getCreatedBy());
-            updatedGroup.setCreatedDate(groupSummaryRequisition.getCreatedDate());  // Nếu ngày được set trong controller
+            updatedGroup.setCreatedDate(groupSummaryRequisition.getCreatedDate());
+            updatedGroup.setStockDate(groupSummaryRequisition.getStockDate());
 
             return Optional.of(groupSummaryRequisitionRepository.save(updatedGroup));
         }
@@ -94,9 +118,11 @@ public class GroupSummaryRequisitionService {
             String name,
             String status,
             String createdBy,
-            String type, // 👈 thêm tham số mới
+            String type,
             LocalDateTime startDate,
             LocalDateTime endDate,
+            LocalDateTime stockStartDate,
+            LocalDateTime stockEndDate,
             Pageable pageable) {
 
         Query query = new Query().with(pageable);
@@ -114,7 +140,7 @@ public class GroupSummaryRequisitionService {
         }
 
         if (type != null && !type.trim().isEmpty()) {
-            query.addCriteria(Criteria.where("type").regex("(?i).*" + type.trim() + ".*")); // 👈 filter theo type
+            query.addCriteria(Criteria.where("type").regex("(?i).*" + type.trim() + ".*"));
         }
 
         if (startDate != null || endDate != null) {
@@ -137,11 +163,29 @@ public class GroupSummaryRequisitionService {
             query.addCriteria(dateCriteria);
         }
 
+        if (stockStartDate != null || stockEndDate != null) {
+            LocalDateTime stockStartOfDay = (stockStartDate != null)
+                    ? stockStartDate.withHour(0).withMinute(0).withSecond(0).withNano(0)
+                    : null;
+            LocalDateTime stockEndOfDay = (stockEndDate != null)
+                    ? stockEndDate.withHour(23).withMinute(59).withSecond(59).withNano(999_999_999)
+                    : null;
+
+            Criteria stockDateCriteria = Criteria.where("stockDate");
+            if (stockStartOfDay != null && stockEndOfDay != null) {
+                stockDateCriteria = stockDateCriteria.gte(stockStartOfDay).lte(stockEndOfDay);
+            } else if (stockStartOfDay != null) {
+                stockDateCriteria = stockDateCriteria.gte(stockStartOfDay);
+            } else if (stockEndOfDay != null) {
+                stockDateCriteria = stockDateCriteria.lte(stockEndOfDay);
+            }
+
+            query.addCriteria(stockDateCriteria);
+        }
+
         List<GroupSummaryRequisition> results = mongoTemplate.find(query, GroupSummaryRequisition.class);
         long total = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), GroupSummaryRequisition.class);
 
         return new PageImpl<>(results, pageable, total);
     }
-
-
 }

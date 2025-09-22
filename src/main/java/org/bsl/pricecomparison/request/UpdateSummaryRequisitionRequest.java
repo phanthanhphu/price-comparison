@@ -1,29 +1,23 @@
 package org.bsl.pricecomparison.request;
 
-import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+@Schema(description = "Request to update an existing summary requisition")
 public class UpdateSummaryRequisitionRequest {
 
-    @ArraySchema(
-            arraySchema = @Schema(description = "List of image files to upload", type = "array"),
-            schema = @Schema(type = "file")
-    )
-    private List<MultipartFile> imageUrls;
+    @Schema(description = "List of uploaded image files")
+    private List<MultipartFile> files;
 
-    @ArraySchema(
-            arraySchema = @Schema(description = "List of image URLs to delete", type = "array"),
-            schema = @Schema(type = "string")
-    )
-    private List<String> imagesToDelete;
+    @Schema(description = "JSON string containing list of image URLs to delete", example = "[\"/uploads/image1.jpg\", \"/uploads/image2.jpg\"]")
+    private String imagesToDelete;
 
-    @Schema(description = "English name", example = "Product XYZ")
+    @Schema(description = "English name of the product", example = "Product XYZ")
     private String englishName;
 
-    @Schema(description = "Vietnamese name", example = "Sản phẩm XYZ")
+    @Schema(description = "Vietnamese name of the product", example = "Sản phẩm XYZ")
     private String vietnameseName;
 
     @Schema(description = "Old SAP code", example = "OLD123")
@@ -32,56 +26,54 @@ public class UpdateSummaryRequisitionRequest {
     @Schema(description = "New SAP code", example = "NEW456")
     private String newSapCode;
 
-    @Schema(description = "Department request quantities as JSON string", example = "{\"dept1\": 10.0, \"dept2\": 20.0}")
+    @Schema(description = "Department request quantities (JSON string)",
+            example = "{\"quantities\": {\"temp_1756183918335\": {\"qty\": 10, \"buy\": 8}}}")
     private String departmentRequestQty;
 
-    @Schema(description = "Stock quantity", example = "100.0")
-    private Double stock;
+    @Schema(description = "Stock quantity", example = "100")
+    private Integer stock;
 
-    @Schema(description = "Purchasing suggestion", example = "50.0")
-    private Double purchasingSuggest;
+    @Schema(description = "Purchasing suggestion", example = "50")
+    private Integer purchasingSuggest;
 
-    @Schema(description = "Reason", example = "Urgent restock")
+    @Schema(description = "Reason for requisition", example = "Urgent restock")
     private String reason;
 
     @Schema(description = "Remark", example = "High priority")
     private String remark;
 
-    @Schema(description = "Supplier ID", example = "SUP123")
+    @Schema(description = "Remark for comparison", example = "Comparison note")
+    private String remarkComparison;
+
+    @Schema(description = "Supplier ID", example = "689dbaddf1bf4d67a76ebae5")
     private String supplierId;
 
-    @Schema(description = "Group ID", example = "GRP456")
+    @Schema(description = "Group ID", example = "689dbaddf1bf4d67a76ebae5")
     private String groupId;
 
-    @Schema(description = "Product Type 1 ID", example = "1")
+    @Schema(description = "Product type 1 ID", example = "")
     private String productType1Id;
 
-    @Schema(description = "Product Type 2 ID", example = "2")
+    @Schema(description = "Product type 2 ID", example = "")
     private String productType2Id;
 
     @Schema(description = "Full description", example = "Detailed description of requisition")
     private String fullDescription;
 
-    @Schema(description = "Total request quantity", example = "30.0")
-    private Double totalRequestQty;
-
-    @Schema(description = "Total price", example = "3000.0")
-    private Double totalPrice;
-
-    // Getters and Setters
-    public List<MultipartFile> getImageUrls() {
-        return imageUrls;
+    // Getters and Setters (chỉ thay đổi getter/setter cho imagesToDelete)
+    public List<MultipartFile> getFiles() {
+        return files;
     }
 
-    public void setImageUrls(List<MultipartFile> imageUrls) {
-        this.imageUrls = imageUrls;
+    public void setFiles(List<MultipartFile> files) {
+        this.files = files;
     }
 
-    public List<String> getImagesToDelete() {
+    public String getImagesToDelete() {
         return imagesToDelete;
     }
 
-    public void setImagesToDelete(List<String> imagesToDelete) {
+    public void setImagesToDelete(String imagesToDelete) {
         this.imagesToDelete = imagesToDelete;
     }
 
@@ -125,19 +117,19 @@ public class UpdateSummaryRequisitionRequest {
         this.departmentRequestQty = departmentRequestQty;
     }
 
-    public Double getStock() {
+    public Integer getStock() {
         return stock;
     }
 
-    public void setStock(Double stock) {
+    public void setStock(Integer stock) {
         this.stock = stock;
     }
 
-    public Double getPurchasingSuggest() {
+    public Integer getPurchasingSuggest() {
         return purchasingSuggest;
     }
 
-    public void setPurchasingSuggest(Double purchasingSuggest) {
+    public void setPurchasingSuggest(Integer purchasingSuggest) {
         this.purchasingSuggest = purchasingSuggest;
     }
 
@@ -155,6 +147,14 @@ public class UpdateSummaryRequisitionRequest {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public String getRemarkComparison() {
+        return remarkComparison;
+    }
+
+    public void setRemarkComparison(String remarkComparison) {
+        this.remarkComparison = remarkComparison;
     }
 
     public String getSupplierId() {
@@ -195,21 +195,5 @@ public class UpdateSummaryRequisitionRequest {
 
     public void setFullDescription(String fullDescription) {
         this.fullDescription = fullDescription;
-    }
-
-    public Double getTotalRequestQty() {
-        return totalRequestQty;
-    }
-
-    public void setTotalRequestQty(Double totalRequestQty) {
-        this.totalRequestQty = totalRequestQty;
-    }
-
-    public Double getTotalPrice() {
-        return totalPrice;
-    }
-
-    public void setTotalPrice(Double totalPrice) {
-        this.totalPrice = totalPrice;
     }
 }
