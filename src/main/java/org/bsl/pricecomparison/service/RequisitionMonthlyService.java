@@ -61,9 +61,9 @@ public class RequisitionMonthlyService {
 //        return existingRequisition;
 //    }
 
-    public void deleteRequisition(int id) {
-        requisitions.removeIf(r -> r.getId() == id);
-    }
+//    public void deleteRequisition(int id) {
+//        requisitions.removeIf(r -> r.getId() == id);
+//    }
 
     public List<RequisitionMonthly> getLatestRequisitions() {
         return requisitions.stream()

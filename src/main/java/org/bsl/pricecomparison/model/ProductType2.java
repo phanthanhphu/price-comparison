@@ -1,6 +1,7 @@
 package org.bsl.pricecomparison.model;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -12,6 +13,8 @@ public class ProductType2 {
     private String id;
     private String name;
     private LocalDateTime createdDate;
+
+    @Indexed
     private String productType1Id;
 
     public ProductType2() {

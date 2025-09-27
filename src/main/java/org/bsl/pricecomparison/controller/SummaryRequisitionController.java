@@ -1,6 +1,5 @@
 package org.bsl.pricecomparison.controller;
 
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -15,10 +14,7 @@ import org.bsl.pricecomparison.repository.*;
 import org.bsl.pricecomparison.request.*;
 import org.bsl.pricecomparison.service.ProductType1Service;
 import org.bsl.pricecomparison.service.ProductType2Service;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.*;
 import org.apache.poi.xssf.usermodel.XSSFDrawing;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -33,7 +29,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -108,89 +103,6 @@ public class SummaryRequisitionController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-//    @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-//    @Operation(
-//            summary = "Create a new summary requisition with multiple image uploads",
-//            description = "Create a summary requisition and upload multiple images using multipart/form-data.",
-//            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
-//                    content = @Content(
-//                            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
-//                            schema = @Schema(implementation = CreateSummaryRequisitionRequest.class)
-//                    )
-//            )
-//    )
-//    public ResponseEntity<?> create(@ModelAttribute CreateSummaryRequisitionRequest request) {
-//        try {
-//            ObjectMapper mapper = new ObjectMapper();
-//            Map<String, Double> deptQty;
-//            try {
-//                deptQty = request.getDepartmentRequestQty() != null
-//                        ? mapper.readValue(request.getDepartmentRequestQty(), new TypeReference<Map<String, Double>>() {})
-//                        : new HashMap<>();
-//            } catch (JsonProcessingException e) {
-//                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-//                        .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
-//            }
-//
-//            Optional<SummaryRequisition> existing = requisitionRepository.findByProductType1IdAndProductType2IdAndOldSapCode(
-//                    request.getProductType1Id(),
-//                    request.getProductType2Id(),
-//                    request.getOldSapCode()
-//            );
-//
-//            if (existing.isPresent()) {
-//                return ResponseEntity.status(HttpStatus.CONFLICT)
-//                        .body("Duplicate entry: productType1Id, productType2Id, and oldSapCode must be unique together.");
-//            }
-//
-//            List<String> imageUrls = new ArrayList<>();
-//            List<MultipartFile> files = request.getFiles();
-//            if (files != null && !files.isEmpty()) {
-//                for (MultipartFile file : files) {
-//                    if (file != null && !file.isEmpty()) {
-//                        String imageUrl = saveImage(file);
-//                        imageUrls.add(imageUrl);
-//                    }
-//                }
-//            }
-//
-//            if (imageUrls.size() > 10) {
-//                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-//                        .body("Maximum 10 images allowed.");
-//            }
-//
-//            SummaryRequisition summary = new SummaryRequisition();
-//            summary.setEnglishName(request.getEnglishName());
-//            summary.setVietnameseName(request.getVietnameseName());
-//            summary.setOldSapCode(request.getOldSapCode());
-//            summary.setNewSapCode(request.getNewSapCode());
-//            summary.setDepartmentRequestQty(deptQty);
-//            summary.setStock(request.getStock());
-//            summary.setPurchasingSuggest(request.getPurchasingSuggest());
-//            summary.setReason(request.getReason());
-//            summary.setRemark(request.getRemark());
-//            summary.setRemarkComparison(request.getRemarkComparison());
-//            summary.setSupplierId(request.getSupplierId());
-//            summary.setGroupId(request.getGroupId());
-//            summary.setProductType1Id(request.getProductType1Id());
-//            summary.setProductType2Id(request.getProductType2Id());
-//            summary.setFullDescription(request.getFullDescription());
-//            summary.setImageUrls(imageUrls);
-//            summary.setCreatedAt(LocalDateTime.now());
-//            summary.setUpdatedAt(LocalDateTime.now());
-//
-//            SummaryRequisition saved = requisitionRepository.save(summary);
-//            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
-//
-//        } catch (IOException e) {
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-//                    .body("Error processing file: " + e.getMessage());
-//        } catch (Exception e) {
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-//                    .body("Unexpected error: " + e.getMessage());
-//        }
-//    }
-
     @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "Create a new summary requisition with multiple image uploads",
@@ -204,6 +116,20 @@ public class SummaryRequisitionController {
     )
     public ResponseEntity<?> create(@ModelAttribute CreateSummaryRequisitionRequest request) {
         try {
+            // Validate required fields
+            if (request.getVietnameseName() == null || request.getVietnameseName().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "Vietnamese name is required."));
+            }
+            if (request.getOldSapCode() == null || request.getOldSapCode().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "Old SAP Code is required."));
+            }
+            if (request.getGroupId() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "Group ID is required."));
+            }
+
             // Log the received departmentRequestQty for debugging
             System.out.println("Received departmentRequestQty: " + request.getDepartmentRequestQty());
 
@@ -213,30 +139,42 @@ public class SummaryRequisitionController {
             try {
                 if (request.getDepartmentRequestQty() != null && !request.getDepartmentRequestQty().isEmpty()) {
                     deptQtyDTO = mapper.readValue(request.getDepartmentRequestQty(), DepartmentRequestQtyDTO.class);
+                    if (deptQtyDTO.getQuantities() == null || deptQtyDTO.getQuantities().isEmpty()) {
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("message", "At least one department quantity is required."));
+                    }
                 } else {
                     deptQtyDTO = new DepartmentRequestQtyDTO();
                     deptQtyDTO.setQuantities(new HashMap<>());
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("message", "DepartmentRequestQty cannot be empty."));
                 }
             } catch (JsonProcessingException e) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
+                        .body(Map.of("message", "Invalid JSON format for departmentRequestQty: " + e.getMessage()));
             }
 
-            // Extract quantities from DepartmentRequestQtyDTO
-            Map<String, DepartmentQty> deptQty = deptQtyDTO.getQuantities() != null
-                    ? deptQtyDTO.getQuantities()
-                    : new HashMap<>();
+            // Extract and validate quantities from DepartmentRequestQtyDTO
+            Map<String, DepartmentQty> deptQty = deptQtyDTO.getQuantities();
+            if (deptQty.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "No department quantities provided."));
+            }
+            for (Map.Entry<String, DepartmentQty> entry : deptQty.entrySet()) {
+                if (entry.getValue().getBuy() != null && entry.getValue().getBuy() < 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("message", "Buy value cannot be negative for department: " + entry.getKey()));
+                }
+            }
 
             // Check for duplicate entry
-            Optional<SummaryRequisition> existing = requisitionRepository.findByProductType1IdAndProductType2IdAndOldSapCode(
-                    request.getProductType1Id(),
-                    request.getProductType2Id(),
-                    request.getOldSapCode()
+            Optional<SummaryRequisition> existing = requisitionRepository.findByGroupIdAndOldSapCode(
+                    request.getGroupId(), request.getOldSapCode()
             );
 
             if (existing.isPresent()) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body("Duplicate entry: productType1Id, productType2Id, and oldSapCode must be unique together.");
+                        .body(Map.of("message", "Duplicate entry: productType1Id, productType2Id, and oldSapCode must be unique together."));
             }
 
             // Handle image uploads
@@ -245,6 +183,14 @@ public class SummaryRequisitionController {
             if (files != null && !files.isEmpty()) {
                 for (MultipartFile file : files) {
                     if (file != null && !file.isEmpty()) {
+                        if (!file.getContentType().startsWith("image/")) {
+                            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                    .body(Map.of("message", "Only image files are allowed: " + file.getOriginalFilename()));
+                        }
+                        if (file.getSize() > 5 * 1024 * 1024) { // 5MB limit
+                            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                    .body(Map.of("message", "Image size exceeds 5MB: " + file.getOriginalFilename()));
+                        }
                         String imageUrl = saveImage(file);
                         imageUrls.add(imageUrl);
                     }
@@ -254,18 +200,18 @@ public class SummaryRequisitionController {
             // Validate image count
             if (imageUrls.size() > 10) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Maximum 10 images allowed.");
+                        .body(Map.of("message", "Maximum 10 images allowed."));
             }
 
             // Create and populate SummaryRequisition
             SummaryRequisition summary = new SummaryRequisition();
             summary.setEnglishName(request.getEnglishName());
-            summary.setVietnameseName(request.getVietnameseName());
-            summary.setOldSapCode(request.getOldSapCode());
-            summary.setNewSapCode(request.getNewSapCode());
+            summary.setVietnameseName(request.getVietnameseName().trim());
+            summary.setOldSapCode(request.getOldSapCode().trim());
+            summary.setNewSapCode(request.getNewSapCode() != null ? request.getNewSapCode().trim() : null);
             summary.setDepartmentRequestQty(deptQty);
-            summary.setStock(request.getStock());
-            summary.setPurchasingSuggest(request.getPurchasingSuggest());
+            summary.setStock(request.getStock() != null ? request.getStock() : 0);
+            summary.setPurchasingSuggest(request.getPurchasingSuggest() != null ? request.getPurchasingSuggest() : 0);
             summary.setReason(request.getReason());
             summary.setRemark(request.getRemark());
             summary.setRemarkComparison(request.getRemarkComparison());
@@ -280,14 +226,15 @@ public class SummaryRequisitionController {
 
             // Save to repository
             SummaryRequisition saved = requisitionRepository.save(summary);
-            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of("message", "Summary requisition created successfully!", "data", saved));
 
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("Error processing file: " + e.getMessage());
+                    .body(Map.of("message", "Error processing file: " + e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Unexpected error: " + e.getMessage());
+                    .body(Map.of("message", "Unexpected error: " + e.getMessage()));
         }
     }
 
@@ -329,10 +276,21 @@ public class SummaryRequisitionController {
             if (!existingRequisition.isPresent()) {
                 return ResponseEntity
                         .status(HttpStatus.NOT_FOUND)
-                        .body("Requisition with ID " + id + " not found.");
+                        .body(Map.of("message", "Requisition with ID " + id + " not found."));
             }
 
             SummaryRequisition current = existingRequisition.get();
+
+            // New: Check for duplicate groupId and oldSapCode, excluding the current requisition
+            if (request.getGroupId() != null && request.getOldSapCode() != null) {
+                Optional<SummaryRequisition> existing = requisitionRepository.findByGroupIdAndOldSapCode(
+                        request.getGroupId(), request.getOldSapCode()
+                );
+                if (existing.isPresent() && !existing.get().getId().equals(id)) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(Map.of("message", "Duplicate entry: groupId and oldSapCode must be unique together."));
+                }
+            }
 
             // Handle department quantities
             Map<String, DepartmentQty> deptQty = current.getDepartmentRequestQty() != null ? new HashMap<>(current.getDepartmentRequestQty()) : new HashMap<>();
@@ -345,7 +303,7 @@ public class SummaryRequisitionController {
                     }
                 } catch (JsonProcessingException e) {
                     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                            .body("Invalid JSON format for departmentRequestQty: " + e.getMessage());
+                            .body(Map.of("message", "Invalid JSON format for departmentRequestQty: " + e.getMessage()));
                 }
             }
 
@@ -369,7 +327,7 @@ public class SummaryRequisitionController {
                     imagesToDelete = objectMapper.readValue(imagesToDeleteJson, new TypeReference<List<String>>() {});
                     if (imagesToDelete.size() > 10) {
                         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                                .body("Cannot delete more than 10 images at once.");
+                                .body(Map.of("message", "Cannot delete more than 10 images at once."));
                     }
                     List<String> imagesToDeleteCopy = new ArrayList<>(imagesToDelete);
                     for (String url : imagesToDeleteCopy) {
@@ -388,14 +346,14 @@ public class SummaryRequisitionController {
                     }
                 } catch (JsonProcessingException e) {
                     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                            .body("Invalid JSON format for imagesToDelete: " + e.getMessage());
+                            .body(Map.of("message", "Invalid JSON format for imagesToDelete: " + e.getMessage()));
                 }
             }
 
             // Validate image count
             if (newImageUrls.size() > 10) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Maximum 10 images allowed.");
+                        .body(Map.of("message", "Maximum 10 images allowed."));
             }
 
             // Update fields only if provided
@@ -422,18 +380,17 @@ public class SummaryRequisitionController {
             // Save to repository
             SummaryRequisition updated = requisitionRepository.save(current);
             System.out.println("Updated imageUrls in database: " + updated.getImageUrls());
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(Map.of("message", "Requisition updated successfully", "data", updated));
 
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error processing request: " + e.getMessage());
+                    .body(Map.of("message", "Error processing request: " + e.getMessage()));
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An error occurred while updating the requisition: " + e.getMessage());
+                    .body(Map.of("message", "An error occurred while updating the requisition: " + e.getMessage()));
         }
     }
-
 
     private void deleteImage(String imageUrl) {
         try {
@@ -446,10 +403,33 @@ public class SummaryRequisitionController {
             System.err.println("Failed to delete image: " + imageUrl + ", error: " + e.getMessage());
         }
     }
-    
+
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable String id) {
-        requisitionRepository.deleteById(id);
+    public ResponseEntity<?> delete(@PathVariable String id) {
+        try {
+            Optional<SummaryRequisition> requisitionOptional = requisitionRepository.findById(id);
+            if (requisitionOptional.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Collections.singletonMap("message", "ID not found: " + id));
+            }
+
+            SummaryRequisition requisition = requisitionOptional.get();
+            String name = requisition.getEnglishName();
+
+            List<String> imageUrls = requisition.getImageUrls();
+            if (imageUrls != null && !imageUrls.isEmpty()) {
+                for (String imageUrl : imageUrls) {
+                    deleteImage(imageUrl);
+                }
+            }
+
+            requisitionRepository.deleteById(id);
+            return ResponseEntity.ok(Collections.singletonMap("message", "Name '" + name + "' has been deleted"));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "Invalid ID: " + id));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Collections.singletonMap("message", "Deletion error: " + e.getMessage()));
+        }
     }
 
     @GetMapping("/with-suppliers")
@@ -979,27 +959,12 @@ public class SummaryRequisitionController {
         if (cell == null) return false;
         try {
             double sttValue = cell.getNumericCellValue();
-            int sttInt = (int) sttValue; // Chuyển sang int để kiểm tra
-            return sttValue == sttInt && sttInt >= 1; // Chấp nhận bất kỳ số nguyên nào từ 1 trở lên
+            int sttInt = (int) sttValue;
+            return sttValue == sttInt && sttInt >= 1;
         } catch (Exception e) {
-            return false; // Nếu không phải số, trả về false và gây break
+            return false;
         }
     }
-
-//    private String getCellValue(Cell cell) {
-//        if (cell == null) return null;
-//        cell.setCellType(CellType.STRING);
-//        return cell.getStringCellValue().trim();
-//    }
-//
-//    private Double parseDouble(Cell cell) {
-//        if (cell == null) return null;
-//        try {
-//            return cell.getNumericCellValue();
-//        } catch (Exception e) {
-//            return null;
-//        }
-//    }
 
     @GetMapping("/search/comparison")
     public ResponseEntity<ComparisonRequisitionResponseDTO> searchRequisitions(

@@ -6,10 +6,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
-public class CreateRequisitionMonthlyRequest {
+public class UpdateRequisitionMonthlyRequest {
 
     @ArraySchema(
-            arraySchema = @Schema(description = "Requisition image files", type = "array"),
+            arraySchema = @Schema(description = "Requisition image files to upload", type = "array"),
             minItems = 0,
             maxItems = 10,
             uniqueItems = false,
@@ -17,51 +17,53 @@ public class CreateRequisitionMonthlyRequest {
     )
     private List<MultipartFile> files;
 
-    @Schema(description = "English item description", example = "Product XYZ")
+    @Schema(description = "JSON string containing list of image URLs to delete", example = "[\"/uploads/image1.jpg\", \"/uploads/image2.jpg\"]")
+    private String imagesToDelete;
+
+    @Schema(description = "English item description", example = "Updated Product XYZ", nullable = true)
     private String itemDescriptionEN;
 
-    @Schema(description = "Vietnamese item description", example = "Sản phẩm XYZ")
+    @Schema(description = "Vietnamese item description", example = "Sản phẩm XYZ cập nhật", nullable = true)
     private String itemDescriptionVN;
 
     @Schema(description = "Old SAP code", example = "OLD123")
     private String oldSAPCode;
 
-    @Schema(description = "New SAP code", example = "NEW456")
+    @Schema(description = "New SAP code", example = "NEW456", nullable = true)
     private String sapCodeNewSAP;
 
-    @Schema(description = "Department requisitions as JSON string", example = "[{\"departmentId\": \"dept1\", \"departmentName\": \"IT Department\", \"qty\": 10, \"buy\": 8}, {\"departmentId\": \"dept2\", \"departmentName\": \"HR Department\", \"qty\": 20, \"buy\": 15}]")
+    @Schema(description = "Department requisitions as JSON string", example = "[{\"departmentId\": \"dept1\", \"departmentName\": \"IT Department\", \"qty\": 15, \"buy\": 12}, {\"departmentId\": \"dept2\", \"departmentName\": \"HR Department\", \"qty\": 25, \"buy\": 20}]", nullable = true)
     private String departmentRequisitions;
 
-    @Schema(description = "Total not issued quantity", example = "50.0")
+    @Schema(description = "Total not issued quantity", example = "75.0", nullable = true)
     private Double totalNotIssuedQty;
 
-    @Schema(description = "In-hand quantity", example = "100.0")
+    @Schema(description = "In-hand quantity", example = "150.0", nullable = true)
     private Double inHand;
 
-    @Schema(description = "Supplier ID", example = "1")
+    @Schema(description = "Supplier ID", example = "1", nullable = true)
     private String supplierId;
 
-    @Schema(description = "Product Type 1 ID", example = "1")
+    @Schema(description = "Product Type 1 ID", example = "1", nullable = true)
     private String productType1Id;
 
-    @Schema(description = "Product Type 2 ID", example = "2")
+    @Schema(description = "Product Type 2 ID", example = "2", nullable = true)
     private String productType2Id;
 
-    @Schema(description = "Full description", example = "Detailed description of requisition")
+    @Schema(description = "Full description", example = "Updated detailed description of requisition", nullable = true)
     private String fullDescription;
 
-    @Schema(description = "Reason for the requisition", example = "Needed for project X")
+    @Schema(description = "Reason for the requisition", example = "Updated for project X", nullable = true)
     private String reason;
 
-    @Schema(description = "Remarks about the requisition", example = "This is urgent")
+    @Schema(description = "Remarks about the requisition", example = "Updated urgent request", nullable = true)
     private String remark;
 
-    @Schema(description = "Comparison remarks", example = "Prices compared with last month")
+    @Schema(description = "Comparison remarks", example = "Updated prices compared with last month", nullable = true)
     private String remarkComparison;
 
-    @Schema(description = "Group ID", example = "689dbaddf1bf4d67a76ebae5")
+    @Schema(description = "Group ID", example = "689dbaddf1bf4d67a76ebae5", nullable = true)
     private String groupId;
-
 
     public List<MultipartFile> getFiles() {
         return files;
@@ -69,6 +71,14 @@ public class CreateRequisitionMonthlyRequest {
 
     public void setFiles(List<MultipartFile> files) {
         this.files = files;
+    }
+
+    public String getImagesToDelete() {
+        return imagesToDelete;
+    }
+
+    public void setImagesToDelete(String imagesToDelete) {
+        this.imagesToDelete = imagesToDelete;
     }
 
     public String getItemDescriptionEN() {

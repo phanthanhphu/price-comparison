@@ -34,55 +34,107 @@ public class GroupSummaryRequisitionService {
     private MongoTemplate mongoTemplate;
 
     public GroupSummaryRequisition createGroupSummaryRequisition(GroupSummaryRequisition groupSummaryRequisition) {
-        // Check for duplicate name and createdDate (date part only)
+        // Validate input
+        if (groupSummaryRequisition == null || groupSummaryRequisition.getName() == null || groupSummaryRequisition.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Name cannot be empty");
+        }
+        if (groupSummaryRequisition.getType() == null || groupSummaryRequisition.getType().trim().isEmpty()) {
+            throw new IllegalArgumentException("Type cannot be empty");
+        }
+        // Set createdDate if not provided
         LocalDate createdDate = groupSummaryRequisition.getCreatedDate() != null
                 ? groupSummaryRequisition.getCreatedDate().toLocalDate()
                 : LocalDate.now();
-        boolean existsByNameAndDate = existsByNameAndCreatedDate(groupSummaryRequisition.getName(), createdDate);
-
-        if (existsByNameAndDate) {
-            throw new IllegalArgumentException("Group with name '" + groupSummaryRequisition.getName() + "' and created date '" + createdDate + "' already exists");
+        // Check for duplicate name, type, and createdDate
+        boolean existsByNameTypeAndDate = existsByNameTypeAndCreatedDate(
+                groupSummaryRequisition.getName(), groupSummaryRequisition.getType(), createdDate);
+        if (existsByNameTypeAndDate) {
+            throw new IllegalArgumentException("Group summary requisition with this name, type, and created date already exists");
         }
-
-        // Existing duplicate name check
-        boolean existsByName = groupSummaryRequisitionRepository
-                .findByNameContainingIgnoreCase(groupSummaryRequisition.getName())
-                .stream()
-                .anyMatch(g -> g.getName().equalsIgnoreCase(groupSummaryRequisition.getName()));
-
-        if (existsByName) {
-            throw new IllegalArgumentException("Group with name '" + groupSummaryRequisition.getName() + "' already exists");
+        // Set createdDate and stockDate if not provided
+        if (groupSummaryRequisition.getCreatedDate() == null) {
+            groupSummaryRequisition.setCreatedDate(LocalDateTime.now());
         }
-
+        if (groupSummaryRequisition.getStockDate() == null) {
+            groupSummaryRequisition.setStockDate(LocalDateTime.now());
+        }
         return groupSummaryRequisitionRepository.save(groupSummaryRequisition);
     }
 
-    public boolean existsByNameAndCreatedDate(String name, LocalDate createdDate) {
+    public boolean existsByNameTypeAndCreatedDate(String name, String type, LocalDate createdDate) {
         LocalDateTime startOfDay = createdDate.atStartOfDay();
         LocalDateTime endOfDay = createdDate.atTime(23, 59, 59, 999999999);
 
         Query query = new Query();
         query.addCriteria(Criteria.where("name").is(name));
+        query.addCriteria(Criteria.where("type").is(type));
         query.addCriteria(Criteria.where("createdDate").gte(startOfDay).lte(endOfDay));
 
         return mongoTemplate.exists(query, GroupSummaryRequisition.class);
     }
 
     public Optional<GroupSummaryRequisition> updateGroupSummaryRequisition(String id, GroupSummaryRequisition groupSummaryRequisition) {
-        Optional<GroupSummaryRequisition> existingGroup = groupSummaryRequisitionRepository.findById(id);
-        if (existingGroup.isPresent()) {
-            GroupSummaryRequisition updatedGroup = existingGroup.get();
-
-            updatedGroup.setName(groupSummaryRequisition.getName());
-            updatedGroup.setType(groupSummaryRequisition.getType());
-            updatedGroup.setStatus(groupSummaryRequisition.getStatus());
-            updatedGroup.setCreatedBy(groupSummaryRequisition.getCreatedBy());
-            updatedGroup.setCreatedDate(groupSummaryRequisition.getCreatedDate());
-            updatedGroup.setStockDate(groupSummaryRequisition.getStockDate());
-
-            return Optional.of(groupSummaryRequisitionRepository.save(updatedGroup));
+        // Validate input
+        if (groupSummaryRequisition == null || groupSummaryRequisition.getName() == null || groupSummaryRequisition.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Name cannot be empty");
         }
-        return Optional.empty();
+        if (groupSummaryRequisition.getType() == null || groupSummaryRequisition.getType().trim().isEmpty()) {
+            throw new IllegalArgumentException("Type cannot be empty");
+        }
+        // Check if group exists
+        Optional<GroupSummaryRequisition> existingGroup = groupSummaryRequisitionRepository.findById(id);
+        if (!existingGroup.isPresent()) {
+            return Optional.empty();
+        }
+        // Check for duplicate name, type, and createdDate (excluding current id)
+        LocalDate createdDate = groupSummaryRequisition.getCreatedDate() != null
+                ? groupSummaryRequisition.getCreatedDate().toLocalDate()
+                : existingGroup.get().getCreatedDate().toLocalDate();
+        GroupSummaryRequisition duplicate = findByNameTypeAndCreatedDateAndIdNot(
+                groupSummaryRequisition.getName(), groupSummaryRequisition.getType(), createdDate, id);
+        if (duplicate != null) {
+            throw new IllegalArgumentException("Group summary requisition with name '" + groupSummaryRequisition.getName() +
+                    "', type '" + groupSummaryRequisition.getType() + "', and created date '" + createdDate + "' already exists");
+        }
+        // Validate status transition
+        String currentStatus = existingGroup.get().getStatus();
+        String newStatus = groupSummaryRequisition.getStatus();
+        if (currentStatus == null) {
+            throw new IllegalArgumentException("Current status is null for group with id '" + id + "'");
+        }
+        if (newStatus == null) {
+            throw new IllegalArgumentException("New status cannot be null");
+        }
+        if (!isValidStatusTransition(currentStatus, newStatus)) {
+            throw new IllegalArgumentException("Invalid status transition from '" + currentStatus + "' to '" + newStatus + "'");
+        }
+        // Update fields
+        GroupSummaryRequisition updatedGroup = existingGroup.get();
+        updatedGroup.setName(groupSummaryRequisition.getName());
+        updatedGroup.setType(groupSummaryRequisition.getType());
+        updatedGroup.setStatus(newStatus);
+        updatedGroup.setCreatedBy(groupSummaryRequisition.getCreatedBy());
+        updatedGroup.setCreatedDate(groupSummaryRequisition.getCreatedDate() != null
+                ? groupSummaryRequisition.getCreatedDate()
+                : existingGroup.get().getCreatedDate());
+        updatedGroup.setStockDate(groupSummaryRequisition.getStockDate() != null
+                ? groupSummaryRequisition.getStockDate()
+                : existingGroup.get().getStockDate());
+
+        return Optional.of(groupSummaryRequisitionRepository.save(updatedGroup));
+    }
+
+    public GroupSummaryRequisition findByNameTypeAndCreatedDateAndIdNot(String name, String type, LocalDate createdDate, String id) {
+        LocalDateTime startOfDay = createdDate.atStartOfDay();
+        LocalDateTime endOfDay = createdDate.atTime(23, 59, 59, 999999999);
+
+        Query query = new Query();
+        query.addCriteria(Criteria.where("name").is(name));
+        query.addCriteria(Criteria.where("type").is(type));
+        query.addCriteria(Criteria.where("createdDate").gte(startOfDay).lte(endOfDay));
+        query.addCriteria(Criteria.where("id").ne(id));
+
+        return mongoTemplate.findOne(query, GroupSummaryRequisition.class);
     }
 
     public boolean deleteGroupSummaryRequisition(String id) {
@@ -119,10 +171,10 @@ public class GroupSummaryRequisitionService {
             String status,
             String createdBy,
             String type,
-            LocalDateTime startDate,
-            LocalDateTime endDate,
-            LocalDateTime stockStartDate,
-            LocalDateTime stockEndDate,
+            LocalDate startDate,
+            LocalDate endDate,
+            LocalDate stockStartDate,
+            LocalDate stockEndDate,
             Pageable pageable) {
 
         Query query = new Query().with(pageable);
@@ -145,10 +197,10 @@ public class GroupSummaryRequisitionService {
 
         if (startDate != null || endDate != null) {
             LocalDateTime startOfDay = (startDate != null)
-                    ? startDate.withHour(0).withMinute(0).withSecond(0).withNano(0)
+                    ? startDate.atStartOfDay()
                     : null;
             LocalDateTime endOfDay = (endDate != null)
-                    ? endDate.withHour(23).withMinute(59).withSecond(59).withNano(999_999_999)
+                    ? endDate.atTime(23, 59, 59, 999_999_999)
                     : null;
 
             Criteria dateCriteria = Criteria.where("createdDate");
@@ -165,10 +217,10 @@ public class GroupSummaryRequisitionService {
 
         if (stockStartDate != null || stockEndDate != null) {
             LocalDateTime stockStartOfDay = (stockStartDate != null)
-                    ? stockStartDate.withHour(0).withMinute(0).withSecond(0).withNano(0)
+                    ? stockStartDate.atStartOfDay()
                     : null;
             LocalDateTime stockEndOfDay = (stockEndDate != null)
-                    ? stockEndDate.withHour(23).withMinute(59).withSecond(59).withNano(999_999_999)
+                    ? stockEndDate.atTime(23, 59, 59, 999_999_999)
                     : null;
 
             Criteria stockDateCriteria = Criteria.where("stockDate");
@@ -187,5 +239,21 @@ public class GroupSummaryRequisitionService {
         long total = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), GroupSummaryRequisition.class);
 
         return new PageImpl<>(results, pageable, total);
+    }
+
+    private boolean isValidStatusTransition(String currentStatus, String newStatus) {
+        if (currentStatus == null || newStatus == null) {
+            return false;
+        }
+        switch (currentStatus) {
+            case "Not Started":
+                return newStatus.equals("Not Started") || newStatus.equals("In Progress");
+            case "In Progress":
+                return newStatus.equals("In Progress") || newStatus.equals("Completed");
+            case "Completed":
+                return newStatus.equals("Completed");
+            default:
+                return false;
+        }
     }
 }

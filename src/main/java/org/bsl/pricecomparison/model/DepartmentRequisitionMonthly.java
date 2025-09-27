@@ -1,20 +1,21 @@
 package org.bsl.pricecomparison.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 public class DepartmentRequisitionMonthly {
 
     @Schema(description = "Department ID", example = "dept1")
-    private String id;        // ID của phòng ban
+    private String id;
 
     @Schema(description = "Department name", example = "IT Department")
-    private String name;      // Tên phòng ban
+    private String name;
 
     @Schema(description = "Requested quantity", example = "10")
-    private Integer qty;      // Số lượng yêu cầu
+    private Integer qty;
 
     @Schema(description = "Approved buy quantity", example = "8")
-    private Integer buy;      // Số lượng được phê duyệt
+    private Integer buy;
 
     public DepartmentRequisitionMonthly() {
     }
@@ -62,10 +63,10 @@ public class DepartmentRequisitionMonthly {
     @Schema(description = "Department request details")
     public static class DepartmentRequestDTO {
         @Schema(description = "Department ID", example = "dept1")
-        private String departmentId;
+        private String id;
 
         @Schema(description = "Department name", example = "IT Department")
-        private String departmentName;
+        private String name;
 
         @Schema(description = "Requested quantity", example = "10")
         private Integer qty;
@@ -73,28 +74,30 @@ public class DepartmentRequisitionMonthly {
         @Schema(description = "Approved buy quantity", example = "8")
         private Integer buy;
 
-        public DepartmentRequestDTO(String departmentId, String departmentName, Integer qty, Integer buy) {
-            this.departmentId = departmentId;
-            this.departmentName = departmentName;
+        public DepartmentRequestDTO() {
+        }
+
+        public DepartmentRequestDTO(String id, String name, Integer qty, Integer buy) {
+            this.id = id;
+            this.name = name;
             this.qty = qty;
             this.buy = buy;
         }
 
-        // Getters and setters
-        public String getDepartmentId() {
-            return departmentId;
+        public String getId() {
+            return id;
         }
 
-        public void setDepartmentId(String departmentId) {
-            this.departmentId = departmentId;
+        public void setId(String id) {
+            this.id = id;
         }
 
-        public String getDepartmentName() {
-            return departmentName;
+        public String getName() {
+            return name;
         }
 
-        public void setDepartmentName(String departmentName) {
-            this.departmentName = departmentName;
+        public void setName(String name) {
+            this.name = name;
         }
 
         public Integer getQty() {

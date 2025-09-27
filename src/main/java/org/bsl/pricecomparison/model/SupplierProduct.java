@@ -3,6 +3,7 @@ package org.bsl.pricecomparison.model;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -26,7 +27,9 @@ public class SupplierProduct {
     private Double price;
     private String unit;
     private List<String> imageUrls;
+    @Indexed
     private String productType1Id;
+    @Indexed
     private String productType2Id;
 
     private LocalDateTime createdAt;

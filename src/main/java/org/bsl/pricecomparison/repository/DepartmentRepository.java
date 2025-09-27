@@ -19,4 +19,9 @@ public interface DepartmentRepository extends MongoRepository<Department, String
     @Query("{ 'departmentName': { $regex: ?0, $options: 'i' }, 'division': { $regex: ?1, $options: 'i' } }")
     Page<Department> searchByDepartmentNameAndDivision(String departmentName, String division, Pageable pageable);
 
+    @Query("{ 'departmentName': ?0, 'division': ?1, 'id': { $ne: ?2 } }")
+    Department findByDepartmentNameAndDivisionAndIdNot(String departmentName, String division, String id);
+
+    @Query("{ 'departmentName': ?0, 'division': ?1 }")
+    Department findByDepartmentNameAndDivision(String departmentName, String division);
 }
