@@ -12,10 +12,12 @@ public interface SupplierProductRepositoryCustom {
             String itemNo,
             String itemDescription,
             String fullDescription,
-            String materialGroupFullDescription,
+            String currency,
+            String goodType,
             String productType1Id,
             String productType2Id,
-            Pageable pageable);
+            Pageable pageable
+    );
 
-    Page<SupplierProduct> findBySapCodeWithPagination(String sapCode, String itemNo, String itemDescription, Pageable pageable);
+    Page<SupplierProduct> findBySapCodeWithPagination(String sapCode, String itemNo, String itemDescription, String currency, Pageable pageable);
 }

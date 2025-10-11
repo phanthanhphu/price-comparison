@@ -81,6 +81,16 @@ public class GroupSummaryRequisitionService {
         if (groupSummaryRequisition.getType() == null || groupSummaryRequisition.getType().trim().isEmpty()) {
             throw new IllegalArgumentException("Type cannot be empty");
         }
+        // Validate currency
+        String currency = groupSummaryRequisition.getCurrency();
+        if (currency != null && !currency.trim().isEmpty()) {
+            currency = currency.toUpperCase();
+            if (!List.of("VND", "EURO", "USD").contains(currency)) {
+                throw new IllegalArgumentException("Invalid currency. Must be VND, EURO, or USD.");
+            }
+        } else {
+            currency = null; // Retain existing currency if not provided
+        }
         // Check if group exists
         Optional<GroupSummaryRequisition> existingGroup = groupSummaryRequisitionRepository.findById(id);
         if (!existingGroup.isPresent()) {
@@ -120,6 +130,9 @@ public class GroupSummaryRequisitionService {
         updatedGroup.setStockDate(groupSummaryRequisition.getStockDate() != null
                 ? groupSummaryRequisition.getStockDate()
                 : existingGroup.get().getStockDate());
+        updatedGroup.setCurrency(currency != null
+                ? currency
+                : existingGroup.get().getCurrency()); // Update currency or retain existing
 
         return Optional.of(groupSummaryRequisitionRepository.save(updatedGroup));
     }
@@ -171,6 +184,7 @@ public class GroupSummaryRequisitionService {
             String status,
             String createdBy,
             String type,
+            String currency, // Added currency parameter
             LocalDate startDate,
             LocalDate endDate,
             LocalDate stockStartDate,
@@ -193,6 +207,10 @@ public class GroupSummaryRequisitionService {
 
         if (type != null && !type.trim().isEmpty()) {
             query.addCriteria(Criteria.where("type").regex("(?i).*" + type.trim() + ".*"));
+        }
+
+        if (currency != null && !currency.trim().isEmpty()) {
+            query.addCriteria(Criteria.where("currency").is(currency.trim().toUpperCase()));
         }
 
         if (startDate != null || endDate != null) {

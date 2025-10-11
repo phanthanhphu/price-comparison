@@ -4,70 +4,128 @@ import org.bsl.pricecomparison.request.DepartmentQty;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
 @Document(collection = "summary_requisition")
+@Schema(description = "Model for summary requisition data")
 public class SummaryRequisition {
     @Id
+    @Schema(description = "Unique identifier of the requisition", example = "req123")
     private String id;
 
+    @Schema(description = "Requisition number", example = "1")
     private int no;
+
+    @Schema(description = "English name of the item", example = "Laptop")
     private String englishName;
+
+    @Schema(description = "Vietnamese name of the item", example = "Máy tính xách tay")
     private String vietnameseName;
+
+    @Schema(description = "Old SAP code of the item", example = "SAP123")
     private String oldSapCode;
-    private String newSapCode;
+
+    @Schema(description = "Hana SAP code of the item", example = "HANA456")
+    private String hanaSapCode;
 
     @Indexed
+    @Schema(description = "Map of department request quantities")
     private Map<String, DepartmentQty> departmentRequestQty;
 
-    private double stock;
+    @Schema(description = "Stock quantity", example = "100.0")
+    @NotNull(message = "Stock quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Stock quantity must be non-negative")
+    private BigDecimal stock;
+
+    @Schema(description = "Date of stock update", example = "2025-09-30T10:05:00")
     private LocalDateTime dateStock;
-    private double purchasingSuggest;
+
+    @Schema(description = "Order quantity", example = "50.0")
+    @NotNull(message = "Order quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Order quantity must be non-negative")
+    private BigDecimal orderQty;
+
+    @Schema(description = "Reason for requisition", example = "Restock")
     private String reason;
+
+    @Schema(description = "General remarks", example = "Urgent request")
     private String remark;
+
+    @Schema(description = "Comparison remarks", example = "Compared with supplier A")
     private String remarkComparison;
 
-    @Indexed // Added index for supplierId
+    @Indexed
+    @Schema(description = "Supplier ID", example = "supp789")
     private String supplierId;
 
     @Indexed
+    @Schema(description = "Group ID", example = "GRP456")
     private String groupId;
 
     @Indexed
+    @Schema(description = "Product Type 1 ID", example = "type1_123")
     private String productType1Id;
 
     @Indexed
+    @Schema(description = "Product Type 2 ID", example = "type2_456")
     private String productType2Id;
 
+    @Schema(description = "Creation date", example = "2025-09-30T10:05:00")
     private LocalDateTime createdAt;
+
+    @Schema(description = "Last updated date", example = "2025-09-30T12:30:00")
     private LocalDateTime updatedAt;
 
+    @Schema(description = "Full description of the item", example = "High-performance laptop")
     private String fullDescription;
+
+    @Schema(description = "List of image URLs", example = "[\"http://example.com/image1.jpg\"]")
     private List<String> imageUrls;
 
     // Constructors
     public SummaryRequisition() {
     }
 
-    public SummaryRequisition(String id, int no, String englishName, String vietnameseName, String oldSapCode,
-                              String newSapCode, Map<String, DepartmentQty> departmentRequestQty, double stock,
-                              LocalDateTime dateStock, double purchasingSuggest, String reason, String remark,
-                              String remarkComparison, String supplierId, String groupId, String productType1Id,
-                              String productType2Id, LocalDateTime createdAt, LocalDateTime updatedAt,
-                              String fullDescription, List<String> imageUrls) {
+    public SummaryRequisition(
+            String id,
+            int no,
+            String englishName,
+            String vietnameseName,
+            String oldSapCode,
+            String hanaSapCode,
+            Map<String, DepartmentQty> departmentRequestQty,
+            BigDecimal stock,
+            LocalDateTime dateStock,
+            BigDecimal orderQty,
+            String reason,
+            String remark,
+            String remarkComparison,
+            String supplierId,
+            String groupId,
+            String productType1Id,
+            String productType2Id,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt,
+            String fullDescription,
+            List<String> imageUrls
+    ) {
         this.id = id;
         this.no = no;
         this.englishName = englishName;
         this.vietnameseName = vietnameseName;
         this.oldSapCode = oldSapCode;
-        this.newSapCode = newSapCode;
+        this.hanaSapCode = hanaSapCode;
         this.departmentRequestQty = departmentRequestQty;
         this.stock = stock;
         this.dateStock = dateStock;
-        this.purchasingSuggest = purchasingSuggest;
+        this.orderQty = orderQty;
         this.reason = reason;
         this.remark = remark;
         this.remarkComparison = remarkComparison;
@@ -92,16 +150,16 @@ public class SummaryRequisition {
     public void setVietnameseName(String vietnameseName) { this.vietnameseName = vietnameseName; }
     public String getOldSapCode() { return oldSapCode; }
     public void setOldSapCode(String oldSapCode) { this.oldSapCode = oldSapCode; }
-    public String getNewSapCode() { return newSapCode; }
-    public void setNewSapCode(String newSapCode) { this.newSapCode = newSapCode; }
+    public String getHanaSapCode() { return hanaSapCode; }
+    public void setHanaSapCode(String hanaSapCode) { this.hanaSapCode = hanaSapCode; }
     public Map<String, DepartmentQty> getDepartmentRequestQty() { return departmentRequestQty; }
     public void setDepartmentRequestQty(Map<String, DepartmentQty> departmentRequestQty) { this.departmentRequestQty = departmentRequestQty; }
-    public double getStock() { return stock; }
-    public void setStock(double stock) { this.stock = stock; }
+    public BigDecimal getStock() { return stock; }
+    public void setStock(BigDecimal stock) { this.stock = stock; }
     public LocalDateTime getDateStock() { return dateStock; }
     public void setDateStock(LocalDateTime dateStock) { this.dateStock = dateStock; }
-    public double getPurchasingSuggest() { return purchasingSuggest; }
-    public void setPurchasingSuggest(double purchasingSuggest) { this.purchasingSuggest = purchasingSuggest; }
+    public BigDecimal getOrderQty() { return orderQty; }
+    public void setOrderQty(BigDecimal orderQty) { this.orderQty = orderQty; }
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
     public String getRemark() { return remark; }

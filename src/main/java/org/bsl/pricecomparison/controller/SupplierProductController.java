@@ -5,8 +5,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import org.apache.logging.log4j.LogManager;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import org.bsl.pricecomparison.costom.SupplierProductRepositoryCustom;
 import org.bsl.pricecomparison.dto.SupplierProductDTO;
 import org.bsl.pricecomparison.exception.DuplicateSupplierProductException;
@@ -25,7 +28,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.*;
+import java.text.DecimalFormat;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -60,7 +66,10 @@ public class SupplierProductController {
     private static final Logger logger = LoggerFactory.getLogger(SupplierProductController.class);
 
     private boolean checkDuplicate(SupplierProduct product, String excludeId) {
-        Double price = product.getPrice() != null ? product.getPrice() : 0.0;
+        if (product.getPrice() == null) {
+            throw new IllegalArgumentException("Price cannot be null");
+        }
+        BigDecimal price = product.getPrice();
         return repository.existsBySupplierCodeAndSapCodeAndPriceAndIdNot(
                 product.getSupplierCode(),
                 product.getSapCode(),
@@ -257,7 +266,7 @@ public class SupplierProductController {
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Import from Excel", description = "Upload an Excel .xlsx file with columns in the order: supplierCode, supplierName, sapCode, itemNo, itemDescription, size, price, unit")
+    @Operation(summary = "Import from Excel", description = "Upload an Excel .xlsx file with columns in the order: supplierCode, supplierName, sapCode, itemNo, itemDescription, size, price, unit, currency, goodType")
     public ResponseEntity<Map<String, Object>> importExcel(
             @Parameter(description = "Excel .xlsx file containing product data")
             @RequestPart("file") MultipartFile file) {
@@ -283,12 +292,57 @@ public class SupplierProductController {
                     String size = formatter.formatCellValue(row.getCell(5));
                     String priceText = formatter.formatCellValue(row.getCell(6));
                     String unit = formatter.formatCellValue(row.getCell(7));
+                    String currency = formatter.formatCellValue(row.getCell(8));
+                    String goodType = formatter.formatCellValue(row.getCell(9));
 
-                    Double price = null;
+                    // Validate currency
+                    if (currency == null || currency.trim().isEmpty()) {
+                        currency = "VND"; // Default to VND if not specified
+                    }
+                    currency = currency.trim().toUpperCase();
+                    if (!"VND".equals(currency) && !"USD".equals(currency) && !"EURO".equals(currency)) {
+                        throw new IllegalArgumentException("Invalid currency at row " + (row.getRowNum() + 1) + ": Must be VND, USD, or EURO");
+                    }
+
+                    // Validate goodType
+                    if (goodType == null || goodType.trim().isEmpty()) {
+                        goodType = "Common"; // Default to Common if not specified
+                    }
+                    goodType = goodType.trim();
+                    if (!"Common".equals(goodType) && !"Special".equals(goodType) && !"Electronics".equals(goodType)) {
+                        throw new IllegalArgumentException("Invalid goodType at row " + (row.getRowNum() + 1) + ": Must be Common, Special, or Electronics");
+                    }
+
+                    BigDecimal price = null;
                     if (priceText != null && !priceText.isEmpty()) {
-                        priceText = priceText.replace(",", "");
+                        logger.debug("Raw priceText at row {}: {}", row.getRowNum() + 1, priceText);
+                        String cleanedPriceText = priceText.trim();
+                        if ("VND".equals(currency)) {
+                            // For VND, remove all commas and dots (thousands separators)
+                            cleanedPriceText = cleanedPriceText.replaceAll("[,.]", "");
+                        } else {
+                            // For USD and EURO, replace comma with dot and ensure only one dot
+                            cleanedPriceText = cleanedPriceText.replace(",", ".");
+                            cleanedPriceText = cleanedPriceText.replaceAll("[^0-9.]", ""); // Keep only numbers and one dot
+                            // Ensure only one decimal point
+                            int dotCount = cleanedPriceText.length() - cleanedPriceText.replace(".", "").length();
+                            if (dotCount > 1) {
+                                throw new IllegalArgumentException("Invalid price format at row " + (row.getRowNum() + 1) +
+                                        ": Multiple decimal points detected in " + priceText);
+                            }
+                        }
                         try {
-                            price = Double.parseDouble(priceText);
+                            price = new BigDecimal(cleanedPriceText);
+                            logger.debug("Parsed price before validation at row {}: {}", row.getRowNum() + 1, price);
+                            int scale = price.scale();
+                            if ("VND".equals(currency) && scale > 0) {
+                                throw new IllegalArgumentException("Invalid price format at row " + (row.getRowNum() + 1) +
+                                        ": VND must have no decimal places, got " + priceText);
+                            }
+                            if (("USD".equals(currency) || "EURO".equals(currency)) && scale != 2) {
+                                price = price.setScale(2, RoundingMode.HALF_UP); // Normalize to 2 decimal places
+                                logger.warn("Price at row {} normalized to 2 decimal places: {}", row.getRowNum() + 1, price);
+                            }
                         } catch (NumberFormatException e) {
                             throw new IllegalArgumentException("Invalid price format at row " + (row.getRowNum() + 1));
                         }
@@ -297,8 +351,8 @@ public class SupplierProductController {
                     boolean exists = repository.existsBySupplierCodeAndSapCodeAndPrice(supplierCode, sapCode, price);
                     if (exists) {
                         throw new DuplicateSupplierProductException(String.format(
-                                "Duplicate entry at row %d: supplierCode='%s', sapCode='%s', price=%.2f already exists",
-                                row.getRowNum() + 1, supplierCode, sapCode, price));
+                                "Duplicate entry at row %d: supplierCode='%s', sapCode='%s', price=%s already exists",
+                                row.getRowNum() + 1, supplierCode, sapCode, price != null ? price.toString() : "null"));
                     }
 
                     SupplierProduct p = new SupplierProduct();
@@ -307,12 +361,15 @@ public class SupplierProductController {
                     p.setSapCode(sapCode);
                     p.setItemNo(itemNo);
                     p.setItemDescription(itemDescription);
-                    p.setFullDescription(""); // Default value
+                    p.setFullDescription(itemDescription); // Use itemDescription as fullDescription if not provided
                     p.setMaterialGroupFullDescription(""); // Default value
-                    p.setCurrency("VND"); // Default value
+                    p.setCurrency(currency);
+                    p.setGoodType(goodType);
                     p.setSize(size);
                     p.setPrice(price);
                     p.setUnit(unit);
+                    p.setCreatedAt(LocalDateTime.now());
+                    p.setUpdatedAt(LocalDateTime.now());
 
                     products.add(p);
                 }
@@ -367,7 +424,7 @@ public class SupplierProductController {
     @Operation(
             summary = "Create a new product with multiple image uploads",
             description = "Create a product and upload multiple images using multipart/form-data.",
-            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            requestBody = @RequestBody(
                     content = @Content(
                             mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
                             schema = @Schema(implementation = CreateProductRequest.class)
@@ -375,7 +432,7 @@ public class SupplierProductController {
             )
     )
     public ResponseEntity<Map<String, Object>> createProductWithFile(
-            @ModelAttribute CreateProductRequest request
+            @Valid @ModelAttribute CreateProductRequest request
     ) {
         try {
             if (repository.existsBySupplierCodeAndSapCodeAndPrice(
@@ -402,8 +459,8 @@ public class SupplierProductController {
             product.setItemNo(request.getItemNo());
             product.setItemDescription(request.getItemDescription());
             product.setFullDescription(request.getFullDescription());
-            product.setMaterialGroupFullDescription(request.getMaterialGroupFullDescription());
             product.setCurrency(request.getCurrency());
+            product.setGoodType(request.getGoodType());
             product.setSize(request.getSize());
             product.setPrice(request.getPrice());
             product.setUnit(request.getUnit());
@@ -442,7 +499,7 @@ public class SupplierProductController {
     )
     public ResponseEntity<Map<String, Object>> updateProduct(
             @PathVariable String id,
-            @ModelAttribute UpdateProductRequest request
+            @Valid @ModelAttribute UpdateProductRequest request
     ) {
         try {
             // Find the existing product
@@ -457,7 +514,7 @@ public class SupplierProductController {
             SupplierProduct tempProduct = new SupplierProduct();
             tempProduct.setSupplierCode(request.getSupplierCode() != null ? request.getSupplierCode() : existingProduct.getSupplierCode());
             tempProduct.setSapCode(request.getSapCode() != null ? request.getSapCode() : existingProduct.getSapCode());
-            tempProduct.setPrice(request.getPrice() != null ? request.getPrice() : (existingProduct.getPrice() != null ? existingProduct.getPrice() : 0.0));
+            tempProduct.setPrice(request.getPrice() != null ? request.getPrice() : (existingProduct.getPrice() != null ? existingProduct.getPrice() : BigDecimal.ZERO));
 
             // Check for duplicates, excluding the current product's ID
             if (checkDuplicate(tempProduct, id)) {
@@ -474,8 +531,8 @@ public class SupplierProductController {
             existingProduct.setItemNo(request.getItemNo() != null ? request.getItemNo() : existingProduct.getItemNo());
             existingProduct.setItemDescription(request.getItemDescription() != null ? request.getItemDescription() : existingProduct.getItemDescription());
             existingProduct.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : existingProduct.getFullDescription());
-            existingProduct.setMaterialGroupFullDescription(request.getMaterialGroupFullDescription() != null ? request.getMaterialGroupFullDescription() : existingProduct.getMaterialGroupFullDescription());
             existingProduct.setCurrency(request.getCurrency() != null ? request.getCurrency() : existingProduct.getCurrency());
+            existingProduct.setGoodType(request.getGoodType() != null ? request.getGoodType() : existingProduct.getGoodType());
             existingProduct.setSize(request.getSize() != null ? request.getSize() : existingProduct.getSize());
             existingProduct.setPrice(tempProduct.getPrice());
             existingProduct.setUnit(request.getUnit() != null ? request.getUnit() : existingProduct.getUnit());
@@ -577,7 +634,8 @@ public class SupplierProductController {
             @RequestParam(required = false, defaultValue = "") String itemNo,
             @RequestParam(required = false, defaultValue = "") String itemDescription,
             @RequestParam(required = false, defaultValue = "") String fullDescription,
-            @RequestParam(required = false, defaultValue = "") String materialGroupFullDescription,
+            @RequestParam(required = false, defaultValue = "") String currency,
+            @RequestParam(required = false, defaultValue = "") String goodType,
             @RequestParam(required = false, defaultValue = "") String productType1Id,
             @RequestParam(required = false, defaultValue = "") String productType2Id,
             @RequestParam(defaultValue = "0") int page,
@@ -597,7 +655,8 @@ public class SupplierProductController {
                     itemNo,
                     itemDescription,
                     fullDescription,
-                    materialGroupFullDescription,
+                    currency,
+                    goodType,
                     productType1Id,
                     productType2Id,
                     pageable
@@ -612,14 +671,14 @@ public class SupplierProductController {
                 dto.setItemNo(Objects.toString(product.getItemNo(), ""));
                 dto.setItemDescription(Objects.toString(product.getItemDescription(), ""));
                 dto.setFullDescription(Objects.toString(product.getFullDescription(), ""));
-                dto.setMaterialGroupFullDescription(Objects.toString(product.getMaterialGroupFullDescription(), ""));
                 dto.setCurrency(Objects.toString(product.getCurrency(), ""));
+                dto.setGoodType(Objects.toString(product.getGoodType(), ""));
                 dto.setSize(Objects.toString(product.getSize(), ""));
-                dto.setPrice(product.getPrice() != null ? product.getPrice() : 0.0);
                 dto.setUnit(Objects.toString(product.getUnit(), ""));
                 dto.setImageUrls(product.getImageUrls() != null ? product.getImageUrls() : new ArrayList<>());
                 dto.setProductType1Id(Objects.toString(product.getProductType1Id(), ""));
                 dto.setProductType2Id(Objects.toString(product.getProductType2Id(), ""));
+                dto.setPrice(product.getPrice() != null ? product.getPrice() : BigDecimal.ZERO);
 
                 if (product.getProductType1Id() != null && !product.getProductType1Id().isEmpty()) {
                     productType1Repository.findById(product.getProductType1Id()).ifPresent(type1 -> {
@@ -650,13 +709,14 @@ public class SupplierProductController {
 
     @GetMapping("/filter-by-sapcode")
     @Operation(
-            summary = "Filter supplier products by SAP code, item number, and item description",
-            description = "Retrieve a paginated list of supplier products filtered by SAP code, item number, and item description, sorted by price from low to high."
+            summary = "Filter supplier products by SAP code, item number, item description, and currency",
+            description = "Retrieve a paginated list of supplier products filtered by SAP code, item number, item description, and currency, sorted by price from low to high."
     )
     public ResponseEntity<Map<String, Object>> filterBySapCodeItemNoAndDescription(
             @RequestParam(required = false, defaultValue = "") String sapCode,
             @RequestParam(required = false, defaultValue = "") String itemNo,
             @RequestParam(required = false, defaultValue = "") String itemDescription,
+            @RequestParam(required = false, defaultValue = "") String currency,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
@@ -671,6 +731,7 @@ public class SupplierProductController {
                     sapCode,
                     itemNo,
                     itemDescription,
+                    currency,
                     pageable
             );
 
@@ -685,8 +746,9 @@ public class SupplierProductController {
                 dto.setFullDescription(Objects.toString(product.getFullDescription(), ""));
                 dto.setMaterialGroupFullDescription(Objects.toString(product.getMaterialGroupFullDescription(), ""));
                 dto.setCurrency(Objects.toString(product.getCurrency(), ""));
+                dto.setGoodType(Objects.toString(product.getGoodType(), ""));
                 dto.setSize(Objects.toString(product.getSize(), ""));
-                dto.setPrice(product.getPrice() != null ? product.getPrice() : 0.0);
+                dto.setPrice(product.getPrice() != null ? product.getPrice() : BigDecimal.ZERO);
                 dto.setUnit(Objects.toString(product.getUnit(), ""));
                 dto.setImageUrls(product.getImageUrls() != null ? product.getImageUrls() : new ArrayList<>());
                 dto.setProductType1Id(Objects.toString(product.getProductType1Id(), ""));
@@ -713,9 +775,9 @@ public class SupplierProductController {
 
             return ResponseEntity.ok(Map.of("message", "Supplier products filtered successfully", "data", result));
         } catch (Exception e) {
-            logger.error("Failed to filter supplier products by SAP code: {}", e.getMessage());
+            logger.error("Failed to filter supplier products: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("message", "Failed to filter supplier products by SAP code: " + e.getMessage()));
+                    .body(Map.of("message", "Failed to filter supplier products: " + e.getMessage()));
         }
     }
 }

@@ -2,7 +2,10 @@ package org.bsl.pricecomparison.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Schema(description = "Request to update an existing summary requisition")
@@ -23,18 +26,22 @@ public class UpdateSummaryRequisitionRequest {
     @Schema(description = "Old SAP code", example = "OLD123")
     private String oldSapCode;
 
-    @Schema(description = "New SAP code", example = "NEW456")
-    private String newSapCode;
+    @Schema(description = "Hana SAP code", example = "NEW456")
+    private String hanaSapCode;
 
     @Schema(description = "Department request quantities (JSON string)",
             example = "{\"quantities\": {\"temp_1756183918335\": {\"qty\": 10, \"buy\": 8}}}")
     private String departmentRequestQty;
 
-    @Schema(description = "Stock quantity", example = "100")
-    private Integer stock;
+    @Schema(description = "Stock quantity", example = "100.0")
+    @NotNull(message = "Stock quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Stock quantity must be non-negative")
+    private BigDecimal stock;
 
-    @Schema(description = "Purchasing suggestion", example = "50")
-    private Integer purchasingSuggest;
+    @Schema(description = "Order quantity", example = "50.0")
+    @NotNull(message = "Order quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Order quantity must be non-negative")
+    private BigDecimal orderQty;
 
     @Schema(description = "Reason for requisition", example = "Urgent restock")
     private String reason;
@@ -60,7 +67,7 @@ public class UpdateSummaryRequisitionRequest {
     @Schema(description = "Full description", example = "Detailed description of requisition")
     private String fullDescription;
 
-    // Getters and Setters (chỉ thay đổi getter/setter cho imagesToDelete)
+    // Getters and Setters
     public List<MultipartFile> getFiles() {
         return files;
     }
@@ -101,12 +108,12 @@ public class UpdateSummaryRequisitionRequest {
         this.oldSapCode = oldSapCode;
     }
 
-    public String getNewSapCode() {
-        return newSapCode;
+    public String getHanaSapCode() {
+        return hanaSapCode;
     }
 
-    public void setNewSapCode(String newSapCode) {
-        this.newSapCode = newSapCode;
+    public void setHanaSapCode(String hanaSapCode) {
+        this.hanaSapCode = hanaSapCode;
     }
 
     public String getDepartmentRequestQty() {
@@ -117,20 +124,20 @@ public class UpdateSummaryRequisitionRequest {
         this.departmentRequestQty = departmentRequestQty;
     }
 
-    public Integer getStock() {
+    public BigDecimal getStock() {
         return stock;
     }
 
-    public void setStock(Integer stock) {
+    public void setStock(BigDecimal stock) {
         this.stock = stock;
     }
 
-    public Integer getPurchasingSuggest() {
-        return purchasingSuggest;
+    public BigDecimal getOrderQty() {
+        return orderQty;
     }
 
-    public void setPurchasingSuggest(Integer purchasingSuggest) {
-        this.purchasingSuggest = purchasingSuggest;
+    public void setOrderQty(BigDecimal orderQty) {
+        this.orderQty = orderQty;
     }
 
     public String getReason() {

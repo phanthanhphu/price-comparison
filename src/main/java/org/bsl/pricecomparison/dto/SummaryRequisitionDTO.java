@@ -3,7 +3,10 @@ package org.bsl.pricecomparison.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.bsl.pricecomparison.model.SupplierProduct;
 import org.bsl.pricecomparison.model.SummaryRequisition;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Schema(description = "DTO for summary requisition details")
@@ -30,8 +33,16 @@ public class SummaryRequisitionDTO {
     @Schema(description = "Total approved buy quantity", example = "23")
     private Integer sumBuy;
 
-    @Schema(description = "Total price based on supplier price and sumBuy", example = "66700000")
-    private Double totalPrice;
+    @Schema(description = "Total price based on supplier price and sumBuy", example = "66700000.0")
+    @NotNull(message = "Total price is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total price must be non-negative")
+    private BigDecimal totalPrice;
+
+    @Schema(description = "Date when the requisition was created", example = "2025-09-30T10:05:00")
+    private String createdDate;
+
+    @Schema(description = "Date when the requisition was last updated", example = "2025-09-30T12:30:00")
+    private String updatedDate;
 
     public SummaryRequisitionDTO(
             SummaryRequisition requisition,
@@ -40,7 +51,9 @@ public class SummaryRequisitionDTO {
             String productType1Name,
             String productType2Name,
             Integer sumBuy,
-            Double totalPrice
+            BigDecimal totalPrice,
+            String createdDate,
+            String updatedDate
     ) {
         this.requisition = requisition;
         this.supplierProduct = supplierProduct;
@@ -50,6 +63,8 @@ public class SummaryRequisitionDTO {
         this.groupId = requisition != null ? requisition.getGroupId() : null;
         this.sumBuy = sumBuy;
         this.totalPrice = totalPrice;
+        this.createdDate = createdDate;
+        this.updatedDate = updatedDate;
     }
 
     // Inner class to hold department request details
@@ -116,6 +131,8 @@ public class SummaryRequisitionDTO {
     public void setRequisition(SummaryRequisition requisition) {
         this.requisition = requisition;
         this.groupId = requisition != null ? requisition.getGroupId() : null;
+        this.createdDate = requisition != null && requisition.getCreatedAt() != null ? requisition.getCreatedAt().toString() : null;
+        this.updatedDate = requisition != null && requisition.getUpdatedAt() != null ? requisition.getUpdatedAt().toString() : null;
     }
 
     public SupplierProduct getSupplierProduct() {
@@ -166,11 +183,27 @@ public class SummaryRequisitionDTO {
         this.sumBuy = sumBuy;
     }
 
-    public Double getTotalPrice() {
+    public BigDecimal getTotalPrice() {
         return totalPrice;
     }
 
-    public void setTotalPrice(Double totalPrice) {
+    public void setTotalPrice(BigDecimal totalPrice) {
         this.totalPrice = totalPrice;
+    }
+
+    public String getCreatedDate() {
+        return createdDate;
+    }
+
+    public void setCreatedDate(String createdDate) {
+        this.createdDate = createdDate;
+    }
+
+    public String getUpdatedDate() {
+        return updatedDate;
+    }
+
+    public void setUpdatedDate(String updatedDate) {
+        this.updatedDate = updatedDate;
     }
 }

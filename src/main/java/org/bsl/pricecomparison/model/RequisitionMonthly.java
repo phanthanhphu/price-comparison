@@ -5,7 +5,10 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -27,8 +30,8 @@ public class RequisitionMonthly {
     @Schema(description = "Old SAP code", example = "OLD123")
     private String oldSAPCode;
 
-    @Schema(description = "New SAP code", example = "NEW456")
-    private String sapCodeNewSAP;
+    @Schema(description = "HANA SAP code", example = "NEW456")
+    private String hanaSAPCode;
 
     @Schema(description = "Unit of measurement", example = "Piece")
     private String unit;
@@ -39,29 +42,49 @@ public class RequisitionMonthly {
     )
     private List<DepartmentRequisitionMonthly> departmentRequisitions;
 
-    @Schema(description = "Total not issued quantity", example = "50.0")
-    private Double totalNotIssuedQty;
+    @Schema(description = "Daily medical inventory", example = "50.0")
+    @NotNull(message = "Daily medical inventory is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Daily medical inventory must be non-negative")
+    private BigDecimal dailyMedInventory;
 
     @Schema(description = "Total requested quantity", example = "30.0")
-    private Double totalRequestQty;
+    @NotNull(message = "Total requested quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total requested quantity must be non-negative")
+    private BigDecimal totalRequestQty;
 
-    @Schema(description = "In-hand quantity", example = "100.0")
-    private Double inHand;
+    @Schema(description = "Safe stock quantity", example = "100.0")
+    @NotNull(message = "Safe stock is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Safe stock must be non-negative")
+    private BigDecimal safeStock;
 
-    @Schema(description = "Actual in-hand quantity", example = "95.0")
-    private Double actualInHand;
+    @Schema(description = "Use stock quantity", example = "95.0")
+    @NotNull(message = "Use stock quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Use stock quantity must be non-negative")
+    private BigDecimal useStockQty;
 
     @Schema(description = "Order quantity", example = "50.0")
-    private Double orderQty;
+    @NotNull(message = "Order quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Order quantity must be non-negative")
+    private BigDecimal orderQty;
 
     @Schema(description = "Total amount", example = "3000.0")
-    private Double amount;
+    @NotNull(message = "Amount is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Amount must be non-negative")
+    private BigDecimal amount;
 
     @Schema(description = "Price", example = "100.0")
-    private Double price;
+    @NotNull(message = "Price is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Price must be non-negative")
+    private BigDecimal price;
+
+    @Schema(description = "Currency", example = "EURO")
+    private String currency;
+
+    @Schema(description = "Good type", example = "Common")
+    private String goodType;
 
     @Schema(description = "Supplier ID", example = "1")
-    @Indexed // Added index for supplierId
+    @Indexed
     private String supplierId;
 
     @Schema(description = "Supplier name", example = "Supplier ABC")
@@ -108,22 +131,24 @@ public class RequisitionMonthly {
     public RequisitionMonthly() {
     }
 
-    public RequisitionMonthly(String id, String groupId, String itemDescriptionEN, String itemDescriptionVN, String oldSAPCode, String sapCodeNewSAP, String unit, List<DepartmentRequisitionMonthly> departmentRequisitions, Double totalNotIssuedQty, Double totalRequestQty, Double inHand, Double actualInHand, Double orderQty, Double amount, Double price, String supplierId, String supplierName, String productType1Id, String productType2Id, String productType1Name, String productType2Name, LocalDateTime createdDate, LocalDateTime updatedDate, List<String> imageUrls, String fullDescription, String reason, String remark, String remarkComparison) {
+    public RequisitionMonthly(String id, String groupId, String itemDescriptionEN, String itemDescriptionVN, String oldSAPCode, String hanaSAPCode, String unit, List<DepartmentRequisitionMonthly> departmentRequisitions, BigDecimal dailyMedInventory, BigDecimal totalRequestQty, BigDecimal safeStock, BigDecimal useStockQty, BigDecimal orderQty, BigDecimal amount, BigDecimal price, String currency, String goodType, String supplierId, String supplierName, String productType1Id, String productType2Id, String productType1Name, String productType2Name, LocalDateTime createdDate, LocalDateTime updatedDate, List<String> imageUrls, String fullDescription, String reason, String remark, String remarkComparison) {
         this.id = id;
         this.groupId = groupId;
         this.itemDescriptionEN = itemDescriptionEN;
         this.itemDescriptionVN = itemDescriptionVN;
         this.oldSAPCode = oldSAPCode;
-        this.sapCodeNewSAP = sapCodeNewSAP;
+        this.hanaSAPCode = hanaSAPCode;
         this.unit = unit;
         this.departmentRequisitions = departmentRequisitions;
-        this.totalNotIssuedQty = totalNotIssuedQty;
+        this.dailyMedInventory = dailyMedInventory;
         this.totalRequestQty = totalRequestQty;
-        this.inHand = inHand;
-        this.actualInHand = actualInHand;
+        this.safeStock = safeStock;
+        this.useStockQty = useStockQty;
         this.orderQty = orderQty;
         this.amount = amount;
         this.price = price;
+        this.currency = currency;
+        this.goodType = goodType;
         this.supplierId = supplierId;
         this.supplierName = supplierName;
         this.productType1Id = productType1Id;
@@ -139,7 +164,6 @@ public class RequisitionMonthly {
         this.remarkComparison = remarkComparison;
     }
 
-    // Getters and Setters
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getGroupId() { return groupId; }
@@ -150,26 +174,30 @@ public class RequisitionMonthly {
     public void setItemDescriptionVN(String itemDescriptionVN) { this.itemDescriptionVN = itemDescriptionVN; }
     public String getOldSAPCode() { return oldSAPCode; }
     public void setOldSAPCode(String oldSAPCode) { this.oldSAPCode = oldSAPCode; }
-    public String getSapCodeNewSAP() { return sapCodeNewSAP; }
-    public void setSapCodeNewSAP(String sapCodeNewSAP) { this.sapCodeNewSAP = sapCodeNewSAP; }
+    public String getHanaSAPCode() { return hanaSAPCode; }
+    public void setHanaSAPCode(String hanaSAPCode) { this.hanaSAPCode = hanaSAPCode; }
     public String getUnit() { return unit; }
     public void setUnit(String unit) { this.unit = unit; }
     public List<DepartmentRequisitionMonthly> getDepartmentRequisitions() { return departmentRequisitions; }
     public void setDepartmentRequisitions(List<DepartmentRequisitionMonthly> departmentRequisitions) { this.departmentRequisitions = departmentRequisitions; }
-    public Double getTotalNotIssuedQty() { return totalNotIssuedQty; }
-    public void setTotalNotIssuedQty(Double totalNotIssuedQty) { this.totalNotIssuedQty = totalNotIssuedQty; }
-    public Double getTotalRequestQty() { return totalRequestQty; }
-    public void setTotalRequestQty(Double totalRequestQty) { this.totalRequestQty = totalRequestQty; }
-    public Double getInHand() { return inHand; }
-    public void setInHand(Double inHand) { this.inHand = inHand; }
-    public Double getActualInHand() { return actualInHand; }
-    public void setActualInHand(Double actualInHand) { this.actualInHand = actualInHand; }
-    public Double getOrderQty() { return orderQty; }
-    public void setOrderQty(Double orderQty) { this.orderQty = orderQty; }
-    public Double getAmount() { return amount; }
-    public void setAmount(Double amount) { this.amount = amount; }
-    public Double getPrice() { return price; }
-    public void setPrice(Double price) { this.price = price; }
+    public BigDecimal getDailyMedInventory() { return dailyMedInventory; }
+    public void setDailyMedInventory(BigDecimal dailyMedInventory) { this.dailyMedInventory = dailyMedInventory; }
+    public BigDecimal getTotalRequestQty() { return totalRequestQty; }
+    public void setTotalRequestQty(BigDecimal totalRequestQty) { this.totalRequestQty = totalRequestQty; }
+    public BigDecimal getSafeStock() { return safeStock; }
+    public void setSafeStock(BigDecimal safeStock) { this.safeStock = safeStock; }
+    public BigDecimal getUseStockQty() { return useStockQty; }
+    public void setUseStockQty(BigDecimal useStockQty) { this.useStockQty = useStockQty; }
+    public BigDecimal getOrderQty() { return orderQty; }
+    public void setOrderQty(BigDecimal orderQty) { this.orderQty = orderQty; }
+    public BigDecimal getAmount() { return amount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
+    public BigDecimal getPrice() { return price; }
+    public void setPrice(BigDecimal price) { this.price = price; }
+    public String getCurrency() { return currency; }
+    public void setCurrency(String currency) { this.currency = currency; }
+    public String getGoodType() { return goodType; }
+    public void setGoodType(String goodType) { this.goodType = goodType; }
     public String getSupplierId() { return supplierId; }
     public void setSupplierId(String supplierId) { this.supplierId = supplierId; }
     public String getSupplierName() { return supplierName; }

@@ -1,7 +1,10 @@
 package org.bsl.pricecomparison.dto;
 
 import org.bsl.pricecomparison.model.DepartmentRequisitionMonthly;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,13 +19,35 @@ public class UpdateRequisitionMonthlyDTO {
     private String sapCodeNewSAP;
     private String unit;
     private List<DepartmentRequisitionMonthly> departmentRequisitions;
-    private Double totalNotIssuedQty;
-    private Double inHand;
-    private Double totalRequestQty;
-    private Double actualInHand;
-    private Double orderQty;
-    private Double amount;
-    private Double price;
+
+    @NotNull(message = "Total not issued quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total not issued quantity must be non-negative")
+    private BigDecimal totalNotIssuedQty;
+
+    @NotNull(message = "In hand quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "In hand quantity must be non-negative")
+    private BigDecimal inHand;
+
+    @NotNull(message = "Total requested quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total requested quantity must be non-negative")
+    private BigDecimal totalRequestQty;
+
+    @NotNull(message = "Actual in hand quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Actual in hand quantity must be non-negative")
+    private BigDecimal actualInHand;
+
+    @NotNull(message = "Order quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Order quantity must be non-negative")
+    private BigDecimal orderQty;
+
+    @NotNull(message = "Amount is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Amount must be non-negative")
+    private BigDecimal amount;
+
+    @NotNull(message = "Price is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Price must be non-negative")
+    private BigDecimal price;
+
     private String supplierName;
     private LocalDateTime createdDate;
     private LocalDateTime updatedDate;
@@ -43,13 +68,13 @@ public class UpdateRequisitionMonthlyDTO {
             String sapCodeNewSAP,
             String unit,
             List<DepartmentRequisitionMonthly> departmentRequisitions,
-            Double totalNotIssuedQty,
-            Double inHand,
-            Double totalRequestQty,
-            Double actualInHand,
-            Double orderQty,
-            Double amount,
-            Double price,
+            BigDecimal totalNotIssuedQty,
+            BigDecimal inHand,
+            BigDecimal totalRequestQty,
+            BigDecimal actualInHand,
+            BigDecimal orderQty,
+            BigDecimal amount,
+            BigDecimal price,
             String supplierName,
             LocalDateTime createdDate,
             LocalDateTime updatedDate,
@@ -167,59 +192,59 @@ public class UpdateRequisitionMonthlyDTO {
         this.departmentRequisitions = departmentRequisitions;
     }
 
-    public Double getTotalNotIssuedQty() {
+    public BigDecimal getTotalNotIssuedQty() {
         return totalNotIssuedQty;
     }
 
-    public void setTotalNotIssuedQty(Double totalNotIssuedQty) {
+    public void setTotalNotIssuedQty(BigDecimal totalNotIssuedQty) {
         this.totalNotIssuedQty = totalNotIssuedQty;
     }
 
-    public Double getInHand() {
+    public BigDecimal getInHand() {
         return inHand;
     }
 
-    public void setInHand(Double inHand) {
+    public void setInHand(BigDecimal inHand) {
         this.inHand = inHand;
     }
 
-    public Double getTotalRequestQty() {
+    public BigDecimal getTotalRequestQty() {
         return totalRequestQty;
     }
 
-    public void setTotalRequestQty(Double totalRequestQty) {
+    public void setTotalRequestQty(BigDecimal totalRequestQty) {
         this.totalRequestQty = totalRequestQty;
     }
 
-    public Double getActualInHand() {
+    public BigDecimal getActualInHand() {
         return actualInHand;
     }
 
-    public void setActualInHand(Double actualInHand) {
+    public void setActualInHand(BigDecimal actualInHand) {
         this.actualInHand = actualInHand;
     }
 
-    public Double getOrderQty() {
+    public BigDecimal getOrderQty() {
         return orderQty;
     }
 
-    public void setOrderQty(Double orderQty) {
+    public void setOrderQty(BigDecimal orderQty) {
         this.orderQty = orderQty;
     }
 
-    public Double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(Double amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
-    public Double getPrice() {
+    public BigDecimal getPrice() {
         return price;
     }
 
-    public void setPrice(Double price) {
+    public void setPrice(BigDecimal price) {
         this.price = price;
     }
 

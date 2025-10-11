@@ -8,6 +8,7 @@ import org.springframework.data.mongodb.core.*;
 import org.springframework.data.mongodb.core.query.*;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Repository
@@ -24,7 +25,8 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
             String itemNo,
             String itemDescription,
             String fullDescription,
-            String materialGroupFullDescription,
+            String currency,
+            String goodType,
             String productType1Id,
             String productType2Id,
             Pageable pageable) {
@@ -32,7 +34,7 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
         Criteria criteria = new Criteria();
 
         // Tạo list điều kiện
-        List<Criteria> criteriaList = new java.util.ArrayList<>();
+        List<Criteria> criteriaList = new ArrayList<>();
 
         if (supplierCode != null && !supplierCode.isEmpty()) {
             criteriaList.add(Criteria.where("supplierCode").regex(supplierCode, "i"));
@@ -52,8 +54,11 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
         if (fullDescription != null && !fullDescription.isEmpty()) {
             criteriaList.add(Criteria.where("fullDescription").regex(fullDescription, "i"));
         }
-        if (materialGroupFullDescription != null && !materialGroupFullDescription.isEmpty()) {
-            criteriaList.add(Criteria.where("materialGroupFullDescription").regex(materialGroupFullDescription, "i"));
+        if (currency != null && !currency.isEmpty()) {
+            criteriaList.add(Criteria.where("currency").is(currency));
+        }
+        if (goodType != null && !goodType.isEmpty()) {
+            criteriaList.add(Criteria.where("goodType").is(goodType));
         }
         if (productType1Id != null && !productType1Id.isEmpty()) {
             criteriaList.add(Criteria.where("productType1Id").is(productType1Id));
@@ -76,10 +81,10 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
     }
 
     @Override
-    public Page<SupplierProduct> findBySapCodeWithPagination(String sapCode, String itemNo, String itemDescription, Pageable pageable) {
+    public Page<SupplierProduct> findBySapCodeWithPagination(String sapCode, String itemNo, String itemDescription, String currency, Pageable pageable) {
         Criteria criteria = new Criteria();
 
-        List<Criteria> criteriaList = new java.util.ArrayList<>();
+        List<Criteria> criteriaList = new ArrayList<>();
 
         if (sapCode != null && !sapCode.isEmpty()) {
             criteriaList.add(Criteria.where("sapCode").regex(sapCode, "i"));
@@ -89,6 +94,9 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
         }
         if (itemDescription != null && !itemDescription.isEmpty()) {
             criteriaList.add(Criteria.where("itemDescription").regex(itemDescription, "i"));
+        }
+        if (currency != null && !currency.isEmpty()) {
+            criteriaList.add(Criteria.where("currency").regex(currency, "i"));
         }
 
         // If no filter parameters are provided, don't apply any criteria (return all)

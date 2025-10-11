@@ -1,7 +1,10 @@
 package org.bsl.pricecomparison.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Schema(description = "DTO for comparison requisition details")
@@ -16,8 +19,8 @@ public class ComparisonRequisitionDTO {
     @Schema(description = "Old SAP code", example = "OLD123")
     private String oldSapCode;
 
-    @Schema(description = "New SAP code", example = "NEW456")
-    private String newSapCode;
+    @Schema(description = "Hana SAP code", example = "NEW456")
+    private String hanaSapCode;
 
     @Schema(description = "List of supplier details")
     private List<SupplierDTO> suppliers;
@@ -29,19 +32,29 @@ public class ComparisonRequisitionDTO {
     private List<DepartmentRequestDTO> departmentRequests;
 
     @Schema(description = "Selected price", example = "100.0")
-    private Double price;
+    @NotNull(message = "Selected price is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Selected price must be non-negative")
+    private BigDecimal selectedPrice;
 
     @Schema(description = "Total amount in VND", example = "1000.0")
-    private Double amtVnd;
+    @NotNull(message = "Total amount in VND is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total amount in VND must be non-negative")
+    private BigDecimal amtVnd;
 
     @Schema(description = "Amount difference", example = "-200.0")
-    private Double amtDifference;
+    @NotNull(message = "Amount difference is required")
+    @DecimalMin(value = "-100.0", inclusive = true, message = "Amount difference must be greater than or equal to -100")
+    private BigDecimal amtDifference;
 
     @Schema(description = "Percentage difference", example = "-20.0")
-    private Double percentage;
+    @NotNull(message = "Percentage difference is required")
+    @DecimalMin(value = "-100.0", inclusive = true, message = "Percentage difference must be greater than or equal to -100")
+    private BigDecimal percentage;
 
     @Schema(description = "Highest price", example = "120.0")
-    private Double highestPrice;
+    @NotNull(message = "Highest price is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Highest price must be non-negative")
+    private BigDecimal highestPrice;
 
     @Schema(description = "Product Type 1 ID", example = "1")
     private String type1;
@@ -58,33 +71,51 @@ public class ComparisonRequisitionDTO {
     @Schema(description = "Unit", example = "pcs")
     private String unit;
 
+    @Schema(description = "Total buy quantity across departments", example = "20")
+    private int requestQty;
+
+    @Schema(description = "Order quantity", example = "5.0")
+    @NotNull(message = "Order quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Order quantity must be non-negative")
+    private BigDecimal orderQty;
+
+    @Schema(description = "Currency of the selected supplier", example = "VND")
+    private String currency;
+
+    @Schema(description = "Good type of the selected supplier", example = "Material")
+    private String goodType;
+
     public ComparisonRequisitionDTO(
             String englishName,
             String vietnameseName,
             String oldSapCode,
-            String newSapCode,
+            String hanaSapCode,
             List<SupplierDTO> suppliers,
             String remarkComparison,
             List<DepartmentRequestDTO> departmentRequests,
-            Double price,
-            Double amtVnd,
-            Double amtDifference,
-            Double percentage,
-            Double highestPrice,
+            BigDecimal selectedPrice,
+            BigDecimal amtVnd,
+            BigDecimal amtDifference,
+            BigDecimal percentage,
+            BigDecimal highestPrice,
             String type1,
             String type2,
             String type1Name,
             String type2Name,
-            String unit
+            String unit,
+            int requestQty,
+            BigDecimal orderQty,
+            String currency,
+            String goodType
     ) {
         this.englishName = englishName;
         this.vietnameseName = vietnameseName;
         this.oldSapCode = oldSapCode;
-        this.newSapCode = newSapCode;
+        this.hanaSapCode = hanaSapCode;
         this.suppliers = suppliers;
         this.remarkComparison = remarkComparison;
         this.departmentRequests = departmentRequests;
-        this.price = price;
+        this.selectedPrice = selectedPrice;
         this.amtVnd = amtVnd;
         this.amtDifference = amtDifference;
         this.percentage = percentage;
@@ -94,6 +125,10 @@ public class ComparisonRequisitionDTO {
         this.type1Name = type1Name;
         this.type2Name = type2Name;
         this.unit = unit;
+        this.requestQty = requestQty;
+        this.orderQty = orderQty;
+        this.currency = currency;
+        this.goodType = goodType;
     }
 
     // Getters and setters
@@ -121,12 +156,12 @@ public class ComparisonRequisitionDTO {
         this.oldSapCode = oldSapCode;
     }
 
-    public String getNewSapCode() {
-        return newSapCode;
+    public String getHanaSapCode() {
+        return hanaSapCode;
     }
 
-    public void setNewSapCode(String newSapCode) {
-        this.newSapCode = newSapCode;
+    public void setHanaSapCode(String hanaSapCode) {
+        this.hanaSapCode = hanaSapCode;
     }
 
     public List<SupplierDTO> getSuppliers() {
@@ -153,43 +188,43 @@ public class ComparisonRequisitionDTO {
         this.departmentRequests = departmentRequests;
     }
 
-    public Double getPrice() {
-        return price;
+    public BigDecimal getSelectedPrice() {
+        return selectedPrice;
     }
 
-    public void setPrice(Double price) {
-        this.price = price;
+    public void setSelectedPrice(BigDecimal selectedPrice) {
+        this.selectedPrice = selectedPrice;
     }
 
-    public Double getAmtVnd() {
+    public BigDecimal getAmtVnd() {
         return amtVnd;
     }
 
-    public void setAmtVnd(Double amtVnd) {
+    public void setAmtVnd(BigDecimal amtVnd) {
         this.amtVnd = amtVnd;
     }
 
-    public Double getAmtDifference() {
+    public BigDecimal getAmtDifference() {
         return amtDifference;
     }
 
-    public void setAmtDifference(Double amtDifference) {
+    public void setAmtDifference(BigDecimal amtDifference) {
         this.amtDifference = amtDifference;
     }
 
-    public Double getPercentage() {
+    public BigDecimal getPercentage() {
         return percentage;
     }
 
-    public void setPercentage(Double percentage) {
+    public void setPercentage(BigDecimal percentage) {
         this.percentage = percentage;
     }
 
-    public Double getHighestPrice() {
+    public BigDecimal getHighestPrice() {
         return highestPrice;
     }
 
-    public void setHighestPrice(Double highestPrice) {
+    public void setHighestPrice(BigDecimal highestPrice) {
         this.highestPrice = highestPrice;
     }
 
@@ -233,10 +268,44 @@ public class ComparisonRequisitionDTO {
         this.unit = unit;
     }
 
+    public int getRequestQty() {
+        return requestQty;
+    }
+
+    public void setRequestQty(int requestQty) {
+        this.requestQty = requestQty;
+    }
+
+    public BigDecimal getOrderQty() {
+        return orderQty;
+    }
+
+    public void setOrderQty(BigDecimal orderQty) {
+        this.orderQty = orderQty;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public String getGoodType() {
+        return goodType;
+    }
+
+    public void setGoodType(String goodType) {
+        this.goodType = goodType;
+    }
+
     @Schema(description = "Supplier details")
     public static class SupplierDTO {
         @Schema(description = "Price", example = "100.0")
-        private Double price;
+        @NotNull(message = "Price is required")
+        @DecimalMin(value = "0.0", inclusive = true, message = "Price must be non-negative")
+        private BigDecimal price;
 
         @Schema(description = "Supplier name", example = "Supplier ABC")
         private String supplierName;
@@ -247,18 +316,18 @@ public class ComparisonRequisitionDTO {
         @Schema(description = "Unit", example = "pcs")
         private String unit;
 
-        public SupplierDTO(Double price, String supplierName, Integer isSelected, String unit) {
+        public SupplierDTO(BigDecimal price, String supplierName, Integer isSelected, String unit) {
             this.price = price;
             this.supplierName = supplierName;
             this.isSelected = isSelected;
             this.unit = unit;
         }
 
-        public Double getPrice() {
+        public BigDecimal getPrice() {
             return price;
         }
 
-        public void setPrice(Double price) {
+        public void setPrice(BigDecimal price) {
             this.price = price;
         }
 

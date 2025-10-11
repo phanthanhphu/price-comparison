@@ -43,6 +43,17 @@ public class GroupSummaryRequisitionController {
             if (groupSummaryRequisition.getStockDate() == null) {
                 groupSummaryRequisition.setStockDate(LocalDateTime.now());
             }
+            // Validate currency
+            if (groupSummaryRequisition.getCurrency() == null || groupSummaryRequisition.getCurrency().trim().isEmpty()) {
+                groupSummaryRequisition.setCurrency("VND"); // Default to VND if not provided
+            } else {
+                String currency = groupSummaryRequisition.getCurrency().toUpperCase();
+                if (!List.of("VND", "EURO", "USD").contains(currency)) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("message", "Invalid currency. Must be VND, EURO, or USD."));
+                }
+                groupSummaryRequisition.setCurrency(currency);
+            }
             GroupSummaryRequisition savedGroup = groupSummaryRequisitionService.createGroupSummaryRequisition(groupSummaryRequisition);
             return ResponseEntity.status(HttpStatus.CREATED).body(savedGroup);
         } catch (IllegalArgumentException e) {
@@ -70,6 +81,17 @@ public class GroupSummaryRequisitionController {
             }
             if (groupSummaryRequisition.getStockDate() == null) {
                 groupSummaryRequisition.setStockDate(existingGroup.get().getStockDate());
+            }
+            // Validate currency
+            if (groupSummaryRequisition.getCurrency() == null || groupSummaryRequisition.getCurrency().trim().isEmpty()) {
+                groupSummaryRequisition.setCurrency(existingGroup.get().getCurrency()); // Retain existing currency
+            } else {
+                String currency = groupSummaryRequisition.getCurrency().toUpperCase();
+                if (!List.of("VND", "EURO", "USD").contains(currency)) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("message", "Invalid currency. Must be VND, EURO, or USD."));
+                }
+                groupSummaryRequisition.setCurrency(currency);
             }
             Optional<GroupSummaryRequisition> updatedGroup = groupSummaryRequisitionService.updateGroupSummaryRequisition(id, groupSummaryRequisition);
             return updatedGroup.map(group -> ResponseEntity.ok(group))
@@ -182,12 +204,50 @@ public class GroupSummaryRequisitionController {
         }
     }
 
+//    @GetMapping("/filter")
+//    public ResponseEntity<?> filterGroupSummaryRequisitions(
+//            @RequestParam(required = false) String name,
+//            @RequestParam(required = false) String status,
+//            @RequestParam(required = false) String createdBy,
+//            @RequestParam(required = false) String type,
+//            @RequestParam(required = false) String currency,
+//            @RequestParam(required = false)
+//            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+//            @RequestParam(required = false)
+//            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+//            @RequestParam(required = false)
+//            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate stockStartDate,
+//            @RequestParam(required = false)
+//            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate stockEndDate,
+//            @RequestParam(defaultValue = "0") int page,
+//            @RequestParam(defaultValue = "10") int size) {
+//        try {
+//            // Validate currency if provided
+//            if (currency != null && !currency.trim().isEmpty()) {
+//                String upperCurrency = currency.toUpperCase();
+//                if (!List.of("VND", "EURO", "USD").contains(upperCurrency)) {
+//                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+//                            .body(Map.of("message", "Invalid currency. Must be VND, EURO, or USD."));
+//                }
+//                currency = upperCurrency;
+//            }
+//            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdDate")));
+//            Page<GroupSummaryRequisition> result = groupSummaryRequisitionService
+//                    .filterGroupSummaryRequisitions(name, status, createdBy, type, currency, startDate, endDate, stockStartDate, stockEndDate, pageable);
+//            return ResponseEntity.ok(result);
+//        } catch (Exception e) {
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+//                    .body(Map.of("message", "Failed to filter group summary requisitions: " + e.getMessage()));
+//        }
+//    }
+
     @GetMapping("/filter")
     public ResponseEntity<?> filterGroupSummaryRequisitions(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String createdBy,
             @RequestParam(required = false) String type,
+            @RequestParam(required = false) String currency,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false)
@@ -199,9 +259,36 @@ public class GroupSummaryRequisitionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         try {
+            // Validate currency if provided
+            if (currency != null && !currency.trim().isEmpty()) {
+                String upperCurrency = currency.toUpperCase();
+                if (!List.of("VND", "EURO", "USD").contains(upperCurrency)) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("message", "Invalid currency. Must be VND, EURO, or USD."));
+                }
+                currency = upperCurrency;
+            }
             Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdDate")));
             Page<GroupSummaryRequisition> result = groupSummaryRequisitionService
-                    .filterGroupSummaryRequisitions(name, status, createdBy, type, startDate, endDate, stockStartDate, stockEndDate, pageable);
+                    .filterGroupSummaryRequisitions(name, status, createdBy, type, currency, startDate, endDate, stockStartDate, stockEndDate, pageable);
+
+            // Set isUsed for each GroupSummaryRequisition, stopping after first match
+            result.getContent().forEach(group -> {
+                String groupId = group.getId();
+                boolean isUsed = false;
+                if (groupId != null) {
+                    // Check SummaryRequisitionRepository first
+                    if (summaryRequisitionRepository.existsByGroupId(groupId)) {
+                        isUsed = true; // Stop checking after match
+                    }
+                    // Only check RequisitionMonthlyRepository if no match found
+                    else if (requisitionMonthlyRepository.existsByGroupId(groupId)) {
+                        isUsed = true; // Stop checking after match
+                    }
+                }
+                group.setUsed(isUsed); // Set to false if no match or groupId is null
+            });
+
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

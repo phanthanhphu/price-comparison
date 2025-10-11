@@ -1,19 +1,37 @@
 package org.bsl.pricecomparison.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.validation.constraints.Pattern;
+
+import java.math.BigDecimal;
 import java.util.List;
 
+/**
+ * Data Transfer Object for SupplierProduct entity.
+ * Represents a supplier product with validated fields for frontend consumption.
+ */
 public class SupplierProductDTO {
     private String id;
     private String supplierCode;
     private String supplierName;
     private String sapCode;
-    private String itemNo; // Renamed from productFullName
-    private String itemDescription; // Renamed from productShortName
-    private String fullDescription; // Added
-    private String materialGroupFullDescription; // Added
-    private String currency; // Added
+    private String itemNo;
+    private String itemDescription;
+    private String fullDescription;
+    private String materialGroupFullDescription;
+
+    @Pattern(regexp = "^(VND|USD|EURO)$", message = "Currency must be VND, USD, or EURO")
+    private String currency;
+
+    @Pattern(regexp = "^(Common|Special)$", message = "Good Type must be Common or Special")
+    private String goodType;
+
     private String size;
-    private double price;
+
+    /** Price as BigDecimal, serialized as string with currency-specific formatting (e.g., "1000000" for VND, "22.00" for USD/EURO) */
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    private BigDecimal price;
+
     private String unit;
     private List<String> imageUrls;
     private String productType1Id;
@@ -93,6 +111,14 @@ public class SupplierProductDTO {
         this.currency = currency;
     }
 
+    public String getGoodType() {
+        return goodType;
+    }
+
+    public void setGoodType(String goodType) {
+        this.goodType = goodType;
+    }
+
     public String getSize() {
         return size;
     }
@@ -101,11 +127,11 @@ public class SupplierProductDTO {
         this.size = size;
     }
 
-    public double getPrice() {
+    public BigDecimal getPrice() {
         return price;
     }
 
-    public void setPrice(double price) {
+    public void setPrice(BigDecimal price) {
         this.price = price;
     }
 

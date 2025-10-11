@@ -1,32 +1,17 @@
-package org.bsl.pricecomparison.model;
+package org.bsl.pricecomparison.request;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDateTime;
-
-@Document(collection = "users")
-public class User {
-    @Id
-    private String id;
+public class UserRequest {
     private String username;
     private String email;
     private String password;
     private String address;
     private String phone;
     private String role;
-    private LocalDateTime createdAt;
-    private String profileImageUrl; // Single image URL
+    private MultipartFile profileImage;
 
     // Getters and setters
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
-
     public String getUsername() {
         return username;
     }
@@ -75,19 +60,11 @@ public class User {
         this.role = role;
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+    public MultipartFile getProfileImage() {
+        return profileImage;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public String getProfileImageUrl() {
-        return profileImageUrl;
-    }
-
-    public void setProfileImageUrl(String profileImageUrl) {
-        this.profileImageUrl = profileImageUrl;
+    public void setProfileImage(MultipartFile profileImage) {
+        this.profileImage = profileImage;
     }
 }

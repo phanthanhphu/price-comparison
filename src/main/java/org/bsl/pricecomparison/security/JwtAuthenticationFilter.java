@@ -27,26 +27,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        // Chỉ log header, không xử lý token
+        System.out.println("JwtAuthenticationFilter - Received Authorization header: " + request.getHeader("Authorization"));
 
-        String token = getTokenFromRequest(request);
-
-        if (token != null && jwtUtil.validateToken(token)) {
-            String email = jwtUtil.getEmailFromToken(token);
-            String role = jwtUtil.getRoleFromToken(token);
-
-            List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority(role));
-
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(email, null, authorities);
-            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-        }
-
+        // Cho phép request đi qua mà không cần xác thực
         filterChain.doFilter(request, response);
     }
 
     private String getTokenFromRequest(HttpServletRequest request) {
+        // Giữ phương thức nhưng không sử dụng
         String bearer = request.getHeader("Authorization");
         if (StringUtils.hasText(bearer) && bearer.startsWith("Bearer ")) {
             return bearer.substring(7);

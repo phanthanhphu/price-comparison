@@ -2,7 +2,10 @@ package org.bsl.pricecomparison.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Schema(description = "Request to create a new summary requisition")
@@ -16,18 +19,22 @@ public class CreateSummaryRequisitionRequest {
     @Schema(description = "Old SAP code", example = "OLD123")
     private String oldSapCode;
 
-    @Schema(description = "New SAP code", example = "NEW456")
-    private String newSapCode;
+    @Schema(description = "Hana SAP code", example = "NEW456")
+    private String hanaSapCode;
 
     @Schema(description = "Department request quantities (JSON string)",
             example = "{\"quantities\": {\"dept1\": {\"qty\": 10.0, \"buy\": 8.0}}}")
     private String departmentRequestQty; // Must be String, not DepartmentRequestQtyDTO
 
-    @Schema(description = "Stock quantity", example = "100")
-    private Integer stock;
+    @Schema(description = "Stock quantity", example = "100.0")
+    @NotNull(message = "Stock quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Stock quantity must be non-negative")
+    private BigDecimal stock;
 
-    @Schema(description = "Purchasing suggestion", example = "50")
-    private Integer purchasingSuggest;
+    @Schema(description = "Order quantity", example = "50.0")
+    @NotNull(message = "Order quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Order quantity must be non-negative")
+    private BigDecimal orderQty;
 
     @Schema(description = "Reason for requisition", example = "Urgent restock")
     private String reason;
@@ -65,19 +72,18 @@ public class CreateSummaryRequisitionRequest {
         this.departmentRequestQty = departmentRequestQty;
     }
 
-    // Other getters and setters (omitted for brevity, ensure they match your fields)
     public String getEnglishName() { return englishName; }
     public void setEnglishName(String englishName) { this.englishName = englishName; }
     public String getVietnameseName() { return vietnameseName; }
     public void setVietnameseName(String vietnameseName) { this.vietnameseName = vietnameseName; }
     public String getOldSapCode() { return oldSapCode; }
     public void setOldSapCode(String oldSapCode) { this.oldSapCode = oldSapCode; }
-    public String getNewSapCode() { return newSapCode; }
-    public void setNewSapCode(String newSapCode) { this.newSapCode = newSapCode; }
-    public Integer getStock() { return stock; }
-    public void setStock(Integer stock) { this.stock = stock; }
-    public Integer getPurchasingSuggest() { return purchasingSuggest; }
-    public void setPurchasingSuggest(Integer purchasingSuggest) { this.purchasingSuggest = purchasingSuggest; }
+    public String getHanaSapCode() { return hanaSapCode; }
+    public void setHanaSapCode(String hanaSapCode) { this.hanaSapCode = hanaSapCode; }
+    public BigDecimal getStock() { return stock; }
+    public void setStock(BigDecimal stock) { this.stock = stock; }
+    public BigDecimal getOrderQty() { return orderQty; }
+    public void setOrderQty(BigDecimal orderQty) { this.orderQty = orderQty; }
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
     public String getRemark() { return remark; }

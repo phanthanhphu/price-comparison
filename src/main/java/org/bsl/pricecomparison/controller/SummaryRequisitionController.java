@@ -12,10 +12,15 @@ import org.bsl.pricecomparison.dto.*;
 import org.bsl.pricecomparison.model.*;
 import org.bsl.pricecomparison.repository.*;
 import org.bsl.pricecomparison.request.*;
+import org.bsl.pricecomparison.service.GroupSummaryRequisitionService;
 import org.bsl.pricecomparison.service.ProductType1Service;
 import org.bsl.pricecomparison.service.ProductType2Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.apache.poi.xssf.usermodel.XSSFDrawing;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +29,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -70,6 +77,9 @@ public class SummaryRequisitionController {
 
     @Autowired
     private ProductType2Repository productType2Repository;
+
+    @Autowired
+    private GroupSummaryRequisitionService groupSummaryRequisitionService;
 
     @GetMapping
     public List<SummaryRequisition> getAll() {
@@ -208,10 +218,10 @@ public class SummaryRequisitionController {
             summary.setEnglishName(request.getEnglishName());
             summary.setVietnameseName(request.getVietnameseName().trim());
             summary.setOldSapCode(request.getOldSapCode().trim());
-            summary.setNewSapCode(request.getNewSapCode() != null ? request.getNewSapCode().trim() : null);
+            summary.setHanaSapCode(request.getHanaSapCode() != null ? request.getHanaSapCode().trim() : null);
             summary.setDepartmentRequestQty(deptQty);
-            summary.setStock(request.getStock() != null ? request.getStock() : 0);
-            summary.setPurchasingSuggest(request.getPurchasingSuggest() != null ? request.getPurchasingSuggest() : 0);
+            summary.setStock(request.getStock() != null ? request.getStock() : BigDecimal.ZERO);
+            summary.setOrderQty(request.getOrderQty() != null ? request.getOrderQty() : BigDecimal.ZERO);
             summary.setReason(request.getReason());
             summary.setRemark(request.getRemark());
             summary.setRemarkComparison(request.getRemarkComparison());
@@ -361,10 +371,10 @@ public class SummaryRequisitionController {
             current.setVietnameseName(request.getVietnameseName() != null ? request.getVietnameseName() : current.getVietnameseName());
             current.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : current.getFullDescription());
             current.setOldSapCode(request.getOldSapCode() != null ? request.getOldSapCode() : current.getOldSapCode());
-            current.setNewSapCode(request.getNewSapCode() != null ? request.getNewSapCode() : current.getNewSapCode());
+            current.setHanaSapCode(request.getHanaSapCode() != null ? request.getHanaSapCode() : current.getHanaSapCode());
             current.setDepartmentRequestQty(deptQty);
             current.setStock(request.getStock() != null ? request.getStock() : current.getStock());
-            current.setPurchasingSuggest(request.getPurchasingSuggest() != null ? request.getPurchasingSuggest() : current.getPurchasingSuggest());
+            current.setOrderQty(request.getOrderQty() != null ? request.getOrderQty() : current.getOrderQty());
             current.setReason(request.getReason() != null ? request.getReason() : current.getReason());
             current.setRemark(request.getRemark() != null ? request.getRemark() : current.getRemark());
             current.setRemarkComparison(request.getRemarkComparison() != null ? request.getRemarkComparison() : current.getRemarkComparison());
@@ -467,238 +477,331 @@ public class SummaryRequisitionController {
 
 
 
-    @GetMapping("/group/{groupId}")
-    @Operation(summary = "Get all requisitions by group ID", description = "Retrieve a list of summary requisitions for a given group ID, sorted by updatedAt or createdAt in descending order.")
-    public ResponseEntity<List<SummaryRequisitionDTO>> getAllByGroupId(@PathVariable String groupId) {
-        List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
-
-        List<SummaryRequisitionDTO> dtoList = requisitions.stream()
-                .sorted((req1, req2) -> {
-                    LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt() : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
-                    LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt() : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
-                    return date2.compareTo(date1); // Descending order (newest first)
-                })
-                .map(req -> {
-                    // Fetch SupplierProduct
-                    SupplierProduct supplierProduct = req.getSupplierId() != null ?
-                            supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
-
-                    // Calculate sumBuy
-                    int sumBuy = 0;
-                    if (req.getDepartmentRequestQty() != null) {
-                        for (Object value : req.getDepartmentRequestQty().values()) {
-                            if (value instanceof DepartmentQty deptQty) {
-                                sumBuy += deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
-                            } else if (value instanceof Double qty) {
-                                sumBuy += qty.intValue(); // Dữ liệu cũ: buy = qty
-                            }
-                        }
-                    }
-
-                    // Calculate totalPrice
-                    double totalPrice = (req.getSupplierId() != null && supplierProduct != null && supplierProduct.getPrice() != null) ?
-                            supplierProduct.getPrice() * sumBuy : 0;
-
-                    // Fetch Department Name for departmentRequestQty
-                    List<SummaryRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null ?
-                            req.getDepartmentRequestQty().entrySet().stream()
-                                    .map(entry -> {
-                                        String departmentId = entry.getKey();
-                                        Object value = entry.getValue();
-                                        Integer qty = 0;
-                                        Integer buy = 0;
-
-                                        if (value instanceof DepartmentQty deptQty) {
-                                            qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
-                                            buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
-                                        } else if (value instanceof Double doubleQty) {
-                                            qty = doubleQty.intValue();
-                                            buy = qty; // Mặc định buy bằng qty cho dữ liệu cũ
-                                        }
-
-                                        Department department = departmentRepository.findById(departmentId).orElse(null);
-                                        String departmentName = department != null ? department.getDepartmentName() : "Unknown";
-                                        return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, qty, buy);
-                                    })
-                                    .collect(Collectors.toList()) :
-                            new ArrayList<>();
-
-                    // Fetch ProductType1 and ProductType2 Names
-                    String productType1Name = null;
-                    if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
-                        ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
-                        productType1Name = productType1 != null ? productType1.getName() : "Unknown";
-                    }
-
-                    String productType2Name = null;
-                    if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
-                        ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
-                        productType2Name = productType2 != null ? productType2.getName() : "Unknown";
-                    }
-
-                    // Create DTO with all required fields
-                    return new SummaryRequisitionDTO(
-                            req,
-                            supplierProduct,
-                            departmentRequests,
-                            productType1Name,
-                            productType2Name,
-                            sumBuy,
-                            totalPrice
-                    );
-                })
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(dtoList);
-    }
-
+//    @GetMapping("/group/{groupId}")
+//    @Operation(summary = "Get all requisitions by group ID", description = "Retrieve a list of summary requisitions for a given group ID, sorted by updatedAt or createdAt in descending order.")
+//    public ResponseEntity<List<SummaryRequisitionDTO>> getAllByGroupId(@PathVariable String groupId) {
+//        List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
+//
+//        List<SummaryRequisitionDTO> dtoList = requisitions.stream()
+//                .sorted((req1, req2) -> {
+//                    LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt() : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
+//                    LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt() : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
+//                    return date2.compareTo(date1); // Descending order (newest first)
+//                })
+//                .map(req -> {
+//                    // Fetch SupplierProduct
+//                    SupplierProduct supplierProduct = req.getSupplierId() != null ?
+//                            supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
+//
+//                    // Calculate sumBuy
+//                    int sumBuy = 0;
+//                    if (req.getDepartmentRequestQty() != null) {
+//                        for (Object value : req.getDepartmentRequestQty().values()) {
+//                            if (value instanceof DepartmentQty deptQty) {
+//                                sumBuy += deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+//                            } else if (value instanceof Double qty) {
+//                                sumBuy += qty.intValue(); // Dữ liệu cũ: buy = qty
+//                            }
+//                        }
+//                    }
+//
+//                    // Calculate totalPrice
+//                    double totalPrice = (req.getSupplierId() != null && supplierProduct != null && supplierProduct.getPrice() != null) ?
+//                            supplierProduct.getPrice() * sumBuy : 0;
+//
+//                    // Fetch Department Name for departmentRequestQty
+//                    List<SummaryRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null ?
+//                            req.getDepartmentRequestQty().entrySet().stream()
+//                                    .map(entry -> {
+//                                        String departmentId = entry.getKey();
+//                                        Object value = entry.getValue();
+//                                        Integer qty = 0;
+//                                        Integer buy = 0;
+//
+//                                        if (value instanceof DepartmentQty deptQty) {
+//                                            qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
+//                                            buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+//                                        } else if (value instanceof Double doubleQty) {
+//                                            qty = doubleQty.intValue();
+//                                            buy = qty;
+//                                        }
+//
+//                                        Department department = departmentRepository.findById(departmentId).orElse(null);
+//                                        String departmentName = department != null ? department.getDepartmentName() : "Unknown";
+//                                        return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, qty, buy);
+//                                    })
+//                                    .collect(Collectors.toList()) :
+//                            new ArrayList<>();
+//
+//                    // Fetch ProductType1 and ProductType2 Names
+//                    String productType1Name = null;
+//                    if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
+//                        ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
+//                        productType1Name = productType1 != null ? productType1.getName() : "Unknown";
+//                    }
+//
+//                    String productType2Name = null;
+//                    if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
+//                        ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
+//                        productType2Name = productType2 != null ? productType2.getName() : "Unknown";
+//                    }
+//
+//                    // Create DTO with all required fields, including createdDate and updatedDate
+//                    return new SummaryRequisitionDTO(
+//                            req,
+//                            supplierProduct,
+//                            departmentRequests,
+//                            productType1Name,
+//                            productType2Name,
+//                            sumBuy,
+//                            totalPrice,
+//                            req.getCreatedAt() != null ? req.getCreatedAt().toString() : null,
+//                            req.getUpdatedAt() != null ? req.getUpdatedAt().toString() : null
+//                    );
+//                })
+//                .collect(Collectors.toList());
+//
+//        return ResponseEntity.ok(dtoList);
+//    }
 
     @GetMapping("/search")
-    @Operation(summary = "Search requisitions by group ID and optional filters", description = "Retrieve a list of summary requisitions for a given group ID with optional filters for product types, names, SAP codes, unit, and department name, sorted by updatedAt or createdAt in descending order.")
-    public ResponseEntity<List<SummaryRequisitionDTO>> searchRequisitions(
+    @Operation(
+            summary = "Search requisitions by group ID and optional filters",
+            description = "Retrieve a paginated or full list of summary requisitions for a given group ID with optional filters for product types, names, SAP codes, supplier, and department, sorted by updatedAt or createdAt in descending order."
+    )
+    public ResponseEntity<Page<SummaryRequisitionDTO>> searchComparison(
             @RequestParam String groupId,
             @RequestParam(required = false) String productType1Name,
             @RequestParam(required = false) String productType2Name,
             @RequestParam(required = false) String englishName,
             @RequestParam(required = false) String vietnameseName,
             @RequestParam(required = false) String oldSapCode,
-            @RequestParam(required = false) String newSapCode,
-            @RequestParam(required = false) String unit,
-            @RequestParam(required = false) String departmentName) {
+            @RequestParam(required = false) String hanaSapCode,
+            @RequestParam(required = false) String supplierName,
+            @RequestParam(required = false) String departmentName,
+            @RequestParam(defaultValue = "false") boolean hasFilter,
+            @RequestParam(defaultValue = "false") boolean disablePagination,
+            Pageable pageable) {
 
-        List<SummaryRequisitionDTO> dtoList = requisitionRepository.findByGroupId(groupId).stream()
-                .filter(req -> {
-                    boolean matches = true;
+        List<SummaryRequisitionDTO> dtoList;
 
-                    // Fetch ProductType1 and ProductType2 Names for filtering
-                    String reqProductType1Name = req.getProductType1Id() != null ?
-                            (productType1Service.getById(req.getProductType1Id()) != null ?
-                                    productType1Service.getById(req.getProductType1Id()).getName() : "Unknown") : "Unknown";
-                    String reqProductType2Name = req.getProductType2Id() != null ?
-                            (productType2Service.getById(req.getProductType2Id()) != null ?
-                                    productType2Service.getById(req.getProductType2Id()).getName() : "Unknown") : "Unknown";
+        if (disablePagination) {
+            // No pagination: fetch all records and apply filters
+            dtoList = requisitionRepository.findByGroupId(groupId).stream()
+                    .filter(req -> {
+                        boolean matches = true;
 
-                    // Fetch Department Names for filtering
-                    List<String> deptNames = req.getDepartmentRequestQty().entrySet().stream()
-                            .map(entry -> {
-                                String deptId = entry.getKey();
-                                Department dept = departmentRepository.findById(deptId).orElse(null);
-                                return dept != null ? dept.getDepartmentName() : "Unknown";
-                            })
-                            .collect(Collectors.toList());
+                        // Fetch ProductType1 and ProductType2 names
+                        String reqProductType1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()
+                                ? (productType1Service.getById(req.getProductType1Id()) != null
+                                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
+                                : "Unknown";
+                        String reqProductType2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()
+                                ? (productType2Service.getById(req.getProductType2Id()) != null
+                                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
+                                : "Unknown";
 
-                    // Apply filters
-                    if (productType1Name != null && !productType1Name.isEmpty()) {
-                        matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
-                    }
-                    if (productType2Name != null && !productType2Name.isEmpty()) {
-                        matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
-                    }
-                    if (englishName != null && !englishName.isEmpty()) {
-                        matches = matches && req.getEnglishName() != null && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
-                    }
-                    if (vietnameseName != null && !vietnameseName.isEmpty()) {
-                        matches = matches && req.getVietnameseName() != null && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
-                    }
-                    if (oldSapCode != null && !oldSapCode.isEmpty()) {
-                        matches = matches && req.getOldSapCode() != null && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
-                    }
-                    if (newSapCode != null && !newSapCode.isEmpty()) {
-                        matches = matches && req.getNewSapCode() != null && req.getNewSapCode().toLowerCase().contains(newSapCode.toLowerCase());
-                    }
-                    if (unit != null && !unit.isEmpty()) {
-                        SupplierProduct supplierProduct = req.getSupplierId() != null ? supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
-                        String reqUnit = supplierProduct != null ? supplierProduct.getUnit() : "";
-                        matches = matches && reqUnit.toLowerCase().contains(unit.toLowerCase());
-                    }
-                    if (departmentName != null && !departmentName.isEmpty()) {
-                        matches = matches && deptNames.stream().anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
-                    }
+                        // Fetch department names
+                        List<String> deptNames = req.getDepartmentRequestQty().entrySet().stream()
+                                .map(entry -> departmentRepository.findById(entry.getKey())
+                                        .map(Department::getDepartmentName)
+                                        .orElse("Unknown"))
+                                .collect(Collectors.toList());
 
-                    return matches;
-                })
-                .sorted((req1, req2) -> {
-                    LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt() : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
-                    LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt() : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
-                    return date2.compareTo(date1); // Descending order (newest first)
-                })
-                .map(req -> convertToDto(req))
-                .collect(Collectors.toList());
+                        // Apply filters only if hasFilter is true
+                        if (hasFilter) {
+                            if (productType1Name != null && !productType1Name.isEmpty()) {
+                                matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
+                            }
+                            if (productType2Name != null && !productType2Name.isEmpty()) {
+                                matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
+                            }
+                            if (englishName != null && !englishName.isEmpty()) {
+                                matches = matches && req.getEnglishName() != null
+                                        && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
+                            }
+                            if (vietnameseName != null && !vietnameseName.isEmpty()) {
+                                matches = matches && req.getVietnameseName() != null
+                                        && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
+                            }
+                            if (oldSapCode != null && !oldSapCode.isEmpty()) {
+                                matches = matches && req.getOldSapCode() != null
+                                        && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
+                            }
+                            if (hanaSapCode != null && !hanaSapCode.isEmpty()) {
+                                matches = matches && req.getHanaSapCode() != null
+                                        && req.getHanaSapCode().toLowerCase().contains(hanaSapCode.toLowerCase());
+                            }
+                            if (supplierName != null && !supplierName.isEmpty()) {
+                                SupplierProduct supplierProduct = req.getSupplierId() != null
+                                        ? supplierProductRepository.findById(req.getSupplierId()).orElse(null)
+                                        : null;
+                                String reqSupplierName = supplierProduct != null ? supplierProduct.getSupplierName() : "";
+                                matches = matches && reqSupplierName.toLowerCase().contains(supplierName.toLowerCase());
+                            }
+                            if (departmentName != null && !departmentName.isEmpty()) {
+                                matches = matches && deptNames.stream()
+                                        .anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
+                            }
+                        }
 
-        return ResponseEntity.ok(dtoList);
+                        return matches;
+                    })
+                    .sorted((req1, req2) -> {
+                        LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt()
+                                : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
+                        LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt()
+                                : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
+                        return date2.compareTo(date1); // Sort newest first
+                    })
+                    .map(this::convertToDto)
+                    .collect(Collectors.toList());
+
+            // Return as a Page with total count
+            return ResponseEntity.ok(new PageImpl<>(dtoList, PageRequest.of(0, dtoList.size()), dtoList.size()));
+        } else {
+            // Apply pagination
+            Page<SummaryRequisition> requisitionPage = requisitionRepository.findByGroupId(groupId, pageable);
+
+            dtoList = requisitionPage.getContent().stream()
+                    .filter(req -> {
+                        boolean matches = true;
+
+                        // Fetch ProductType1 and ProductType2 names
+                        String reqProductType1Name = req.getProductType1Id() != null
+                                ? (productType1Service.getById(req.getProductType1Id()) != null
+                                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
+                                : "Unknown";
+                        String reqProductType2Name = req.getProductType2Id() != null
+                                ? (productType2Service.getById(req.getProductType2Id()) != null
+                                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
+                                : "Unknown";
+
+                        // Fetch department names
+                        List<String> deptNames = req.getDepartmentRequestQty().entrySet().stream()
+                                .map(entry -> departmentRepository.findById(entry.getKey())
+                                        .map(Department::getDepartmentName)
+                                        .orElse("Unknown"))
+                                .collect(Collectors.toList());
+
+                        // Apply filters only if hasFilter is true
+                        if (hasFilter) {
+                            if (productType1Name != null && !productType1Name.isEmpty()) {
+                                matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
+                            }
+                            if (productType2Name != null && !productType2Name.isEmpty()) {
+                                matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
+                            }
+                            if (englishName != null && !englishName.isEmpty()) {
+                                matches = matches && req.getEnglishName() != null
+                                        && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
+                            }
+                            if (vietnameseName != null && !vietnameseName.isEmpty()) {
+                                matches = matches && req.getVietnameseName() != null
+                                        && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
+                            }
+                            if (oldSapCode != null && !oldSapCode.isEmpty()) {
+                                matches = matches && req.getOldSapCode() != null
+                                        && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
+                            }
+                            if (hanaSapCode != null && !hanaSapCode.isEmpty()) {
+                                matches = matches && req.getHanaSapCode() != null
+                                        && req.getHanaSapCode().toLowerCase().contains(hanaSapCode.toLowerCase());
+                            }
+                            if (supplierName != null && !supplierName.isEmpty()) {
+                                SupplierProduct supplierProduct = req.getSupplierId() != null
+                                        ? supplierProductRepository.findById(req.getSupplierId()).orElse(null)
+                                        : null;
+                                String reqSupplierName = supplierProduct != null ? supplierProduct.getSupplierName() : "";
+                                matches = matches && reqSupplierName.toLowerCase().contains(supplierName.toLowerCase());
+                            }
+                            if (departmentName != null && !departmentName.isEmpty()) {
+                                matches = matches && deptNames.stream()
+                                        .anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
+                            }
+                        }
+
+                        return matches;
+                    })
+                    .map(this::convertToDto)
+                    .collect(Collectors.toList());
+
+            // Return paginated result
+            return ResponseEntity.ok(new PageImpl<>(dtoList, pageable, requisitionPage.getTotalElements()));
+        }
     }
 
     private SummaryRequisitionDTO convertToDto(SummaryRequisition req) {
         // Fetch SupplierProduct
-        SupplierProduct supplierProduct = req.getSupplierId() != null ?
-                supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
+        SupplierProduct supplierProduct = req.getSupplierId() != null
+                ? supplierProductRepository.findById(req.getSupplierId()).orElse(null)
+                : null;
 
-        // Calculate sumBuy
+        // Calculate sumBuy (for DTO, not used in totalPrice)
         int sumBuy = 0;
         if (req.getDepartmentRequestQty() != null) {
             for (Object value : req.getDepartmentRequestQty().values()) {
                 if (value instanceof DepartmentQty deptQty) {
                     sumBuy += deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
                 } else if (value instanceof Double qty) {
-                    sumBuy += qty.intValue(); // Dữ liệu cũ: buy = qty
+                    sumBuy += qty.intValue(); // Old data: buy = qty
                 }
             }
         }
 
-        // Calculate totalPrice
-        double totalPrice = (req.getSupplierId() != null && supplierProduct != null && supplierProduct.getPrice() != null) ?
-                supplierProduct.getPrice() * sumBuy : 0;
+        // Calculate totalPrice (orderQty * price)
+        BigDecimal totalPrice = (req.getSupplierId() != null && supplierProduct != null
+                && supplierProduct.getPrice() != null && req.getOrderQty() != null
+                && req.getOrderQty().compareTo(BigDecimal.ZERO) != 0)
+                ? supplierProduct.getPrice().multiply(req.getOrderQty())
+                : BigDecimal.ZERO;
 
         // Fetch DepartmentRequestQty
-        List<SummaryRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null ?
-                req.getDepartmentRequestQty().entrySet().stream()
-                        .map(entry -> {
-                            String departmentId = entry.getKey();
-                            Object value = entry.getValue();
-                            Integer qty = 0;
-                            Integer buy = 0;
+        List<SummaryRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null
+                ? req.getDepartmentRequestQty().entrySet().stream()
+                .map(entry -> {
+                    String departmentId = entry.getKey();
+                    Object value = entry.getValue();
+                    Integer qty = 0;
+                    Integer buy = 0;
 
-                            if (value instanceof DepartmentQty deptQty) {
-                                qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
-                                buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
-                            } else if (value instanceof Double doubleQty) {
-                                qty = doubleQty.intValue();
-                                buy = qty; // Mặc định buy bằng qty cho dữ liệu cũ
-                            }
+                    if (value instanceof DepartmentQty deptQty) {
+                        qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
+                        buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                    } else if (value instanceof Double doubleQty) {
+                        qty = doubleQty.intValue();
+                        buy = qty; // Old data: buy = qty
+                    }
 
-                            Department department = departmentRepository.findById(departmentId).orElse(null);
-                            String departmentName = department != null ? department.getDepartmentName() : "Unknown";
-                            return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, qty, buy);
-                        })
-                        .collect(Collectors.toList()) :
-                new ArrayList<>();
-
-        // Fetch ProductType1 and ProductType2 Names
-        String productType1Name = null;
-        if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
-            ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
-            productType1Name = productType1 != null ? productType1.getName() : "Unknown";
-        }
-
-        String productType2Name = null;
-        if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
-            ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
-            productType2Name = productType2 != null ? productType2.getName() : "Unknown";
-        }
-
-        // Create DTO with all required fields
-        return new SummaryRequisitionDTO(req, supplierProduct, departmentRequests, productType1Name, productType2Name, sumBuy, totalPrice);
-    }
-
-    private List<SummaryRequisitionDTO> convertToDtoList(List<SummaryRequisition> requisitions) {
-        return requisitions.stream()
-                .sorted((req1, req2) -> {
-                    LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt() : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
-                    LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt() : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
-                    return date2.compareTo(date1); // Descending order (newest first)
+                    Department department = departmentRepository.findById(departmentId).orElse(null);
+                    String departmentName = department != null ? department.getDepartmentName() : "Unknown";
+                    return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, qty, buy);
                 })
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList())
+                : new ArrayList<>();
+
+        // Fetch ProductType1 and ProductType2 names
+        String productType1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()
+                ? (productType1Service.getById(req.getProductType1Id()) != null
+                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
+                : "Unknown";
+        String productType2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()
+                ? (productType2Service.getById(req.getProductType2Id()) != null
+                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
+                : "Unknown";
+
+        // Create DTO
+        return new SummaryRequisitionDTO(
+                req,
+                supplierProduct,
+                departmentRequests,
+                productType1Name,
+                productType2Name,
+                sumBuy,
+                totalPrice,
+                req.getCreatedAt() != null ? req.getCreatedAt().toString() : null,
+                req.getUpdatedAt() != null ? req.getUpdatedAt().toString() : null
+        );
     }
 
     @PostMapping(value = "/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -789,7 +892,7 @@ public class SummaryRequisitionController {
                 String sapCode = sapCell != null ? getCellValue(sapCell) : null;
                 if (sapCode != null) {
                     if ("New".equalsIgnoreCase(sapCode.trim())) {
-                        req.setNewSapCode(sapCode);
+                        req.setHanaSapCode(sapCode);
                     } else {
                         req.setOldSapCode(sapCode);
                     }
@@ -967,6 +1070,8 @@ public class SummaryRequisitionController {
     }
 
     @GetMapping("/search/comparison")
+    @Operation(summary = "Search requisitions for comparison by group ID and optional filters",
+            description = "Retrieve a paginated or full list of summary requisitions for a given group ID with optional filters for product types, names, Old SAP code, Hana SAP code, supplier name, and department name, sorted by updatedAt or createdAt in descending order. Includes sumBuy (total buy quantity across departments) and financial totals for each requisition.")
     public ResponseEntity<ComparisonRequisitionResponseDTO> searchRequisitions(
             @RequestParam String groupId,
             @RequestParam(required = false) String productType1Name,
@@ -974,177 +1079,303 @@ public class SummaryRequisitionController {
             @RequestParam(required = false) String englishName,
             @RequestParam(required = false) String vietnameseName,
             @RequestParam(required = false) String oldSapCode,
-            @RequestParam(required = false) String newSapCode,
-            @RequestParam(required = false) String unit,
+            @RequestParam(required = false) String hanaSapCode,
+            @RequestParam(required = false) String supplierName,
             @RequestParam(required = false) String departmentName,
-            @RequestParam(defaultValue = "false") Boolean filter) {
+            @RequestParam(defaultValue = "false") boolean hasFilter,
+            @RequestParam(defaultValue = "false") boolean disablePagination,
+            Pageable pageable) {
 
-        List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
+        // Fetch GroupSummaryRequisition once using groupId
+        Optional<GroupSummaryRequisition> group = groupSummaryRequisitionService.getGroupSummaryRequisitionById(groupId);
+        String currency = group.isPresent() && group.get().getCurrency() != null ? group.get().getCurrency() : "";
 
-        List<SummaryRequisition> filteredRequisitions = requisitions;
-        if (Boolean.TRUE.equals(filter)) {
-            filteredRequisitions = requisitions.stream()
+        List<ComparisonRequisitionDTO> dtoList;
+        long totalElements;
+
+        if (disablePagination) {
+            // No pagination: fetch all records and apply filters
+            List<SummaryRequisition> requisitions = requisitionRepository.findByGroupId(groupId);
+            totalElements = requisitions.size();
+
+            dtoList = requisitions.stream()
                     .filter(req -> {
                         boolean matches = true;
 
-                        String reqProductType1Name = "";
-                        if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
-                            reqProductType1Name = productType1Repository.findById(req.getProductType1Id())
-                                    .map(ProductType1::getName)
-                                    .orElse("");
-                        }
+                        String reqProductType1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()
+                                ? (productType1Service.getById(req.getProductType1Id()) != null
+                                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
+                                : "Unknown";
+                        String reqProductType2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()
+                                ? (productType2Service.getById(req.getProductType2Id()) != null
+                                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
+                                : "Unknown";
 
-                        String reqProductType2Name = "";
-                        if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
-                            reqProductType2Name = productType2Repository.findById(req.getProductType2Id())
-                                    .map(ProductType2::getName)
-                                    .orElse("");
-                        }
+                        List<String> deptNames = req.getDepartmentRequestQty() != null ?
+                                req.getDepartmentRequestQty().keySet().stream()
+                                        .filter(deptId -> deptId != null && !deptId.isEmpty())
+                                        .map(deptId -> departmentRepository.findById(deptId)
+                                                .map(Department::getDepartmentName)
+                                                .orElse("Unknown"))
+                                        .collect(Collectors.toList()) :
+                                Collections.emptyList();
 
-                        List<String> deptNames = req.getDepartmentRequestQty().keySet().stream()
-                                .filter(deptId -> deptId != null && !deptId.isEmpty())
-                                .map(deptId -> departmentRepository.findById(deptId)
-                                        .map(Department::getDepartmentName)
-                                        .orElse("Unknown"))
-                                .collect(Collectors.toList());
-
-                        if (productType1Name != null && !productType1Name.isEmpty()) {
-                            matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
-                        }
-                        if (productType2Name != null && !productType2Name.isEmpty()) {
-                            matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
-                        }
-                        if (englishName != null && !englishName.isEmpty()) {
-                            matches = matches && req.getEnglishName() != null && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
-                        }
-                        if (vietnameseName != null && !vietnameseName.isEmpty()) {
-                            matches = matches && req.getVietnameseName() != null && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
-                        }
-                        if (oldSapCode != null && !oldSapCode.isEmpty()) {
-                            matches = matches && req.getOldSapCode() != null && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
-                        }
-                        if (newSapCode != null && !newSapCode.isEmpty()) {
-                            matches = matches && req.getNewSapCode() != null && req.getNewSapCode().toLowerCase().contains(newSapCode.toLowerCase());
-                        }
-                        if (unit != null && !unit.isEmpty()) {
-                            String reqUnit = "";
-                            if (req.getSupplierId() != null && !req.getSupplierId().isEmpty()) {
-                                SupplierProduct supplierProduct = supplierProductRepository.findById(req.getSupplierId()).orElse(null);
-                                reqUnit = supplierProduct != null ? supplierProduct.getUnit() : "";
+                        if (hasFilter) {
+                            if (productType1Name != null && !productType1Name.isEmpty()) {
+                                matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
                             }
-                            matches = matches && reqUnit.toLowerCase().contains(unit.toLowerCase());
-                        }
-                        if (departmentName != null && !departmentName.isEmpty()) {
-                            matches = matches && deptNames.stream().anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
+                            if (productType2Name != null && !productType2Name.isEmpty()) {
+                                matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
+                            }
+                            if (englishName != null && !englishName.isEmpty()) {
+                                matches = matches && req.getEnglishName() != null && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
+                            }
+                            if (vietnameseName != null && !vietnameseName.isEmpty()) {
+                                matches = matches && req.getVietnameseName() != null && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
+                            }
+                            if (oldSapCode != null && !oldSapCode.isEmpty()) {
+                                matches = matches && req.getOldSapCode() != null && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
+                            }
+                            if (hanaSapCode != null && !hanaSapCode.isEmpty()) {
+                                matches = matches && req.getHanaSapCode() != null && req.getHanaSapCode().toLowerCase().contains(hanaSapCode.toLowerCase());
+                            }
+                            if (supplierName != null && !supplierName.isEmpty()) {
+                                SupplierProduct supplierProduct = req.getSupplierId() != null ? supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
+                                String reqSupplierName = supplierProduct != null ? supplierProduct.getSupplierName() : "";
+                                matches = matches && reqSupplierName.toLowerCase().contains(supplierName.toLowerCase());
+                            }
+                            if (departmentName != null && !departmentName.isEmpty()) {
+                                matches = matches && deptNames.stream().anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
+                            }
                         }
 
                         return matches;
                     })
+                    .sorted((req1, req2) -> {
+                        LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt() : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
+                        LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt() : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
+                        return date2.compareTo(date1);
+                    })
+                    .map(req -> convertToDtos(req, currency)) // Pass currency to convertToDtos
                     .collect(Collectors.toList());
+
+            BigDecimal totalAmtVnd = BigDecimal.ZERO;
+            BigDecimal totalAmtDifference = BigDecimal.ZERO;
+            BigDecimal totalDifferencePercentage = BigDecimal.ZERO;
+            for (ComparisonRequisitionDTO dto : dtoList) {
+                if (dto.getAmtVnd() != null) {
+                    totalAmtVnd = totalAmtVnd.add(dto.getAmtVnd());
+                }
+                if (dto.getAmtDifference() != null) {
+                    totalAmtDifference = totalAmtDifference.add(dto.getAmtDifference());
+                }
+                if (dto.getPercentage() != null) {
+                    totalDifferencePercentage = totalDifferencePercentage.add(dto.getPercentage());
+                }
+            }
+
+            // Create Page object for response
+            Page<ComparisonRequisitionDTO> page = new PageImpl<>(dtoList, PageRequest.of(0, Math.max(dtoList.size(), 1)), totalElements);
+
+            // Create response DTO
+            ComparisonRequisitionResponseDTO response = new ComparisonRequisitionResponseDTO(
+                    page,
+                    totalAmtVnd,
+                    totalAmtDifference,
+                    totalDifferencePercentage
+            );
+
+            return ResponseEntity.ok(response);
+        } else {
+            // Apply pagination
+            Page<SummaryRequisition> requisitionPage = requisitionRepository.findByGroupId(groupId, pageable);
+            totalElements = requisitionPage.getTotalElements();
+
+            dtoList = requisitionPage.getContent().stream()
+                    .filter(req -> {
+                        boolean matches = true;
+
+                        String reqProductType1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()
+                                ? (productType1Service.getById(req.getProductType1Id()) != null
+                                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
+                                : "Unknown";
+                        String reqProductType2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()
+                                ? (productType2Service.getById(req.getProductType2Id()) != null
+                                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
+                                : "Unknown";
+
+                        List<String> deptNames = req.getDepartmentRequestQty() != null ?
+                                req.getDepartmentRequestQty().keySet().stream()
+                                        .filter(deptId -> deptId != null && !deptId.isEmpty())
+                                        .map(deptId -> departmentRepository.findById(deptId)
+                                                .map(Department::getDepartmentName)
+                                                .orElse("Unknown"))
+                                        .collect(Collectors.toList()) :
+                                Collections.emptyList();
+
+                        if (hasFilter) {
+                            if (productType1Name != null && !productType1Name.isEmpty()) {
+                                matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
+                            }
+                            if (productType2Name != null && !productType2Name.isEmpty()) {
+                                matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
+                            }
+                            if (englishName != null && !englishName.isEmpty()) {
+                                matches = matches && req.getEnglishName() != null && req.getEnglishName().toLowerCase().contains(englishName.toLowerCase());
+                            }
+                            if (vietnameseName != null && !vietnameseName.isEmpty()) {
+                                matches = matches && req.getVietnameseName() != null && req.getVietnameseName().toLowerCase().contains(vietnameseName.toLowerCase());
+                            }
+                            if (oldSapCode != null && !oldSapCode.isEmpty()) {
+                                matches = matches && req.getOldSapCode() != null && req.getOldSapCode().toLowerCase().contains(oldSapCode.toLowerCase());
+                            }
+                            if (hanaSapCode != null && !hanaSapCode.isEmpty()) {
+                                matches = matches && req.getHanaSapCode() != null && req.getHanaSapCode().toLowerCase().contains(hanaSapCode.toLowerCase());
+                            }
+                            if (supplierName != null && !supplierName.isEmpty()) {
+                                SupplierProduct supplierProduct = req.getSupplierId() != null ? supplierProductRepository.findById(req.getSupplierId()).orElse(null) : null;
+                                String reqSupplierName = supplierProduct != null ? supplierProduct.getSupplierName() : "";
+                                matches = matches && reqSupplierName.toLowerCase().contains(supplierName.toLowerCase());
+                            }
+                            if (departmentName != null && !departmentName.isEmpty()) {
+                                matches = matches && deptNames.stream().anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
+                            }
+                        }
+
+                        return matches;
+                    })
+                    .map(req -> convertToDtos(req, currency)) // Pass currency to convertToDtos
+                    .collect(Collectors.toList());
+
+            // Calculate totals
+            BigDecimal totalAmt = BigDecimal.ZERO;
+            BigDecimal totalAmtDifference = BigDecimal.ZERO;
+            BigDecimal totalDifferencePercentage = BigDecimal.ZERO;
+            for (ComparisonRequisitionDTO dto : dtoList) {
+                if (dto.getAmtVnd() != null) {
+                    totalAmt = totalAmt.add(dto.getAmtVnd());
+                }
+                if (dto.getAmtDifference() != null) {
+                    totalAmtDifference = totalAmtDifference.add(dto.getAmtDifference());
+                }
+                if (dto.getPercentage() != null) {
+                    totalDifferencePercentage = totalDifferencePercentage.add(dto.getPercentage());
+                }
+            }
+
+            // Create Page object for response
+            Page<ComparisonRequisitionDTO> page = new PageImpl<>(dtoList, pageable, totalElements);
+
+            // Create response DTO
+            ComparisonRequisitionResponseDTO response = new ComparisonRequisitionResponseDTO(
+                    page,
+                    totalAmt,
+                    totalAmtDifference,
+                    totalDifferencePercentage
+            );
+
+            return ResponseEntity.ok(response);
         }
-
-        filteredRequisitions.sort((req1, req2) -> {
-            LocalDateTime date1 = req1.getUpdatedAt() != null ? req1.getUpdatedAt() : req1.getCreatedAt() != null ? req1.getCreatedAt() : LocalDateTime.MIN;
-            LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt() : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
-            return date2.compareTo(date1);
-        });
-
-        List<ComparisonRequisitionDTO> dtoList = new ArrayList<>();
-        double totalAmtVnd = 0.0;
-        double totalAmtDifference = 0.0;
-        double totalDifferencePercentage = 0.0;
-
-        for (SummaryRequisition req : filteredRequisitions) {
-            ComparisonRequisitionDTO dto = convertToDtos(req);
-            dtoList.add(dto);
-            if (dto.getAmtVnd() != null) {
-                totalAmtVnd += dto.getAmtVnd();
-            }
-            if (dto.getAmtDifference() != null) {
-                totalAmtDifference += dto.getAmtDifference();
-            }
-            if (dto.getPercentage() != null) {
-                totalDifferencePercentage += dto.getPercentage();
-            }
-        }
-
-        ComparisonRequisitionResponseDTO response = new ComparisonRequisitionResponseDTO(
-                dtoList,
-                totalAmtVnd,
-                totalAmtDifference,
-                totalDifferencePercentage
-        );
-
-        return ResponseEntity.ok(response);
     }
 
-    private ComparisonRequisitionDTO convertToDtos(SummaryRequisition req) {
-        List<ComparisonRequisitionDTO.SupplierDTO> supplierDTOs;
+    private ComparisonRequisitionDTO convertToDtos(SummaryRequisition req, String currency) {
+        List<ComparisonRequisitionDTO.SupplierDTO> suppliers;
 
         String sapCode = req.getOldSapCode() != null && !req.getOldSapCode().isEmpty() ? req.getOldSapCode() : null;
-
         String selectedSupplierId = req.getSupplierId();
 
         String unit = "";
-        if (sapCode != null && sapCode.length() >= 3) {
-            List<SupplierProduct> suppliers = supplierProductRepository.findBySapCode(sapCode);
+        String goodType = null; // Default goodType
 
-            supplierDTOs = suppliers.stream()
+        if (sapCode != null && sapCode.length() >= 3) {
+            // Use currency passed from searchRequisitions
+            List<SupplierProduct> supplierProducts = (currency != null && !currency.isEmpty()) ?
+                    supplierProductRepository.findBySapCodeAndCurrency(sapCode, currency) :
+                    supplierProductRepository.findBySapCode(sapCode);
+
+            suppliers = supplierProducts.stream()
                     .map(sp -> new ComparisonRequisitionDTO.SupplierDTO(
                             sp.getPrice(),
                             sp.getSupplierName(),
                             selectedSupplierId != null && !selectedSupplierId.isEmpty() && selectedSupplierId.equals(sp.getId()) ? 1 : 0,
                             sp.getUnit()))
-                    .sorted(Comparator.comparing(ComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(Double::compareTo)))
+                    .sorted(Comparator.comparing(ComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(BigDecimal::compareTo)))
                     .collect(Collectors.toList());
 
             if (selectedSupplierId != null && !selectedSupplierId.isEmpty()) {
-                unit = suppliers.stream()
+                SupplierProduct selectedSupplier = supplierProducts.stream()
                         .filter(sp -> sp.getId().equals(selectedSupplierId))
-                        .map(SupplierProduct::getUnit)
                         .findFirst()
-                        .orElse("");
+                        .orElse(null);
+                if (selectedSupplier != null) {
+                    unit = selectedSupplier.getUnit() != null ? selectedSupplier.getUnit() : unit;
+                    currency = selectedSupplier.getCurrency() != null ? selectedSupplier.getCurrency() : currency; // Update currency if available
+                    goodType = selectedSupplier.getGoodType() != null ? selectedSupplier.getGoodType() : null;
+                }
             }
         } else {
-            supplierDTOs = Collections.emptyList();
+            suppliers = Collections.emptyList();
         }
 
-        int totalBuy = req.getDepartmentRequestQty() != null ?
-                req.getDepartmentRequestQty().values().stream()
-                        .mapToInt(deptQty -> deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0)
-                        .sum() : 0;
+        // Calculate requestQty to store in DTO (total buy from departmentRequestQty)
+        int requestQty = 0;
+        if (req.getDepartmentRequestQty() != null) {
+            for (Object value : req.getDepartmentRequestQty().values()) {
+                if (value instanceof DepartmentQty deptQty) {
+                    requestQty += deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                } else if (value instanceof Double qty) {
+                    requestQty += qty.intValue(); // Old data: buy = qty
+                }
+            }
+        }
 
-        Double selectedPrice = null;
-        Double highestPrice = null;
-        if (selectedSupplierId != null && !selectedSupplierId.isEmpty() && !supplierDTOs.isEmpty()) {
-            selectedPrice = supplierDTOs.stream()
+        // Use orderQty (BigDecimal) for calculations
+        BigDecimal orderQty = req.getOrderQty() != null && req.getOrderQty().compareTo(BigDecimal.ZERO) != 0 ? req.getOrderQty() : BigDecimal.ZERO;
+
+        BigDecimal selectedPrice = null;
+        BigDecimal highestPrice = null;
+        if (selectedSupplierId != null && !selectedSupplierId.isEmpty() && !suppliers.isEmpty()) {
+            selectedPrice = suppliers.stream()
                     .filter(dto -> dto.getIsSelected() == 1)
                     .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
                     .filter(price -> price != null)
                     .findFirst()
                     .orElse(null);
 
-            highestPrice = supplierDTOs.stream()
+            highestPrice = suppliers.stream()
                     .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
                     .filter(price -> price != null)
-                    .max(Double::compareTo)
+                    .max(BigDecimal::compareTo)
                     .orElse(null);
         }
 
-        Double amtVnd = selectedPrice != null ? selectedPrice * totalBuy : null;
+        BigDecimal amtVnd = selectedPrice != null && orderQty != null ? selectedPrice.multiply(orderQty) : null;
 
-        Double amtDifference = (amtVnd != null && highestPrice != null) ? amtVnd - (highestPrice * totalBuy) : null;
+        BigDecimal amtDifference = (amtVnd != null && highestPrice != null && orderQty != null)
+                ? amtVnd.subtract(highestPrice.multiply(orderQty))
+                : null;
 
-        Double percentage = (amtVnd != null && amtDifference != null && amtVnd != 0) ? (amtDifference / amtVnd) * 100 : 0.0;
+        BigDecimal percentage = (amtVnd != null && amtDifference != null && amtVnd.compareTo(BigDecimal.ZERO) != 0)
+                ? amtDifference.divide(amtVnd, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                : BigDecimal.ZERO;
 
         List<ComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null ?
                 req.getDepartmentRequestQty().entrySet().stream()
                         .filter(entry -> entry.getKey() != null && !entry.getKey().isEmpty())
                         .map(entry -> {
                             String deptId = entry.getKey();
-                            DepartmentQty deptQty = entry.getValue();
-                            Integer qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
-                            Integer buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                            Object value = entry.getValue();
+                            Integer qty = 0;
+                            Integer buy = 0;
+
+                            if (value instanceof DepartmentQty deptQty) {
+                                qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
+                                buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                            } else if (value instanceof Double doubleQty) {
+                                qty = doubleQty.intValue();
+                                buy = qty; // Old data: buy = qty
+                            }
+
                             Department dept = departmentRepository.findById(deptId).orElse(null);
                             String deptName = dept != null ? dept.getDepartmentName() : "Unknown";
                             return new ComparisonRequisitionDTO.DepartmentRequestDTO(deptId, deptName, qty, buy);
@@ -1152,24 +1383,21 @@ public class SummaryRequisitionController {
                         .collect(Collectors.toList()) :
                 Collections.emptyList();
 
-        String type1Name = null;
-        if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
-            ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
-            type1Name = productType1 != null ? productType1.getName() : "Unknown";
-        }
-
-        String type2Name = null;
-        if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
-            ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
-            type2Name = productType2 != null ? productType2.getName() : "Unknown";
-        }
+        String type1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()
+                ? (productType1Service.getById(req.getProductType1Id()) != null
+                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
+                : "Unknown";
+        String type2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()
+                ? (productType2Service.getById(req.getProductType2Id()) != null
+                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
+                : "Unknown";
 
         return new ComparisonRequisitionDTO(
                 req.getEnglishName(),
                 req.getVietnameseName(),
                 req.getOldSapCode(),
-                req.getNewSapCode(),
-                supplierDTOs,
+                req.getHanaSapCode(),
+                suppliers,
                 req.getRemarkComparison(),
                 departmentRequests,
                 selectedPrice,
@@ -1181,7 +1409,11 @@ public class SummaryRequisitionController {
                 req.getProductType2Id(),
                 type1Name,
                 type2Name,
-                unit
+                unit,
+                requestQty,
+                orderQty,
+                currency,
+                goodType
         );
     }
 }

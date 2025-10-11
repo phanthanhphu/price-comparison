@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public interface SupplierProductRepository extends MongoRepository<SupplierProduct, String> {
@@ -21,13 +22,16 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
     @Query("{ 'itemNo': { $regex: ?0, $options: 'i' }, 'sapCode': { $regex: ?1, $options: 'i' } }")
     List<SupplierProduct> findByItemNoContainingIgnoreCaseAndSapCodeContainingIgnoreCase(String itemNo, String sapCode);
 
-    boolean existsBySupplierCodeAndSapCodeAndPrice(String supplierCode, String sapCode, Double price);
+    boolean existsBySupplierCodeAndSapCodeAndPrice(String supplierCode, String sapCode, BigDecimal price);
 
-    boolean existsBySupplierCodeAndSapCodeAndPriceAndIdNot(String supplierCode, String sapCode, double price, String id);
+    boolean existsBySupplierCodeAndSapCodeAndPriceAndIdNot(String supplierCode, String sapCode, BigDecimal price, String id);
 
     @Query("{ 'sapCode': { $regex: ?0, $options: 'i' }, 'supplierCode': { $regex: ?1, $options: 'i' }, 'itemNo': { $regex: ?2, $options: 'i' }, 'supplierName': { $regex: ?3, $options: 'i' } }")
     Page<SupplierProduct> findBySapCodeContainingIgnoreCaseOrSupplierCodeContainingIgnoreCaseOrItemNoContainingIgnoreCaseOrSupplierNameContainingIgnoreCase(
             String sapCode, String supplierCode, String itemNo, String supplierName, Pageable pageable);
 
     List<SupplierProduct> findBySapCode(String sapCode);
+
+    @Query("{ 'sapCode': { $regex: ?0, $options: 'i' }, 'currency': { $regex: ?1, $options: 'i' } }")
+    List<SupplierProduct> findBySapCodeAndCurrency(String sapCode, String currency);
 }

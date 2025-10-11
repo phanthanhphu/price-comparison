@@ -1,6 +1,8 @@
 package org.bsl.pricecomparison.repository;
 
 import org.bsl.pricecomparison.model.SummaryRequisition;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 
@@ -10,6 +12,8 @@ import java.util.Optional;
 public interface SummaryRequisitionRepository extends MongoRepository<SummaryRequisition, String> {
 
     List<SummaryRequisition> findByGroupId(String groupId);
+
+    Page<SummaryRequisition> findByGroupId(String groupId, Pageable pageable);
 
     Optional<SummaryRequisition> findByProductType1IdAndProductType2IdAndOldSapCode(
             String productType1Id,

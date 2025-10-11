@@ -3,7 +3,10 @@ package org.bsl.pricecomparison.request;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public class CreateRequisitionMonthlyRequest {
@@ -26,17 +29,21 @@ public class CreateRequisitionMonthlyRequest {
     @Schema(description = "Old SAP code", example = "OLD123")
     private String oldSAPCode;
 
-    @Schema(description = "New SAP code", example = "NEW456")
-    private String sapCodeNewSAP;
+    @Schema(description = "HANA SAP code", example = "NEW456")
+    private String hanaSAPCode;
 
-    @Schema(description = "Department requisitions as JSON string", example = "[{\"departmentId\": \"dept1\", \"departmentName\": \"IT Department\", \"qty\": 10, \"buy\": 8}, {\"departmentId\": \"dept2\", \"departmentName\": \"HR Department\", \"qty\": 20, \"buy\": 15}]")
+    @Schema(description = "Department requisitions as JSON string", example = "[{\"id\": \"dept1\", \"name\": \"Finance Department\", \"qty\": 10, \"buy\": 8}, {\"id\": \"dept2\", \"name\": \"HR Department\", \"qty\": 20, \"buy\": 15}]")
     private String departmentRequisitions;
 
-    @Schema(description = "Total not issued quantity", example = "50.0")
-    private Double totalNotIssuedQty;
+    @Schema(description = "Daily medical inventory", example = "50.0")
+    @NotNull(message = "Daily medical inventory is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Daily medical inventory must be non-negative")
+    private BigDecimal dailyMedInventory;
 
-    @Schema(description = "In-hand quantity", example = "100.0")
-    private Double inHand;
+    @Schema(description = "Safe stock quantity", example = "100.0")
+    @NotNull(message = "Safe stock is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Safe stock must be non-negative")
+    private BigDecimal safeStock;
 
     @Schema(description = "Supplier ID", example = "1")
     private String supplierId;
@@ -61,7 +68,6 @@ public class CreateRequisitionMonthlyRequest {
 
     @Schema(description = "Group ID", example = "689dbaddf1bf4d67a76ebae5")
     private String groupId;
-
 
     public List<MultipartFile> getFiles() {
         return files;
@@ -95,12 +101,12 @@ public class CreateRequisitionMonthlyRequest {
         this.oldSAPCode = oldSAPCode;
     }
 
-    public String getSapCodeNewSAP() {
-        return sapCodeNewSAP;
+    public String getHanaSAPCode() {
+        return hanaSAPCode;
     }
 
-    public void setSapCodeNewSAP(String sapCodeNewSAP) {
-        this.sapCodeNewSAP = sapCodeNewSAP;
+    public void setHanaSAPCode(String hanaSAPCode) {
+        this.hanaSAPCode = hanaSAPCode;
     }
 
     public String getDepartmentRequisitions() {
@@ -111,20 +117,20 @@ public class CreateRequisitionMonthlyRequest {
         this.departmentRequisitions = departmentRequisitions;
     }
 
-    public Double getTotalNotIssuedQty() {
-        return totalNotIssuedQty;
+    public BigDecimal getDailyMedInventory() {
+        return dailyMedInventory;
     }
 
-    public void setTotalNotIssuedQty(Double totalNotIssuedQty) {
-        this.totalNotIssuedQty = totalNotIssuedQty;
+    public void setDailyMedInventory(BigDecimal dailyMedInventory) {
+        this.dailyMedInventory = dailyMedInventory;
     }
 
-    public Double getInHand() {
-        return inHand;
+    public BigDecimal getSafeStock() {
+        return safeStock;
     }
 
-    public void setInHand(Double inHand) {
-        this.inHand = inHand;
+    public void setSafeStock(BigDecimal safeStock) {
+        this.safeStock = safeStock;
     }
 
     public String getSupplierId() {

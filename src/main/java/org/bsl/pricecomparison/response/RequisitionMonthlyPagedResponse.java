@@ -2,26 +2,52 @@ package org.bsl.pricecomparison.response;
 
 import org.bsl.pricecomparison.dto.RequisitionMonthlyDTO;
 import org.springframework.data.domain.Page;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
+
+import java.math.BigDecimal;
 
 public class RequisitionMonthlyPagedResponse {
     private Page<RequisitionMonthlyDTO> requisitions;
-    private Double totalSumNotIssuedQty;
-    private Double totalSumInHand;
-    private Double totalSumRequestQty;
-    private Double totalSumActualInHand;
-    private Double totalSumOrderQty;
-    private Double totalSumAmount;
-    private Double totalSumPrice;
+
+    @NotNull(message = "Total sum daily medical inventory is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total sum daily medical inventory must be non-negative")
+    private BigDecimal totalSumDailyMedInventory;
+
+    @NotNull(message = "Total sum safe stock is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total sum safe stock must be non-negative")
+    private BigDecimal totalSumSafeStock;
+
+    @NotNull(message = "Total sum request quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total sum request quantity must be non-negative")
+    private BigDecimal totalSumRequestQty;
+
+    @NotNull(message = "Total sum use stock quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total sum use stock quantity must be non-negative")
+    private BigDecimal totalSumUseStockQty;
+
+    @NotNull(message = "Total sum order quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total sum order quantity must be non-negative")
+    private BigDecimal totalSumOrderQty;
+
+    @NotNull(message = "Total sum amount is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total sum amount must be non-negative")
+    private BigDecimal totalSumAmount;
+
+    @NotNull(message = "Total sum price is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total sum price must be non-negative")
+    private BigDecimal totalSumPrice;
 
     public RequisitionMonthlyPagedResponse(Page<RequisitionMonthlyDTO> requisitions,
-                                           Double totalSumNotIssuedQty, Double totalSumInHand, Double totalSumRequestQty,
-                                           Double totalSumActualInHand, Double totalSumOrderQty, Double totalSumAmount,
-                                           Double totalSumPrice) {
+                                           BigDecimal totalSumDailyMedInventory, BigDecimal totalSumSafeStock,
+                                           BigDecimal totalSumRequestQty, BigDecimal totalSumUseStockQty,
+                                           BigDecimal totalSumOrderQty, BigDecimal totalSumAmount,
+                                           BigDecimal totalSumPrice) {
         this.requisitions = requisitions;
-        this.totalSumNotIssuedQty = totalSumNotIssuedQty;
-        this.totalSumInHand = totalSumInHand;
+        this.totalSumDailyMedInventory = totalSumDailyMedInventory;
+        this.totalSumSafeStock = totalSumSafeStock;
         this.totalSumRequestQty = totalSumRequestQty;
-        this.totalSumActualInHand = totalSumActualInHand;
+        this.totalSumUseStockQty = totalSumUseStockQty;
         this.totalSumOrderQty = totalSumOrderQty;
         this.totalSumAmount = totalSumAmount;
         this.totalSumPrice = totalSumPrice;
@@ -32,31 +58,31 @@ public class RequisitionMonthlyPagedResponse {
         return requisitions;
     }
 
-    public Double getTotalSumNotIssuedQty() {
-        return totalSumNotIssuedQty;
+    public BigDecimal getTotalSumDailyMedInventory() {
+        return totalSumDailyMedInventory;
     }
 
-    public Double getTotalSumInHand() {
-        return totalSumInHand;
+    public BigDecimal getTotalSumSafeStock() {
+        return totalSumSafeStock;
     }
 
-    public Double getTotalSumRequestQty() {
+    public BigDecimal getTotalSumRequestQty() {
         return totalSumRequestQty;
     }
 
-    public Double getTotalSumActualInHand() {
-        return totalSumActualInHand;
+    public BigDecimal getTotalSumUseStockQty() {
+        return totalSumUseStockQty;
     }
 
-    public Double getTotalSumOrderQty() {
+    public BigDecimal getTotalSumOrderQty() {
         return totalSumOrderQty;
     }
 
-    public Double getTotalSumAmount() {
+    public BigDecimal getTotalSumAmount() {
         return totalSumAmount;
     }
 
-    public Double getTotalSumPrice() {
+    public BigDecimal getTotalSumPrice() {
         return totalSumPrice;
     }
 }

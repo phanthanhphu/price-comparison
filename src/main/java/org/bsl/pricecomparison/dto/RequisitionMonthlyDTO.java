@@ -1,8 +1,10 @@
-
 package org.bsl.pricecomparison.dto;
 
 import org.bsl.pricecomparison.model.DepartmentRequisitionMonthly;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.DecimalMin;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -14,16 +16,40 @@ public class RequisitionMonthlyDTO {
     private String itemDescriptionEN;
     private String itemDescriptionVN;
     private String oldSAPCode;
-    private String sapCodeNewSAP;
+    private String hanaSAPCode;
     private String unit;
     private List<DepartmentRequisitionMonthly> departmentRequisitions;
-    private Double totalNotIssuedQty;
-    private Double inHand;
-    private Double totalRequestQty;
-    private Double actualInHand;
-    private Double orderQty;
-    private Double amount;
-    private Double price;
+
+    @NotNull(message = "Daily medical inventory is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Daily medical inventory must be non-negative")
+    private BigDecimal dailyMedInventory;
+
+    @NotNull(message = "Safe stock is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Safe stock must be non-negative")
+    private BigDecimal safeStock;
+
+    @NotNull(message = "Total requested quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Total requested quantity must be non-negative")
+    private BigDecimal totalRequestQty;
+
+    @NotNull(message = "Use stock quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Use stock quantity must be non-negative")
+    private BigDecimal useStockQty;
+
+    @NotNull(message = "Order quantity is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Order quantity must be non-negative")
+    private BigDecimal orderQty;
+
+    @NotNull(message = "Amount is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Amount must be non-negative")
+    private BigDecimal amount;
+
+    @NotNull(message = "Price is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "Price must be non-negative")
+    private BigDecimal price;
+
+    private String currency;
+    private String goodType;
     private String supplierName;
     private LocalDateTime createdDate;
     private LocalDateTime updatedDate;
@@ -33,15 +59,6 @@ public class RequisitionMonthlyDTO {
     private String remarkComparison;
     private List<String> imageUrls;
 
-    // New fields for totals
-    private Double totalSumNotIssuedQty;
-    private Double totalSumInHand;
-    private Double totalSumRequestQty;
-    private Double totalSumActualInHand;
-    private Double totalSumOrderQty;
-    private Double totalSumAmount;
-    private Double totalSumPrice;
-
     public RequisitionMonthlyDTO(
             String id,
             String groupId,
@@ -50,16 +67,18 @@ public class RequisitionMonthlyDTO {
             String itemDescriptionEN,
             String itemDescriptionVN,
             String oldSAPCode,
-            String sapCodeNewSAP,
+            String hanaSAPCode,
             String unit,
             List<DepartmentRequisitionMonthly> departmentRequisitions,
-            Double totalNotIssuedQty,
-            Double inHand,
-            Double totalRequestQty,
-            Double actualInHand,
-            Double orderQty,
-            Double amount,
-            Double price,
+            BigDecimal dailyMedInventory,
+            BigDecimal safeStock,
+            BigDecimal totalRequestQty,
+            BigDecimal useStockQty,
+            BigDecimal orderQty,
+            BigDecimal amount,
+            BigDecimal price,
+            String currency,
+            String goodType,
             String supplierName,
             LocalDateTime createdDate,
             LocalDateTime updatedDate,
@@ -67,14 +86,7 @@ public class RequisitionMonthlyDTO {
             String reason,
             String remark,
             String remarkComparison,
-            List<String> imageUrls,
-            Double totalSumNotIssuedQty,
-            Double totalSumInHand,
-            Double totalSumRequestQty,
-            Double totalSumActualInHand,
-            Double totalSumOrderQty,
-            Double totalSumAmount,
-            Double totalSumPrice
+            List<String> imageUrls
     ) {
         this.id = id;
         this.groupId = groupId;
@@ -83,16 +95,18 @@ public class RequisitionMonthlyDTO {
         this.itemDescriptionEN = itemDescriptionEN;
         this.itemDescriptionVN = itemDescriptionVN;
         this.oldSAPCode = oldSAPCode;
-        this.sapCodeNewSAP = sapCodeNewSAP;
+        this.hanaSAPCode = hanaSAPCode;
         this.unit = unit;
         this.departmentRequisitions = departmentRequisitions;
-        this.totalNotIssuedQty = totalNotIssuedQty;
-        this.inHand = inHand;
+        this.dailyMedInventory = dailyMedInventory;
+        this.safeStock = safeStock;
         this.totalRequestQty = totalRequestQty;
-        this.actualInHand = actualInHand;
+        this.useStockQty = useStockQty;
         this.orderQty = orderQty;
         this.amount = amount;
         this.price = price;
+        this.currency = currency;
+        this.goodType = goodType;
         this.supplierName = supplierName;
         this.createdDate = createdDate;
         this.updatedDate = updatedDate;
@@ -101,16 +115,8 @@ public class RequisitionMonthlyDTO {
         this.remark = remark;
         this.remarkComparison = remarkComparison;
         this.imageUrls = imageUrls;
-        this.totalSumNotIssuedQty = totalSumNotIssuedQty;
-        this.totalSumInHand = totalSumInHand;
-        this.totalSumRequestQty = totalSumRequestQty;
-        this.totalSumActualInHand = totalSumActualInHand;
-        this.totalSumOrderQty = totalSumOrderQty;
-        this.totalSumAmount = totalSumAmount;
-        this.totalSumPrice = totalSumPrice;
     }
 
-    // Getters and setters
     public String getId() {
         return id;
     }
@@ -167,12 +173,12 @@ public class RequisitionMonthlyDTO {
         this.oldSAPCode = oldSAPCode;
     }
 
-    public String getSapCodeNewSAP() {
-        return sapCodeNewSAP;
+    public String getHanaSAPCode() {
+        return hanaSAPCode;
     }
 
-    public void setSapCodeNewSAP(String sapCodeNewSAP) {
-        this.sapCodeNewSAP = sapCodeNewSAP;
+    public void setHanaSAPCode(String hanaSAPCode) {
+        this.hanaSAPCode = hanaSAPCode;
     }
 
     public String getUnit() {
@@ -191,60 +197,76 @@ public class RequisitionMonthlyDTO {
         this.departmentRequisitions = departmentRequisitions;
     }
 
-    public Double getTotalNotIssuedQty() {
-        return totalNotIssuedQty;
+    public BigDecimal getDailyMedInventory() {
+        return dailyMedInventory;
     }
 
-    public void setTotalNotIssuedQty(Double totalNotIssuedQty) {
-        this.totalNotIssuedQty = totalNotIssuedQty;
+    public void setDailyMedInventory(BigDecimal dailyMedInventory) {
+        this.dailyMedInventory = dailyMedInventory;
     }
 
-    public Double getInHand() {
-        return inHand;
+    public BigDecimal getSafeStock() {
+        return safeStock;
     }
 
-    public void setInHand(Double inHand) {
-        this.inHand = inHand;
+    public void setSafeStock(BigDecimal safeStock) {
+        this.safeStock = safeStock;
     }
 
-    public Double getTotalRequestQty() {
+    public BigDecimal getTotalRequestQty() {
         return totalRequestQty;
     }
 
-    public void setTotalRequestQty(Double totalRequestQty) {
+    public void setTotalRequestQty(BigDecimal totalRequestQty) {
         this.totalRequestQty = totalRequestQty;
     }
 
-    public Double getActualInHand() {
-        return actualInHand;
+    public BigDecimal getUseStockQty() {
+        return useStockQty;
     }
 
-    public void setActualInHand(Double actualInHand) {
-        this.actualInHand = actualInHand;
+    public void setUseStockQty(BigDecimal useStockQty) {
+        this.useStockQty = useStockQty;
     }
 
-    public Double getOrderQty() {
+    public BigDecimal getOrderQty() {
         return orderQty;
     }
 
-    public void setOrderQty(Double orderQty) {
+    public void setOrderQty(BigDecimal orderQty) {
         this.orderQty = orderQty;
     }
 
-    public Double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(Double amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
-    public Double getPrice() {
+    public BigDecimal getPrice() {
         return price;
     }
 
-    public void setPrice(Double price) {
+    public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public String getGoodType() {
+        return goodType;
+    }
+
+    public void setGoodType(String goodType) {
+        this.goodType = goodType;
     }
 
     public String getSupplierName() {
@@ -309,61 +331,5 @@ public class RequisitionMonthlyDTO {
 
     public void setImageUrls(List<String> imageUrls) {
         this.imageUrls = imageUrls;
-    }
-
-    public Double getTotalSumNotIssuedQty() {
-        return totalSumNotIssuedQty;
-    }
-
-    public void setTotalSumNotIssuedQty(Double totalSumNotIssuedQty) {
-        this.totalSumNotIssuedQty = totalSumNotIssuedQty;
-    }
-
-    public Double getTotalSumInHand() {
-        return totalSumInHand;
-    }
-
-    public void setTotalSumInHand(Double totalSumInHand) {
-        this.totalSumInHand = totalSumInHand;
-    }
-
-    public Double getTotalSumRequestQty() {
-        return totalSumRequestQty;
-    }
-
-    public void setTotalSumRequestQty(Double totalSumRequestQty) {
-        this.totalSumRequestQty = totalSumRequestQty;
-    }
-
-    public Double getTotalSumActualInHand() {
-        return totalSumActualInHand;
-    }
-
-    public void setTotalSumActualInHand(Double totalSumActualInHand) {
-        this.totalSumActualInHand = totalSumActualInHand;
-    }
-
-    public Double getTotalSumOrderQty() {
-        return totalSumOrderQty;
-    }
-
-    public void setTotalSumOrderQty(Double totalSumOrderQty) {
-        this.totalSumOrderQty = totalSumOrderQty;
-    }
-
-    public Double getTotalSumAmount() {
-        return totalSumAmount;
-    }
-
-    public void setTotalSumAmount(Double totalSumAmount) {
-        this.totalSumAmount = totalSumAmount;
-    }
-
-    public Double getTotalSumPrice() {
-        return totalSumPrice;
-    }
-
-    public void setTotalSumPrice(Double totalSumPrice) {
-        this.totalSumPrice = totalSumPrice;
     }
 }

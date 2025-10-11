@@ -1,11 +1,14 @@
 package org.bsl.pricecomparison.model;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -15,24 +18,50 @@ public class SupplierProduct {
     @Id
     private String id;
 
+    @NotBlank(message = "Supplier code is required")
     private String supplierCode;
+
+    @NotBlank(message = "Supplier name is required")
     private String supplierName;
+
+    @NotBlank(message = "SAP code is required")
     private String sapCode;
+
     private String itemNo; // Renamed from productFullName
+
+    @NotBlank(message = "Item description is required")
     private String itemDescription; // Renamed from productShortName
+
     private String fullDescription; // Added
+
     private String materialGroupFullDescription; // Added
+
+    @NotBlank(message = "Currency is required")
     private String currency; // Added
+
+    @NotBlank(message = "Good type is required")
+    private String goodType; // Added
+
     private String size;
-    private Double price;
+
+    @NotNull(message = "Price is required")
+    private BigDecimal price;
+
+    @NotBlank(message = "Unit is required")
     private String unit;
+
     private List<String> imageUrls;
+
     @Indexed
     private String productType1Id;
+
     @Indexed
     private String productType2Id;
 
+    @CreatedDate
     private LocalDateTime createdAt;
+
+    @LastModifiedDate
     private LocalDateTime updatedAt;
 
     public SupplierProduct() {
@@ -48,8 +77,9 @@ public class SupplierProduct {
             String fullDescription,
             String materialGroupFullDescription,
             String currency,
+            String goodType,
             String size,
-            Double price,
+            BigDecimal price,
             String unit,
             List<String> imageUrls,
             String productType1Id,
@@ -64,6 +94,7 @@ public class SupplierProduct {
         this.fullDescription = fullDescription;
         this.materialGroupFullDescription = materialGroupFullDescription;
         this.currency = currency;
+        this.goodType = goodType;
         this.size = size;
         this.price = price;
         this.unit = unit;
@@ -145,6 +176,14 @@ public class SupplierProduct {
         this.currency = currency;
     }
 
+    public String getGoodType() {
+        return goodType;
+    }
+
+    public void setGoodType(String goodType) {
+        this.goodType = goodType;
+    }
+
     public String getSize() {
         return size;
     }
@@ -153,11 +192,11 @@ public class SupplierProduct {
         this.size = size;
     }
 
-    public Double getPrice() {
+    public BigDecimal getPrice() {
         return price;
     }
 
-    public void setPrice(Double price) {
+    public void setPrice(BigDecimal price) {
         this.price = price;
     }
 
