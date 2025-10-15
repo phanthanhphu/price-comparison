@@ -41,6 +41,31 @@ public class ProductType1Controller {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable String id, @RequestParam String name) {
         try {
+            // Check if ProductType1 exists
+            ProductType1 productType1 = productType1Service.getById(id);
+            if (productType1 == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "ProductType1 not found with ID: " + id));
+            }
+
+            // Check for references in ProductType2
+            Query productType2Query = new Query(Criteria.where("productType1Id").is(id)).limit(1);
+            List<ProductType2> productType2s = mongoTemplate.find(productType2Query, ProductType2.class);
+
+            // If ProductType2 references exist
+            if (!productType2s.isEmpty()) {
+                List<String> conflictingItems = productType2s.stream()
+                        .map(ProductType2::getName)
+                        .filter(itemName -> itemName != null)
+                        .collect(Collectors.toList());
+
+                String message = String.format("Cannot update ProductType1 '%s' because it is referenced by %d ProductType2 item(s).",
+                        productType1.getName(), productType2s.size());
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", message, "conflictingItems", conflictingItems));
+            }
+
+            // Update ProductType1 if no references exist
             ProductType1 updated = productType1Service.update(id, name);
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
@@ -60,7 +85,7 @@ public class ProductType1Controller {
             }
 
             // Check for references in ProductType2
-            Query productType2Query = new Query(Criteria.where("productType1Id").is(id)).limit(5);
+            Query productType2Query = new Query(Criteria.where("productType1Id").is(id)).limit(1);
             List<ProductType2> productType2s = mongoTemplate.find(productType2Query, ProductType2.class);
 
             // If ProductType2 references exist
@@ -85,8 +110,6 @@ public class ProductType1Controller {
                     .body(Map.of("message", "Failed to delete ProductType1: " + e.getMessage()));
         }
     }
-
-    @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable String id) {
         try {
             ProductType1 type1 = productType1Service.getById(id);

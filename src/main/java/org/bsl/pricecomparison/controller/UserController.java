@@ -205,19 +205,8 @@ public class UserController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get user by ID", description = "Retrieve a user's details by ID")
-    public ResponseEntity<Map<String, Object>> getUserById(@PathVariable String id, @RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<Map<String, Object>> getUserById(@PathVariable String id) {
         try {
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("message", "Invalid or missing Authorization header"));
-            }
-            String token = authHeader.substring(7);
-            if (!jwtUtil.validateToken(token)) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("message", "Invalid or expired token"));
-            }
-            String authEmail = jwtUtil.getEmailFromToken(token);
-
             Optional<User> userOpt = userService.findById(id);
             if (!userOpt.isPresent()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -225,11 +214,6 @@ public class UserController {
             }
 
             User user = userOpt.get();
-            if (!authEmail.equals(user.getEmail()) && !"ADMIN".equals(jwtUtil.getRoleFromToken(token))) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("message", "Unauthorized to access this user's details"));
-            }
-
             UserDTO userDTO = new UserDTO();
             userDTO.setId(user.getId());
             userDTO.setUsername(user.getUsername());
@@ -240,9 +224,6 @@ public class UserController {
             userDTO.setCreatedAt(user.getCreatedAt());
 
             return ResponseEntity.ok(Map.of("message", "User retrieved successfully", "data", userDTO));
-        } catch (JwtException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Invalid JWT token: " + e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Failed to retrieve user: " + e.getMessage()));

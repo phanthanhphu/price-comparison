@@ -16,7 +16,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class GroupSummaryRequisitionService {
@@ -273,5 +275,39 @@ public class GroupSummaryRequisitionService {
             default:
                 return false;
         }
+    }
+
+    public List<String> getFilteredGroupIds(String name, String type, String status, String currency) {
+        Query query = new Query();
+
+        if (name != null && !name.trim().isEmpty()) {
+            query.addCriteria(Criteria.where("name").regex("(?i).*" + name.trim() + ".*"));
+        }
+
+        if (type != null && !type.trim().isEmpty()) {
+            query.addCriteria(Criteria.where("type").regex("(?i).*" + type.trim() + ".*"));
+        }
+
+        if (status != null && !status.trim().isEmpty()) {
+            query.addCriteria(Criteria.where("status").regex("(?i).*" + status.trim() + ".*"));
+        }
+
+        if (currency != null && !currency.trim().isEmpty()) {
+            query.addCriteria(Criteria.where("currency").is(currency.trim().toUpperCase()));
+        }
+
+        return mongoTemplate.find(query, GroupSummaryRequisition.class).stream()
+                .map(GroupSummaryRequisition::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    public List<String> getAllGroupIds() {
+        return groupSummaryRequisitionRepository.findAll().stream()
+                .map(GroupSummaryRequisition::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
     }
 }

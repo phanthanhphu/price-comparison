@@ -104,16 +104,33 @@ public class DepartmentController {
                         .body(Map.of("message", "Department with this name and division already exists"));
             }
             Optional<Department> optional = departmentRepository.findById(id);
-            if (optional.isPresent()) {
-                Department dept = optional.get();
-                dept.setDivision(updated.getDivision());
-                dept.setDepartmentName(updated.getDepartmentName());
-                Department saved = departmentRepository.save(dept);
-                return ResponseEntity.ok(Map.of("message", "Department updated successfully", "data", saved));
-            } else {
+            if (!optional.isPresent()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Department not found with ID: " + id));
             }
+
+            // Check if the department is referenced in requisitions
+            Department department = optional.get();
+            if (summaryRequisitionRepository.existsByDepartmentRequestQtyKey(id)) {
+                String message = String.format(
+                        "Cannot update department '%s' because it is referenced by requisition(s).",
+                        department.getDepartmentName());
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", message));
+            }
+            if (requisitionMonthlyRepository.existsByDepartmentRequisitionsId(id)) {
+                String message = String.format(
+                        "Cannot update department '%s' because it is referenced by requisition(s).",
+                        department.getDepartmentName());
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", message));
+            }
+
+            // Proceed with the update
+            department.setDivision(updated.getDivision());
+            department.setDepartmentName(updated.getDepartmentName());
+            Department saved = departmentRepository.save(department);
+            return ResponseEntity.ok(Map.of("message", "Department updated successfully", "data", saved));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Failed to update department: " + e.getMessage()));

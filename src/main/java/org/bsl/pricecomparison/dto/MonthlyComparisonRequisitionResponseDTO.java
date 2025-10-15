@@ -52,4 +52,20 @@ public class MonthlyComparisonRequisitionResponseDTO {
     public BigDecimal getTotalDifferencePercentage() {
         return totalDifferencePercentage;
     }
+
+    public void setRequisitions(List<MonthlyComparisonRequisitionDTO> requisitions) {
+        this.requisitions = requisitions;
+    }
+
+    public void setTotalAmt(BigDecimal totalAmt) {
+        this.totalAmt = totalAmt;
+    }
+
+    public void setTotalAmtDifference(BigDecimal totalAmtDifference) {
+        this.totalAmtDifference = totalAmtDifference;
+    }
+
+    public void setTotalDifferencePercentage(BigDecimal totalDifferencePercentage) {
+        this.totalDifferencePercentage = totalDifferencePercentage;
+    }
 }
