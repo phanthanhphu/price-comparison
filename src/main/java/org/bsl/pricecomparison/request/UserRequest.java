@@ -9,9 +9,10 @@ public class UserRequest {
     private String address;
     private String phone;
     private String role;
+    private Boolean isEnabled;
     private MultipartFile profileImage;
 
-    // Getters and setters
+    // Getters and Setters
     public String getUsername() {
         return username;
     }
@@ -58,6 +59,15 @@ public class UserRequest {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    // THÊM: Getter & Setter cho isEnabled
+    public Boolean getIsEnabled() {
+        return isEnabled;
+    }
+
+    public void setIsEnabled(Boolean isEnabled) {
+        this.isEnabled = isEnabled;
     }
 
     public MultipartFile getProfileImage() {

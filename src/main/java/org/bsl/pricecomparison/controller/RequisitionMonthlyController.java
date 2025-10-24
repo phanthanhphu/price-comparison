@@ -679,7 +679,8 @@ public class RequisitionMonthlyController {
             @RequestParam(required = false) String hanaSapCode,
             @RequestParam(required = false) String unit,
             @RequestParam(required = false) String departmentName,
-            @RequestParam(defaultValue = "false") Boolean filter) {
+            @RequestParam(defaultValue = "false") Boolean filter,
+            @RequestParam(defaultValue = "false") Boolean removeDuplicateSuppliers) {
 
         // Fetch GroupSummaryRequisition once using groupId
         Optional<GroupSummaryRequisition> group = groupSummaryRequisitionService.getGroupSummaryRequisitionById(groupId);
@@ -761,8 +762,7 @@ public class RequisitionMonthlyController {
         BigDecimal totalDifferencePercentage = BigDecimal.ZERO;
 
         for (RequisitionMonthly req : filteredRequisitions) {
-            // Pass currency to convertToComparisonDTO
-            MonthlyComparisonRequisitionDTO dto = convertToComparisonDTO(req, currency);
+            MonthlyComparisonRequisitionDTO dto = convertToComparisonDTO(req, currency, removeDuplicateSuppliers);
             dtoList.add(dto);
             if (dto.getAmount() != null) {
                 totalAmount = totalAmount.add(dto.getAmount());
@@ -785,7 +785,7 @@ public class RequisitionMonthlyController {
         return ResponseEntity.ok(response);
     }
 
-    private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthly req, String currency) {
+    private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthly req, String currency, Boolean removeDuplicateSuppliers) {
         List<MonthlyComparisonRequisitionDTO.SupplierDTO> supplierDTOs = new ArrayList<>();
 
         String sapCode = req.getOldSAPCode() != null && !req.getOldSAPCode().isEmpty() ? req.getOldSAPCode() : null;
@@ -795,15 +795,60 @@ public class RequisitionMonthlyController {
         String goodtype = ""; // Default goodtype
 
         if (sapCode != null && !sapCode.isEmpty()) {
-            // Use currency passed from searchComparisonMonthly
+            // Lấy danh sách nhà cung cấp theo sapCode và currency
             List<SupplierProduct> suppliers = supplierProductRepository.findBySapCodeAndCurrency(sapCode, currency);
 
-            supplierDTOs = suppliers.stream()
-                    .map(sp -> new MonthlyComparisonRequisitionDTO.SupplierDTO(
-                            sp.getPrice(),
-                            sp.getSupplierName(),
-                            selectedSupplierId != null && !selectedSupplierId.isEmpty() && selectedSupplierId.equals(sp.getId()) ? 1 : 0,
-                            sp.getUnit()))
+            // Nhóm nhà cung cấp theo supplierName, sapCode, và currency
+            Map<String, List<SupplierProduct>> supplierGroups = suppliers.stream()
+                    .collect(Collectors.groupingBy(
+                            sp -> sp.getSupplierName() + "|" + sp.getSapCode() + "|" + sp.getCurrency(),
+                            Collectors.toList()
+                    ));
+
+            List<SupplierProduct> filteredSuppliers = new ArrayList<>();
+            if (Boolean.TRUE.equals(removeDuplicateSuppliers)) {
+                // Khi removeDuplicateSuppliers = true, chỉ giữ nhà cung cấp được chọn hoặc giá thấp nhất
+                for (List<SupplierProduct> group : supplierGroups.values()) {
+                    if (group.size() > 1) {
+                        Optional<SupplierProduct> selectedSupplier = group.stream()
+                                .filter(sp -> selectedSupplierId != null && selectedSupplierId.equals(sp.getId()))
+                                .findFirst();
+                        if (selectedSupplier.isPresent()) {
+                            filteredSuppliers.add(selectedSupplier.get());
+                        } else {
+                            group.stream()
+                                    .filter(sp -> sp.getPrice() != null)
+                                    .min(Comparator.comparing(SupplierProduct::getPrice, Comparator.nullsLast(BigDecimal::compareTo)))
+                                    .ifPresent(filteredSuppliers::add);
+                        }
+                    } else {
+                        filteredSuppliers.addAll(group);
+                    }
+                }
+            } else {
+                filteredSuppliers.addAll(suppliers);
+            }
+
+            // Tìm giá thấp nhất toàn cục trong filteredSuppliers
+            BigDecimal globalMinPrice = filteredSuppliers.stream()
+                    .map(SupplierProduct::getPrice)
+                    .filter(Objects::nonNull)
+                    .min(BigDecimal::compareTo)
+                    .orElse(null);
+
+            // Chuyển đổi sang SupplierDTO và thêm isBestPrice
+            supplierDTOs = filteredSuppliers.stream()
+                    .map(sp -> {
+                        boolean isBestPrice = !Boolean.TRUE.equals(removeDuplicateSuppliers) && globalMinPrice != null && sp.getPrice() != null && sp.getPrice().equals(globalMinPrice);
+
+                        return new MonthlyComparisonRequisitionDTO.SupplierDTO(
+                                sp.getPrice(),
+                                sp.getSupplierName(),
+                                selectedSupplierId != null && selectedSupplierId.equals(sp.getId()) ? 1 : 0,
+                                sp.getUnit(),
+                                isBestPrice
+                        );
+                    })
                     .sorted(Comparator.comparing(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(BigDecimal::compareTo)))
                     .collect(Collectors.toList());
 
@@ -813,15 +858,17 @@ public class RequisitionMonthlyController {
                         .findFirst();
                 if (selectedSupplier.isPresent()) {
                     unit = selectedSupplier.get().getUnit() != null ? selectedSupplier.get().getUnit() : unit;
-                    currency = selectedSupplier.get().getCurrency() != null ? selectedSupplier.get().getCurrency() : currency; // Update currency if available
+                    currency = selectedSupplier.get().getCurrency() != null ? selectedSupplier.get().getCurrency() : currency;
                     goodtype = selectedSupplier.get().getGoodType() != null ? selectedSupplier.get().getGoodType() : "";
                 }
             }
         }
 
+        // Tính toán price và highestPrice
         BigDecimal price = null;
         BigDecimal highestPrice = null;
-        if (selectedSupplierId != null && !selectedSupplierId.isEmpty() && !supplierDTOs.isEmpty()) {
+        Boolean isBestPrice = false;
+        if (!supplierDTOs.isEmpty()) {
             price = supplierDTOs.stream()
                     .filter(dto -> dto.getIsSelected() == 1)
                     .map(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice)
@@ -834,13 +881,22 @@ public class RequisitionMonthlyController {
                     .filter(Objects::nonNull)
                     .max(BigDecimal::compareTo)
                     .orElse(null);
+
+            // Kiểm tra xem giá của nhà cung cấp được chọn có phải là giá thấp nhất không
+            BigDecimal minPrice = supplierDTOs.stream()
+                    .map(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice)
+                    .filter(Objects::nonNull)
+                    .min(BigDecimal::compareTo)
+                    .orElse(null);
+            isBestPrice = price != null && minPrice != null && price.equals(minPrice);
         }
 
         BigDecimal orderQty = req.getOrderQty() != null ? req.getOrderQty() : BigDecimal.ZERO;
         BigDecimal amount = price != null ? price.multiply(orderQty) : null;
         BigDecimal amtDifference = (amount != null && highestPrice != null) ? amount.subtract(highestPrice.multiply(orderQty)) : null;
-        BigDecimal percentage = (amount != null && amtDifference != null && amount.compareTo(BigDecimal.ZERO) != 0) ?
-                amtDifference.divide(amount, 2, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)) : BigDecimal.ZERO;
+        BigDecimal percentage = (amtDifference != null && amtDifference.compareTo(BigDecimal.ZERO) == 0) ? BigDecimal.ZERO :
+                (amount != null && highestPrice != null && amount.compareTo(BigDecimal.ZERO) != 0) ?
+                        highestPrice.multiply(orderQty).divide(amount, 2, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)) : BigDecimal.ZERO;
 
         List<MonthlyComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequisitions() != null ?
                 req.getDepartmentRequisitions().stream()
@@ -874,6 +930,7 @@ public class RequisitionMonthlyController {
                 amtDifference,
                 percentage,
                 highestPrice,
+                isBestPrice,
                 req.getProductType1Id(),
                 req.getProductType2Id(),
                 type1Name,

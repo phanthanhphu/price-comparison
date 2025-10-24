@@ -48,31 +48,42 @@ public class UserService {
 
     public User updateUser(String id, User user) {
         Optional<User> existingUserOpt = userRepository.findById(id);
-        if (existingUserOpt.isPresent()) {
-            User existingUser = existingUserOpt.get();
-            existingUser.setUsername(user.getUsername());
-            existingUser.setEmail(user.getEmail());
-            if (user.getPassword() != null && !user.getPassword().isEmpty()) {
-                existingUser.setPassword(passwordEncoder.encode(user.getPassword()));
-            }
-            existingUser.setAddress(user.getAddress());
-            existingUser.setPhone(user.getPhone());
-            existingUser.setRole(user.getRole());
-            existingUser.setProfileImageUrl(user.getProfileImageUrl());
-            return userRepository.save(existingUser);
+        if (!existingUserOpt.isPresent()) {
+            throw new RuntimeException("User not found with ID: " + id);
         }
-        throw new RuntimeException("User not found with ID: " + id);
+        User existingUser = existingUserOpt.get();
+        existingUser.setUsername(user.getUsername());
+        existingUser.setEmail(user.getEmail());
+        existingUser.setAddress(user.getAddress());
+        existingUser.setPhone(user.getPhone());
+        existingUser.setRole(user.getRole());
+        existingUser.setProfileImageUrl(user.getProfileImageUrl());
+        existingUser.setCreatedAt(user.getCreatedAt());
+        existingUser.setTokenVersion(user.getTokenVersion());
+        existingUser.setEnabled(user.isEnabled());
+        return userRepository.save(existingUser);
     }
 
     public boolean changePassword(String email, String oldPassword, String newPassword) {
-        Optional<User> userOpt = userRepository.findByEmail(email);
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            if (passwordEncoder.matches(oldPassword, user.getPassword())) {
-                user.setPassword(passwordEncoder.encode(newPassword));
-                userRepository.save(user);
-                return true;
-            }
+        if (email == null || email.trim().isEmpty()) {
+            System.out.println("Email is null or empty");
+            return false;
+        }
+        System.out.println("ChangePassword called with email: " + email + ", oldPassword: " + oldPassword);
+        Optional<User> userOpt = userRepository.findByEmail(email.toLowerCase());
+        if (!userOpt.isPresent()) {
+            System.out.println("User not found for email: " + email);
+            return false;
+        }
+        User user = userOpt.get();
+        System.out.println("Stored hashed password: " + user.getPassword());
+        boolean passwordMatch = passwordEncoder.matches(oldPassword, user.getPassword());
+        System.out.println("Password match result: " + passwordMatch);
+        if (passwordMatch) {
+            user.setPassword(passwordEncoder.encode(newPassword));
+            userRepository.save(user);
+            System.out.println("Password updated for user: " + email);
+            return true;
         }
         return false;
     }
@@ -112,6 +123,7 @@ public class UserService {
             dto.setRole(user.getRole());
             dto.setProfileImageUrl(user.getProfileImageUrl());
             dto.setCreatedAt(user.getCreatedAt());
+            dto.setEnabled(user.isEnabled());
             return dto;
         }).collect(Collectors.toList());
 

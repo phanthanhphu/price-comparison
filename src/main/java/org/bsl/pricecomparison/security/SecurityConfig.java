@@ -32,29 +32,33 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                        .maximumSessions(1)
+                        .maxSessionsPreventsLogin(false)
+                )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/users/add", // Đảm bảo endpoint /add công khai
-                                "**",
-                                "/api/auth/**",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**",
-                                "/swagger-resources/**",
-                                "/webjars/**",
-                                "/favicon.ico",
-                                "/",
-                                "/index.html",
-                                "/authentication-signin-cover.html",
-                                "/assets/**",
-                                "/css/**",
-                                "/js/**",
-                                "/**/*.html",
-                                "/**/*.js",
-                                "/**/*.css",
-                                "/users/change-password"
+                                // LOGIN ENDPOINTS
+                                "/users/login", "/api/auth/login", "/login",
+                                // REGISTER
+                                "/api/users/add", "/users/add",
+                                // SWAGGER UI & DOCS
+                                "/swagger-ui/**", "/v3/api-docs/**",
+                                "/swagger-resources/**", "/webjars/**",
+                                "/swagger-ui.html", "/swagger-ui/index.html",
+                                // STATIC RESOURCES
+                                "/", "/index.html", "/favicon.ico",
+                                "/assets/**", "/css/**", "/js/**", "/images/**",
+                                // HEALTH CHECK
+                                "/actuator/**", "/health", "/info",
+                                // LOGOUT
+                                "/users/logout",
+                                "/users/change-password",
+                                // PUBLIC
+                                "/users/change-password", "/users/get-swagger-token"
                         ).permitAll()
-                        .anyRequest().authenticated()
+                        .anyRequest().permitAll()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -64,10 +68,19 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000", "http://10.232.106.178:3000", "http://10.232.100.68:3000"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:3000",
+                "http://10.232.106.178:3000",
+                "http://10.232.100.68:3000",
+                "http://localhost:8080",
+                "http://127.0.0.1:8080",
+                "http://127.0.0.1:3000"  // THÊM NẾU CẦN CHO REACT DEV
+        ));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
+        // THÊM: Exposed headers cho Authorization nếu cần
+        configuration.setExposedHeaders(List.of("Authorization", "X-Total-Count"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

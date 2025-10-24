@@ -15,9 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -309,5 +307,16 @@ public class GroupSummaryRequisitionService {
                 .filter(Objects::nonNull)
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    public Map<String, String> getCurrenciesByGroupIds(List<String> groupIds) {
+        if (groupIds == null || groupIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Query query = new Query(Criteria.where("_id").in(groupIds));
+        query.fields().include("_id").include("currency");
+        return mongoTemplate.find(query, GroupSummaryRequisition.class).stream()
+                .filter(g -> g.getCurrency() != null)
+                .collect(Collectors.toMap(GroupSummaryRequisition::getId, GroupSummaryRequisition::getCurrency));
     }
 }

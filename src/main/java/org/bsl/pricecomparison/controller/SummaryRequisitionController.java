@@ -502,30 +502,37 @@ public class SummaryRequisitionController {
                     .filter(req -> {
                         boolean matches = true;
 
-                        // Fetch ProductType1 and ProductType2 names
-                        String reqProductType1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()
-                                ? (productType1Service.getById(req.getProductType1Id()) != null
-                                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
-                                : "Unknown";
-                        String reqProductType2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()
-                                ? (productType2Service.getById(req.getProductType2Id()) != null
-                                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
-                                : "Unknown";
+                        // Fetch ProductType1 and ProductType2 names with null handling
+                        String reqProductType1Name = Optional.ofNullable(req.getProductType1Id())
+                                .filter(id -> !id.isEmpty())
+                                .map(id -> Optional.ofNullable(productType1Service.getById(id))
+                                        .map(ProductType1::getName)
+                                        .orElse(null))
+                                .orElse(null);
+                        String reqProductType2Name = Optional.ofNullable(req.getProductType2Id())
+                                .filter(id -> !id.isEmpty())
+                                .map(id -> Optional.ofNullable(productType2Service.getById(id))
+                                        .map(ProductType2::getName)
+                                        .orElse(null))
+                                .orElse(null);
 
                         // Fetch department names
                         List<String> deptNames = req.getDepartmentRequestQty().entrySet().stream()
                                 .map(entry -> departmentRepository.findById(entry.getKey())
                                         .map(Department::getDepartmentName)
-                                        .orElse("Unknown"))
+                                        .orElse(null))
+                                .filter(Objects::nonNull)
                                 .collect(Collectors.toList());
 
                         // Apply filters only if hasFilter is true
                         if (hasFilter) {
                             if (productType1Name != null && !productType1Name.isEmpty()) {
-                                matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
+                                matches = matches && reqProductType1Name != null
+                                        && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
                             }
                             if (productType2Name != null && !productType2Name.isEmpty()) {
-                                matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
+                                matches = matches && reqProductType2Name != null
+                                        && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
                             }
                             if (englishName != null && !englishName.isEmpty()) {
                                 matches = matches && req.getEnglishName() != null
@@ -547,8 +554,9 @@ public class SummaryRequisitionController {
                                 SupplierProduct supplierProduct = req.getSupplierId() != null
                                         ? supplierProductRepository.findById(req.getSupplierId()).orElse(null)
                                         : null;
-                                String reqSupplierName = supplierProduct != null ? supplierProduct.getSupplierName() : "";
-                                matches = matches && reqSupplierName.toLowerCase().contains(supplierName.toLowerCase());
+                                String reqSupplierName = supplierProduct != null ? supplierProduct.getSupplierName() : null;
+                                matches = matches && reqSupplierName != null
+                                        && reqSupplierName.toLowerCase().contains(supplierName.toLowerCase());
                             }
                             if (departmentName != null && !departmentName.isEmpty()) {
                                 matches = matches && deptNames.stream()
@@ -578,30 +586,37 @@ public class SummaryRequisitionController {
                     .filter(req -> {
                         boolean matches = true;
 
-                        // Fetch ProductType1 and ProductType2 names
-                        String reqProductType1Name = req.getProductType1Id() != null
-                                ? (productType1Service.getById(req.getProductType1Id()) != null
-                                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
-                                : "Unknown";
-                        String reqProductType2Name = req.getProductType2Id() != null
-                                ? (productType2Service.getById(req.getProductType2Id()) != null
-                                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
-                                : "Unknown";
+                        // Fetch ProductType1 and ProductType2 names with null handling
+                        String reqProductType1Name = Optional.ofNullable(req.getProductType1Id())
+                                .filter(id -> !id.isEmpty())
+                                .map(id -> Optional.ofNullable(productType1Service.getById(id))
+                                        .map(ProductType1::getName)
+                                        .orElse(null))
+                                .orElse(null);
+                        String reqProductType2Name = Optional.ofNullable(req.getProductType2Id())
+                                .filter(id -> !id.isEmpty())
+                                .map(id -> Optional.ofNullable(productType2Service.getById(id))
+                                        .map(ProductType2::getName)
+                                        .orElse(null))
+                                .orElse(null);
 
                         // Fetch department names
                         List<String> deptNames = req.getDepartmentRequestQty().entrySet().stream()
                                 .map(entry -> departmentRepository.findById(entry.getKey())
                                         .map(Department::getDepartmentName)
-                                        .orElse("Unknown"))
+                                        .orElse(null))
+                                .filter(Objects::nonNull)
                                 .collect(Collectors.toList());
 
                         // Apply filters only if hasFilter is true
                         if (hasFilter) {
                             if (productType1Name != null && !productType1Name.isEmpty()) {
-                                matches = matches && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
+                                matches = matches && reqProductType1Name != null
+                                        && reqProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
                             }
                             if (productType2Name != null && !productType2Name.isEmpty()) {
-                                matches = matches && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
+                                matches = matches && reqProductType2Name != null
+                                        && reqProductType2Name.toLowerCase().contains(productType2Name.toLowerCase());
                             }
                             if (englishName != null && !englishName.isEmpty()) {
                                 matches = matches && req.getEnglishName() != null
@@ -623,8 +638,9 @@ public class SummaryRequisitionController {
                                 SupplierProduct supplierProduct = req.getSupplierId() != null
                                         ? supplierProductRepository.findById(req.getSupplierId()).orElse(null)
                                         : null;
-                                String reqSupplierName = supplierProduct != null ? supplierProduct.getSupplierName() : "";
-                                matches = matches && reqSupplierName.toLowerCase().contains(supplierName.toLowerCase());
+                                String reqSupplierName = supplierProduct != null ? supplierProduct.getSupplierName() : null;
+                                matches = matches && reqSupplierName != null
+                                        && reqSupplierName.toLowerCase().contains(supplierName.toLowerCase());
                             }
                             if (departmentName != null && !departmentName.isEmpty()) {
                                 matches = matches && deptNames.stream()
@@ -648,7 +664,7 @@ public class SummaryRequisitionController {
                 ? supplierProductRepository.findById(req.getSupplierId()).orElse(null)
                 : null;
 
-        // Calculate sumBuy (for DTO, not used in totalPrice)
+        // Calculate sumBuy
         int sumBuy = 0;
         if (req.getDepartmentRequestQty() != null) {
             for (Object value : req.getDepartmentRequestQty().values()) {
@@ -685,21 +701,26 @@ public class SummaryRequisitionController {
                     }
 
                     Department department = departmentRepository.findById(departmentId).orElse(null);
-                    String departmentName = department != null ? department.getDepartmentName() : "Unknown";
+                    String departmentName = department != null ? department.getDepartmentName() : null;
                     return new SummaryRequisitionDTO.DepartmentRequestDTO(departmentId, departmentName, qty, buy);
                 })
+                .filter(dto -> dto.getDepartmentName() != null) // Filter out null department names
                 .collect(Collectors.toList())
                 : new ArrayList<>();
 
-        // Fetch ProductType1 and ProductType2 names
-        String productType1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()
-                ? (productType1Service.getById(req.getProductType1Id()) != null
-                ? productType1Service.getById(req.getProductType1Id()).getName() : "Unknown")
-                : "Unknown";
-        String productType2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()
-                ? (productType2Service.getById(req.getProductType2Id()) != null
-                ? productType2Service.getById(req.getProductType2Id()).getName() : "Unknown")
-                : "Unknown";
+        // Fetch ProductType1 and ProductType2 names with null handling
+        String productType1Name = Optional.ofNullable(req.getProductType1Id())
+                .filter(id -> !id.isEmpty())
+                .map(id -> Optional.ofNullable(productType1Service.getById(id))
+                        .map(ProductType1::getName)
+                        .orElse(null))
+                .orElse(null);
+        String productType2Name = Optional.ofNullable(req.getProductType2Id())
+                .filter(id -> !id.isEmpty())
+                .map(id -> Optional.ofNullable(productType2Service.getById(id))
+                        .map(ProductType2::getName)
+                        .orElse(null))
+                .orElse(null);
 
         // Create DTO
         return new SummaryRequisitionDTO(
@@ -866,7 +887,6 @@ public class SummaryRequisitionController {
                     if (shape instanceof XSSFPicture) {
                         XSSFPicture picture = (XSSFPicture) shape;
                         XSSFClientAnchor anchor = picture.getClientAnchor();
-                        // Kiểm tra nếu anchor thuộc row hiện tại (cột N - index 13)
                         if (anchor.getCol1() == 13 && anchor.getRow1() <= i && anchor.getRow2() >= i) {
                             byte[] imageBytes = picture.getPictureData().getData();
                             String imagePath = saveImage(imageBytes, "image_" + i + "_" + System.currentTimeMillis() + ".png");
@@ -982,7 +1002,7 @@ public class SummaryRequisitionController {
 
     @GetMapping("/search/comparison")
     @Operation(summary = "Search requisitions for comparison by group ID and optional filters",
-            description = "Retrieve a paginated or full list of summary requisitions for a given group ID with optional filters for product types, names, Old SAP code, Hana SAP code, supplier name, and department name, sorted by updatedAt or createdAt in descending order. Includes sumBuy (total buy quantity across departments) and financial totals for each requisition.")
+            description = "Retrieve a paginated or full list of summary requisitions for a given group ID with optional filters for product types, names, Old SAP code, Hana SAP code, supplier name, and department name, sorted by updatedAt or createdAt in descending order. Includes sumBuy (total buy quantity across departments) and financial totals for each requisition. Optionally removes duplicate suppliers based on supplierName, keeping the one with the lowest price.")
     public ResponseEntity<ComparisonRequisitionResponseDTO> searchRequisitions(
             @RequestParam String groupId,
             @RequestParam(required = false) String productType1Name,
@@ -995,6 +1015,7 @@ public class SummaryRequisitionController {
             @RequestParam(required = false) String departmentName,
             @RequestParam(defaultValue = "false") boolean hasFilter,
             @RequestParam(defaultValue = "false") boolean disablePagination,
+            @RequestParam(defaultValue = "false") Boolean removeDuplicateSuppliers,
             Pageable pageable) {
 
         // Fetch GroupSummaryRequisition once using groupId
@@ -1067,7 +1088,7 @@ public class SummaryRequisitionController {
                         LocalDateTime date2 = req2.getUpdatedAt() != null ? req2.getUpdatedAt() : req2.getCreatedAt() != null ? req2.getCreatedAt() : LocalDateTime.MIN;
                         return date2.compareTo(date1);
                     })
-                    .map(req -> convertToDtos(req, currency)) // Pass currency to convertToDtos
+                    .map(req -> convertToDtos(req, currency, removeDuplicateSuppliers))
                     .collect(Collectors.toList());
 
             BigDecimal totalAmtVnd = BigDecimal.ZERO;
@@ -1085,10 +1106,8 @@ public class SummaryRequisitionController {
                 }
             }
 
-            // Create Page object for response
             Page<ComparisonRequisitionDTO> page = new PageImpl<>(dtoList, PageRequest.of(0, Math.max(dtoList.size(), 1)), totalElements);
 
-            // Create response DTO
             ComparisonRequisitionResponseDTO response = new ComparisonRequisitionResponseDTO(
                     page,
                     totalAmtVnd,
@@ -1098,7 +1117,6 @@ public class SummaryRequisitionController {
 
             return ResponseEntity.ok(response);
         } else {
-            // Apply pagination
             Page<SummaryRequisition> requisitionPage = requisitionRepository.findByGroupId(groupId, pageable);
             totalElements = requisitionPage.getTotalElements();
 
@@ -1155,10 +1173,9 @@ public class SummaryRequisitionController {
 
                         return matches;
                     })
-                    .map(req -> convertToDtos(req, currency)) // Pass currency to convertToDtos
+                    .map(req -> convertToDtos(req, currency, removeDuplicateSuppliers))
                     .collect(Collectors.toList());
 
-            // Calculate totals
             BigDecimal totalAmt = BigDecimal.ZERO;
             BigDecimal totalAmtDifference = BigDecimal.ZERO;
             BigDecimal totalDifferencePercentage = BigDecimal.ZERO;
@@ -1174,10 +1191,8 @@ public class SummaryRequisitionController {
                 }
             }
 
-            // Create Page object for response
             Page<ComparisonRequisitionDTO> page = new PageImpl<>(dtoList, pageable, totalElements);
 
-            // Create response DTO
             ComparisonRequisitionResponseDTO response = new ComparisonRequisitionResponseDTO(
                     page,
                     totalAmt,
@@ -1189,17 +1204,16 @@ public class SummaryRequisitionController {
         }
     }
 
-    private ComparisonRequisitionDTO convertToDtos(SummaryRequisition req, String currency) {
+    private ComparisonRequisitionDTO convertToDtos(SummaryRequisition req, String currency, boolean removeDuplicateSuppliers) {
         List<ComparisonRequisitionDTO.SupplierDTO> suppliers;
 
         String sapCode = req.getOldSapCode() != null && !req.getOldSapCode().isEmpty() ? req.getOldSapCode() : null;
         String selectedSupplierId = req.getSupplierId();
 
         String unit = "";
-        String goodType = null; // Default goodType
+        String goodType = null;
 
         if (sapCode != null && sapCode.length() >= 3) {
-            // Use currency passed from searchRequisitions
             List<SupplierProduct> supplierProducts = (currency != null && !currency.isEmpty()) ?
                     supplierProductRepository.findBySapCodeAndCurrency(sapCode, currency) :
                     supplierProductRepository.findBySapCode(sapCode);
@@ -1210,6 +1224,27 @@ public class SummaryRequisitionController {
                             sp.getSupplierName(),
                             selectedSupplierId != null && !selectedSupplierId.isEmpty() && selectedSupplierId.equals(sp.getId()) ? 1 : 0,
                             sp.getUnit()))
+                    .collect(Collectors.toList());
+
+            // Remove duplicate suppliers based on supplierName, keeping the one with the lowest price
+            if (removeDuplicateSuppliers) {
+                Map<String, ComparisonRequisitionDTO.SupplierDTO> supplierMap = new LinkedHashMap<>();
+                for (ComparisonRequisitionDTO.SupplierDTO supplier : suppliers) {
+                    String supplierName = supplier.getSupplierName();
+                    if (!supplierMap.containsKey(supplierName)) {
+                        supplierMap.put(supplierName, supplier);
+                    } else {
+                        ComparisonRequisitionDTO.SupplierDTO existing = supplierMap.get(supplierName);
+                        if (supplier.getPrice() != null && (existing.getPrice() == null || supplier.getPrice().compareTo(existing.getPrice()) < 0)) {
+                            supplierMap.put(supplierName, supplier);
+                        }
+                    }
+                }
+                suppliers = new ArrayList<>(supplierMap.values());
+            }
+
+            // Sort suppliers by price (ascending, nulls last)
+            suppliers = suppliers.stream()
                     .sorted(Comparator.comparing(ComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(BigDecimal::compareTo)))
                     .collect(Collectors.toList());
 
@@ -1220,32 +1255,48 @@ public class SummaryRequisitionController {
                         .orElse(null);
                 if (selectedSupplier != null) {
                     unit = selectedSupplier.getUnit() != null ? selectedSupplier.getUnit() : unit;
-                    currency = selectedSupplier.getCurrency() != null ? selectedSupplier.getCurrency() : currency; // Update currency if available
+                    currency = selectedSupplier.getCurrency() != null ? selectedSupplier.getCurrency() : currency;
                     goodType = selectedSupplier.getGoodType() != null ? selectedSupplier.getGoodType() : null;
+
+                    // If duplicates were removed, ensure selected supplier is in the list
+                    if (removeDuplicateSuppliers) {
+                        boolean isSelectedInList = suppliers.stream()
+                                .anyMatch(s -> s.getIsSelected() == 1);
+                        if (!isSelectedInList && selectedSupplier != null) {
+                            ComparisonRequisitionDTO.SupplierDTO selectedSupplierDTO = suppliers.stream()
+                                    .filter(s -> s.getSupplierName().equals(selectedSupplier.getSupplierName()))
+                                    .findFirst()
+                                    .orElse(null);
+                            if (selectedSupplierDTO != null) {
+                                selectedSupplierDTO.setIsSelected(1);
+                            }
+                        }
+                    }
                 }
             }
         } else {
             suppliers = Collections.emptyList();
         }
 
-        // Calculate requestQty to store in DTO (total buy from departmentRequestQty)
         int requestQty = 0;
         if (req.getDepartmentRequestQty() != null) {
             for (Object value : req.getDepartmentRequestQty().values()) {
                 if (value instanceof DepartmentQty deptQty) {
                     requestQty += deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
                 } else if (value instanceof Double qty) {
-                    requestQty += qty.intValue(); // Old data: buy = qty
+                    requestQty += qty.intValue();
                 }
             }
         }
 
-        // Use orderQty (BigDecimal) for calculations
         BigDecimal orderQty = req.getOrderQty() != null && req.getOrderQty().compareTo(BigDecimal.ZERO) != 0 ? req.getOrderQty() : BigDecimal.ZERO;
 
         BigDecimal selectedPrice = null;
         BigDecimal highestPrice = null;
-        if (selectedSupplierId != null && !selectedSupplierId.isEmpty() && !suppliers.isEmpty()) {
+        BigDecimal lowestPrice = null;
+        boolean isBestPrice = false;
+
+        if (!suppliers.isEmpty()) {
             selectedPrice = suppliers.stream()
                     .filter(dto -> dto.getIsSelected() == 1)
                     .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
@@ -1258,13 +1309,23 @@ public class SummaryRequisitionController {
                     .filter(price -> price != null)
                     .max(BigDecimal::compareTo)
                     .orElse(null);
+
+            lowestPrice = suppliers.stream()
+                    .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
+                    .filter(price -> price != null)
+                    .min(BigDecimal::compareTo)
+                    .orElse(null);
+
+            if (selectedPrice != null && lowestPrice != null) {
+                isBestPrice = selectedPrice.compareTo(lowestPrice) == 0;
+            }
         }
 
-        BigDecimal amtVnd = selectedPrice != null && orderQty != null ? selectedPrice.multiply(orderQty) : null;
+        BigDecimal amtVnd = selectedPrice != null && orderQty != null ? selectedPrice.multiply(orderQty) : BigDecimal.ZERO;
 
-        BigDecimal amtDifference = (amtVnd != null && highestPrice != null && orderQty != null)
+        BigDecimal amtDifference = (amtVnd != null && highestPrice != null && orderQty != null && orderQty.compareTo(BigDecimal.ZERO) != 0)
                 ? amtVnd.subtract(highestPrice.multiply(orderQty))
-                : null;
+                : BigDecimal.ZERO;
 
         BigDecimal percentage = (amtVnd != null && amtDifference != null && amtVnd.compareTo(BigDecimal.ZERO) != 0)
                 ? amtDifference.divide(amtVnd, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
@@ -1284,7 +1345,7 @@ public class SummaryRequisitionController {
                                 buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
                             } else if (value instanceof Double doubleQty) {
                                 qty = doubleQty.intValue();
-                                buy = qty; // Old data: buy = qty
+                                buy = qty;
                             }
 
                             Department dept = departmentRepository.findById(deptId).orElse(null);
@@ -1324,7 +1385,8 @@ public class SummaryRequisitionController {
                 requestQty,
                 orderQty,
                 currency,
-                goodType
+                goodType,
+                isBestPrice
         );
     }
 }

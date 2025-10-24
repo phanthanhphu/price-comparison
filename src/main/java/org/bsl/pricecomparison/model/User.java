@@ -16,7 +16,9 @@ public class User {
     private String phone;
     private String role;
     private LocalDateTime createdAt;
-    private String profileImageUrl; // Single image URL
+    private String profileImageUrl;
+    private boolean isEnabled;
+    private long tokenVersion; // Thêm trường tokenVersion
 
     // Getters and setters
     public String getId() {
@@ -89,5 +91,21 @@ public class User {
 
     public void setProfileImageUrl(String profileImageUrl) {
         this.profileImageUrl = profileImageUrl;
+    }
+
+    public boolean isEnabled() {
+        return isEnabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        isEnabled = enabled;
+    }
+
+    public long getTokenVersion() {
+        return tokenVersion;
+    }
+
+    public void setTokenVersion(long tokenVersion) {
+        this.tokenVersion = tokenVersion;
     }
 }

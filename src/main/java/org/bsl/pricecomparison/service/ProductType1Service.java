@@ -10,7 +10,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductType1Service {
@@ -84,5 +85,21 @@ public class ProductType1Service {
             return Page.empty(pageable);
         }
         return productType1Repository.findByIdIn(ids, pageable);
+    }
+
+    public Map<String, String> findNamesByIds(Set<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        // 🔥 MONGODB: Trả List<ProductType1> thay vì Object[]
+        return productType1Repository.findNamesByIds(ids)
+                .stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(
+                        ProductType1::getId,
+                        ProductType1::getName,
+                        (existing, replacement) -> existing
+                ));
     }
 }

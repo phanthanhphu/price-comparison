@@ -47,6 +47,9 @@ public class MonthlyComparisonRequisitionDTO {
     @DecimalMin(value = "0.0", inclusive = true, message = "Highest price must be non-negative")
     private BigDecimal highestPrice;
 
+    @Schema(description = "Indicates if the selected supplier has the best price", example = "true")
+    private Boolean isBestPrice;
+
     @Schema(description = "Product Type 1 ID", example = "1")
     private String type1;
 
@@ -110,6 +113,7 @@ public class MonthlyComparisonRequisitionDTO {
             BigDecimal amtDifference,
             BigDecimal percentage,
             BigDecimal highestPrice,
+            Boolean isBestPrice,
             String type1,
             String type2,
             String type1Name,
@@ -135,6 +139,7 @@ public class MonthlyComparisonRequisitionDTO {
         this.amtDifference = amtDifference;
         this.percentage = percentage;
         this.highestPrice = highestPrice;
+        this.isBestPrice = isBestPrice;
         this.type1 = type1;
         this.type2 = type2;
         this.type1Name = type1Name;
@@ -236,6 +241,14 @@ public class MonthlyComparisonRequisitionDTO {
 
     public void setHighestPrice(BigDecimal highestPrice) {
         this.highestPrice = highestPrice;
+    }
+
+    public Boolean getIsBestPrice() {
+        return isBestPrice;
+    }
+
+    public void setIsBestPrice(Boolean isBestPrice) {
+        this.isBestPrice = isBestPrice;
     }
 
     public String getType1() {
@@ -358,11 +371,15 @@ public class MonthlyComparisonRequisitionDTO {
         @Schema(description = "Unit", example = "pcs")
         private String unit;
 
-        public SupplierDTO(BigDecimal price, String supplierName, Integer isSelected, String unit) {
+        @Schema(description = "Indicates if this supplier has the best price", example = "true")
+        private Boolean isBestPrice;
+
+        public SupplierDTO(BigDecimal price, String supplierName, Integer isSelected, String unit, Boolean isBestPrice) {
             this.price = price;
             this.supplierName = supplierName;
             this.isSelected = isSelected;
             this.unit = unit;
+            this.isBestPrice = isBestPrice;
         }
 
         public BigDecimal getPrice() {
@@ -395,6 +412,14 @@ public class MonthlyComparisonRequisitionDTO {
 
         public void setUnit(String unit) {
             this.unit = unit;
+        }
+
+        public Boolean getIsBestPrice() {
+            return isBestPrice;
+        }
+
+        public void setIsBestPrice(Boolean isBestPrice) {
+            this.isBestPrice = isBestPrice;
         }
     }
 
