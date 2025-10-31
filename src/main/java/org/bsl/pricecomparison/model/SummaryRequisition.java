@@ -1,9 +1,12 @@
+// src/main/java/org/bsl/pricecomparison/model/SummaryRequisition.java
 package org.bsl.pricecomparison.model;
 
+import org.bsl.pricecomparison.enums.RequisitionType;
 import org.bsl.pricecomparison.request.DepartmentQty;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.DecimalMin;
@@ -16,6 +19,7 @@ import java.util.Map;
 @Document(collection = "summary_requisition")
 @Schema(description = "Model for summary requisition data")
 public class SummaryRequisition {
+
     @Id
     @Schema(description = "Unique identifier of the requisition", example = "req123")
     private String id;
@@ -89,8 +93,15 @@ public class SummaryRequisition {
     @Schema(description = "List of image URLs", example = "[\"http://example.com/image1.jpg\"]")
     private List<String> imageUrls;
 
-    // Constructors
+    // === THÊM TRƯỜNG TYPE ===
+    @Field("type")
+    @Indexed
+    @Schema(description = "Type of requisition", example = "SUMMARY", allowableValues = {"MONTHLY", "SUMMARY"})
+    private RequisitionType type;
+
+    // === CONSTRUCTORS ===
     public SummaryRequisition() {
+        this.type = RequisitionType.WEEKLY;
     }
 
     public SummaryRequisition(
@@ -114,7 +125,8 @@ public class SummaryRequisition {
             LocalDateTime createdAt,
             LocalDateTime updatedAt,
             String fullDescription,
-            List<String> imageUrls
+            List<String> imageUrls,
+            RequisitionType type // Thêm tham số type
     ) {
         this.id = id;
         this.no = no;
@@ -137,49 +149,81 @@ public class SummaryRequisition {
         this.updatedAt = updatedAt;
         this.fullDescription = fullDescription;
         this.imageUrls = imageUrls;
+        this.type = type != null ? type : RequisitionType.WEEKLY;
     }
 
-    // Getters and Setters
+    // === GETTERS & SETTERS ===
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
+
     public int getNo() { return no; }
     public void setNo(int no) { this.no = no; }
+
     public String getEnglishName() { return englishName; }
     public void setEnglishName(String englishName) { this.englishName = englishName; }
+
     public String getVietnameseName() { return vietnameseName; }
     public void setVietnameseName(String vietnameseName) { this.vietnameseName = vietnameseName; }
+
     public String getOldSapCode() { return oldSapCode; }
     public void setOldSapCode(String oldSapCode) { this.oldSapCode = oldSapCode; }
+
     public String getHanaSapCode() { return hanaSapCode; }
     public void setHanaSapCode(String hanaSapCode) { this.hanaSapCode = hanaSapCode; }
+
     public Map<String, DepartmentQty> getDepartmentRequestQty() { return departmentRequestQty; }
-    public void setDepartmentRequestQty(Map<String, DepartmentQty> departmentRequestQty) { this.departmentRequestQty = departmentRequestQty; }
+    public void setDepartmentRequestQty(Map<String, DepartmentQty> departmentRequestQty) {
+        this.departmentRequestQty = departmentRequestQty;
+    }
+
     public BigDecimal getStock() { return stock; }
     public void setStock(BigDecimal stock) { this.stock = stock; }
+
     public LocalDateTime getDateStock() { return dateStock; }
     public void setDateStock(LocalDateTime dateStock) { this.dateStock = dateStock; }
+
     public BigDecimal getOrderQty() { return orderQty; }
     public void setOrderQty(BigDecimal orderQty) { this.orderQty = orderQty; }
+
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
+
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
+
     public String getRemarkComparison() { return remarkComparison; }
     public void setRemarkComparison(String remarkComparison) { this.remarkComparison = remarkComparison; }
+
     public String getSupplierId() { return supplierId; }
     public void setSupplierId(String supplierId) { this.supplierId = supplierId; }
+
     public String getGroupId() { return groupId; }
     public void setGroupId(String groupId) { this.groupId = groupId; }
+
     public String getProductType1Id() { return productType1Id; }
     public void setProductType1Id(String productType1Id) { this.productType1Id = productType1Id; }
+
     public String getProductType2Id() { return productType2Id; }
     public void setProductType2Id(String productType2Id) { this.productType2Id = productType2Id; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
     public String getFullDescription() { return fullDescription; }
     public void setFullDescription(String fullDescription) { this.fullDescription = fullDescription; }
+
     public List<String> getImageUrls() { return imageUrls; }
     public void setImageUrls(List<String> imageUrls) { this.imageUrls = imageUrls; }
+
+    // === GETTER & SETTER CHO TYPE ===
+    public RequisitionType getType() {
+        return type;
+    }
+
+    public void setType(RequisitionType type) {
+        this.type = type != null ? type : RequisitionType.WEEKLY;
+    }
 }

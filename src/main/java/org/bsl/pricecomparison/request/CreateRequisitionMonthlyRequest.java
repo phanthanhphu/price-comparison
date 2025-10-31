@@ -32,7 +32,8 @@ public class CreateRequisitionMonthlyRequest {
     @Schema(description = "HANA SAP code", example = "NEW456")
     private String hanaSAPCode;
 
-    @Schema(description = "Department requisitions as JSON string", example = "[{\"id\": \"dept1\", \"name\": \"Finance Department\", \"qty\": 10, \"buy\": 8}, {\"id\": \"dept2\", \"name\": \"HR Department\", \"qty\": 20, \"buy\": 15}]")
+    @Schema(description = "Department requisitions as JSON string",
+            example = "[{\"id\": \"dept1\", \"name\": \"Finance Department\", \"qty\": 10, \"buy\": 8}, {\"id\": \"dept2\", \"name\": \"HR Department\", \"qty\": 20, \"buy\": 15}]")
     private String departmentRequisitions;
 
     @Schema(description = "Daily medical inventory", example = "50.0")
@@ -68,6 +69,13 @@ public class CreateRequisitionMonthlyRequest {
 
     @Schema(description = "Group ID", example = "689dbaddf1bf4d67a76ebae5")
     private String groupId;
+
+    // === THÊM TRƯỜNG TYPE ĐỂ PHÂN BIỆT MONTHLY / SUMMARY ===
+    @Schema(description = "Type of requisition", example = "MONTHLY", allowableValues = {"MONTHLY", "SUMMARY"})
+    @NotNull(message = "Requisition type is required")
+    private String type;
+
+    // Getters and Setters
 
     public List<MultipartFile> getFiles() {
         return files;
@@ -195,5 +203,13 @@ public class CreateRequisitionMonthlyRequest {
 
     public void setGroupId(String groupId) {
         this.groupId = groupId;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 }

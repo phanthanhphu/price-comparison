@@ -102,4 +102,11 @@ public class ProductType1Service {
                         (existing, replacement) -> existing
                 ));
     }
+
+    public String getNameById(String id) {
+        if (id == null || id.isBlank()) return null;
+        return productType1Repository.findById(id)
+                .map(ProductType1::getName)
+                .orElse(null);
+    }
 }

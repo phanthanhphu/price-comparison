@@ -2,7 +2,9 @@ package org.bsl.pricecomparison.controller;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
 import org.bsl.pricecomparison.dto.*;
+import org.bsl.pricecomparison.enums.RequisitionType;
 import org.bsl.pricecomparison.model.*;
 import org.bsl.pricecomparison.repository.RequisitionMonthlyRepository;
 import org.bsl.pricecomparison.repository.SupplierProductRepository;
@@ -18,6 +20,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -58,6 +61,8 @@ public class RequisitionMonthlyController {
     private GroupSummaryRequisitionService groupSummaryRequisitionService;
 
     private static final String UPLOAD_DIR = "./uploads/";
+
+
 
     @PostMapping(value = "/requisition-monthly", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> addRequisitionMonthly(@ModelAttribute CreateRequisitionMonthlyRequest request) {
@@ -111,6 +116,7 @@ public class RequisitionMonthlyController {
             requisition.setRemarkComparison(request.getRemarkComparison());
             requisition.setProductType1Id(request.getProductType1Id());
             requisition.setProductType2Id(request.getProductType2Id());
+            requisition.setType(RequisitionType.MONTHLY);
             requisition.setCreatedDate(LocalDateTime.now());
             requisition.setUpdatedDate(LocalDateTime.now());
 
@@ -381,7 +387,8 @@ public class RequisitionMonthlyController {
                             req.getReason(),
                             req.getRemark(),
                             req.getRemarkComparison(),
-                            req.getImageUrls()
+                            req.getImageUrls(),
+                            req.getType()
                     );
                 })
                 .collect(Collectors.toList());
@@ -409,6 +416,8 @@ public class RequisitionMonthlyController {
 
         return ResponseEntity.ok(response);
     }
+
+
 
     @DeleteMapping("/requisition-monthly/{id}")
     public ResponseEntity<?> delete(@PathVariable String id) {
@@ -497,6 +506,7 @@ public class RequisitionMonthlyController {
             if (request.getRemarkComparison() != null) requisition.setRemarkComparison(request.getRemarkComparison());
             if (request.getProductType1Id() != null) requisition.setProductType1Id(request.getProductType1Id());
             if (request.getProductType2Id() != null) requisition.setProductType2Id(request.getProductType2Id());
+            requisition.setType(RequisitionType.MONTHLY);
 
             // Update department requisitions
             List<DepartmentRequisitionMonthly> deptRequisitions = requisition.getDepartmentRequisitions();

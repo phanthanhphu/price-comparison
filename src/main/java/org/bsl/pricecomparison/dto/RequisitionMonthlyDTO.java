@@ -1,5 +1,6 @@
 package org.bsl.pricecomparison.dto;
 
+import org.bsl.pricecomparison.enums.RequisitionType;  // <-- THÊM IMPORT
 import org.bsl.pricecomparison.model.DepartmentRequisitionMonthly;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.DecimalMin;
@@ -59,6 +60,10 @@ public class RequisitionMonthlyDTO {
     private String remarkComparison;
     private List<String> imageUrls;
 
+    // === THÊM FIELD TYPE ===
+    @NotNull(message = "Requisition type is required")
+    private RequisitionType type;
+
     public RequisitionMonthlyDTO(
             String id,
             String groupId,
@@ -86,7 +91,8 @@ public class RequisitionMonthlyDTO {
             String reason,
             String remark,
             String remarkComparison,
-            List<String> imageUrls
+            List<String> imageUrls,
+            RequisitionType type  // <-- THÊM VÀO CONSTRUCTOR
     ) {
         this.id = id;
         this.groupId = groupId;
@@ -115,8 +121,10 @@ public class RequisitionMonthlyDTO {
         this.remark = remark;
         this.remarkComparison = remarkComparison;
         this.imageUrls = imageUrls;
+        this.type = type;  // <-- GÁN GIÁ TRỊ
     }
 
+    // === CÁC GETTER/SETTER CŨ GIỮ NGUYÊN ===
     public String getId() {
         return id;
     }
@@ -331,5 +339,14 @@ public class RequisitionMonthlyDTO {
 
     public void setImageUrls(List<String> imageUrls) {
         this.imageUrls = imageUrls;
+    }
+
+    // === GETTER & SETTER CHO TYPE ===
+    public RequisitionType getType() {
+        return type;
+    }
+
+    public void setType(RequisitionType type) {
+        this.type = type;
     }
 }

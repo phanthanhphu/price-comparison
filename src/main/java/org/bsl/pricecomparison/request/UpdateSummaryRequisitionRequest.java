@@ -29,9 +29,11 @@ public class UpdateSummaryRequisitionRequest {
     @Schema(description = "Hana SAP code", example = "NEW456")
     private String hanaSapCode;
 
-    @Schema(description = "Department request quantities (JSON string)",
-            example = "{\"quantities\": {\"temp_1756183918335\": {\"qty\": 10, \"buy\": 8}}}")
-    private String departmentRequestQty;
+    // ĐÃ SỬA: Tên field + example mới
+    @Schema(description = "Department requisitions as JSON string",
+            example = "[{\"id\": \"dept1\", \"name\": \"Finance Department\", \"qty\": 10, \"buy\": 8}, " +
+                    "{\"id\": \"dept2\", \"name\": \"HR Department\", \"qty\": 20, \"buy\": 15}]")
+    private String departmentRequisitions;
 
     @Schema(description = "Stock quantity", example = "100.0")
     @NotNull(message = "Stock quantity is required")
@@ -116,12 +118,13 @@ public class UpdateSummaryRequisitionRequest {
         this.hanaSapCode = hanaSapCode;
     }
 
-    public String getDepartmentRequestQty() {
-        return departmentRequestQty;
+    // ĐÃ SỬA: Getter & Setter cho field mới
+    public String getDepartmentRequisitions() {
+        return departmentRequisitions;
     }
 
-    public void setDepartmentRequestQty(String departmentRequestQty) {
-        this.departmentRequestQty = departmentRequestQty;
+    public void setDepartmentRequisitions(String departmentRequisitions) {
+        this.departmentRequisitions = departmentRequisitions;
     }
 
     public BigDecimal getStock() {

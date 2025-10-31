@@ -154,4 +154,11 @@ public class ProductType2Service {
     public long count() {
         return productType2Repository.count();
     }
+
+    public String getNameById(String id) {
+        if (id == null || id.isBlank()) return null;
+        return productType2Repository.findById(id)
+                .map(ProductType2::getName)
+                .orElse(null);
+    }
 }
