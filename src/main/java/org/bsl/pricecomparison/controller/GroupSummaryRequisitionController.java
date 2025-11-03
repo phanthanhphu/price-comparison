@@ -1,8 +1,10 @@
 package org.bsl.pricecomparison.controller;
 
+import jakarta.validation.Valid;
 import org.bsl.pricecomparison.model.GroupSummaryRequisition;
 import org.bsl.pricecomparison.repository.RequisitionMonthlyRepository;
 import org.bsl.pricecomparison.repository.SummaryRequisitionRepository;
+import org.bsl.pricecomparison.request.UpdateGroupStatusRequest;
 import org.bsl.pricecomparison.service.GroupSummaryRequisitionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -103,6 +105,33 @@ public class GroupSummaryRequisitionController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Failed to update group summary requisition: " + e.getMessage()));
+        }
+    }
+
+    @PutMapping("/status")
+    public ResponseEntity<?> updateGroupStatus(
+            @Valid @RequestBody UpdateGroupStatusRequest request) {
+
+        String groupId = request.getGroupId();
+        String userId = request.getUserId();
+        String newStatus = request.getStatus();
+
+        try {
+            Optional<GroupSummaryRequisition> updated = groupSummaryRequisitionService
+                    .updateStatusOnly(groupId, newStatus, userId);
+
+            return updated
+                    .map(g -> ResponseEntity.ok(Map.of(
+                            "message", "Status updated successfully!"
+                    )))
+                    .orElse(ResponseEntity.notFound().build());
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Lỗi server: " + e.getMessage()));
         }
     }
 

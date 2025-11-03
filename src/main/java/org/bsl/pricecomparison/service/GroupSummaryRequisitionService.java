@@ -2,6 +2,7 @@ package org.bsl.pricecomparison.service;
 
 import org.bsl.pricecomparison.model.GroupSummaryRequisition;
 import org.bsl.pricecomparison.model.SummaryRequisition;
+import org.bsl.pricecomparison.model.User;
 import org.bsl.pricecomparison.repository.GroupSummaryRequisitionRepository;
 import org.bsl.pricecomparison.repository.SummaryRequisitionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,9 @@ public class GroupSummaryRequisitionService {
 
     @Autowired
     private SummaryRequisitionRepository summaryRequisitionRepository;
+
+    @Autowired
+    private UserService userService;
 
     @Autowired
     private MongoTemplate mongoTemplate;
@@ -135,6 +139,54 @@ public class GroupSummaryRequisitionService {
                 : existingGroup.get().getCurrency()); // Update currency or retain existing
 
         return Optional.of(groupSummaryRequisitionRepository.save(updatedGroup));
+    }
+
+
+    public Optional<GroupSummaryRequisition> updateStatusOnly(
+            String id,
+            String newStatus,
+            String userId) {
+
+        // 1. Find the existing group
+        GroupSummaryRequisition group = groupSummaryRequisitionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Group not found with ID: " + id));
+
+        // 2. Validate new status is not null/empty
+        if (newStatus == null || newStatus.trim().isEmpty()) {
+            throw new IllegalArgumentException("New status cannot be empty");
+        }
+
+        String trimmedStatus = newStatus.trim();
+
+        // 3. Check user role (Admin or Leader) → bypass transition rules
+        boolean isAdminOrLeader = false;
+        if (userId != null && !userId.trim().isEmpty()) {
+            Optional<User> userOpt = userService.findById(userId);
+            if (userOpt.isPresent()) {
+                String role = userOpt.get().getRole();
+                isAdminOrLeader = "ADMIN".equalsIgnoreCase(role) || "LEADER".equalsIgnoreCase(role);
+            }
+        }
+
+        // 4. Enforce status transition for non-privileged users
+        if (!isAdminOrLeader) {
+            String currentStatus = group.getStatus();
+            if (currentStatus == null) {
+                throw new IllegalArgumentException("Current status is null for group ID: " + id);
+            }
+            if (!isValidStatusTransition(currentStatus, trimmedStatus)) {
+                throw new IllegalArgumentException(
+                        "Invalid status transition from '" + currentStatus + "' to '" + trimmedStatus + "'");
+            }
+        }
+
+        // 5. Apply the new status
+        group.setStatus(trimmedStatus);
+
+        // 6. Save and return
+        GroupSummaryRequisition saved = groupSummaryRequisitionRepository.save(group);
+        return Optional.of(saved);
     }
 
     public GroupSummaryRequisition findByNameTypeAndCreatedDateAndIdNot(String name, String type, LocalDate createdDate, String id) {
