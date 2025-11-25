@@ -1,30 +1,31 @@
 package org.bsl.pricecomparison.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
 
 @Schema(description = "Quantity and approved buy amount for a department")
 public class DepartmentQty {
 
     @Schema(description = "Requested quantity", example = "10")
-    private Integer qty;
+    private BigDecimal qty;
 
     @Schema(description = "Approved buy quantity", example = "8")
-    private Integer buy;
+    private BigDecimal buy;
 
     // === GETTERS & SETTERS ===
-    public Integer getQty() {
+    public BigDecimal getQty() {
         return qty;
     }
 
-    public void setQty(Integer qty) {
+    public void setQty(BigDecimal qty) {
         this.qty = qty;
     }
 
-    public Integer getBuy() {
+    public BigDecimal getBuy() {
         return buy;
     }
 
-    public void setBuy(Integer buy) {
+    public void setBuy(BigDecimal buy) {
         this.buy = buy;
     }
 }

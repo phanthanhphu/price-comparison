@@ -31,16 +31,16 @@ public class SummaryRequisitionDTO {
     private String groupId;
 
     @Schema(description = "Total requested quantity (sum of qty)", example = "2")
-    private Integer totalRequestQty;
+    private BigDecimal totalRequestQty;
 
     @Schema(description = "Total approved buy quantity (sum of buy)", example = "2")
-    private Integer sumBuy;
+    private BigDecimal sumBuy;
 
     @Schema(description = "Stock quantity", example = "1")
     private BigDecimal stock;
 
     @Schema(description = "Order quantity", example = "2")
-    private BigDecimal orderQty; // Changed from Integer to BigDecimal
+    private BigDecimal orderQty;
 
     @Schema(description = "Total price based on supplier price and orderQty", example = "200000")
     @NotNull(message = "Total price is required")
@@ -86,16 +86,21 @@ public class SummaryRequisitionDTO {
     @Schema(description = "Date when the requisition was last updated", example = "2025-10-27T21:21:48.672")
     private String updatedDate;
 
+    // THÊM UNIT
+    @Schema(description = "Unit of measurement (e.g., Set, PC, Roll)", example = "Set")
+    private String unit;
+
+    // CONSTRUCTOR ĐÃ CẬP NHẬT (THÊM unit)
     public SummaryRequisitionDTO(
             SummaryRequisition requisition,
             SupplierProduct supplierProduct,
             List<DepartmentRequestDTO> departmentRequests,
             String productType1Name,
             String productType2Name,
-            Integer totalRequestQty,
-            Integer sumBuy,
+            BigDecimal totalRequestQty,
+            BigDecimal sumBuy,
             BigDecimal stock,
-            BigDecimal orderQty, // Changed to BigDecimal
+            BigDecimal orderQty,
             BigDecimal totalPrice,
             BigDecimal price,
             String currency,
@@ -109,7 +114,8 @@ public class SummaryRequisitionDTO {
             String reason,
             String remarkComparison,
             String createdDate,
-            String updatedDate
+            String updatedDate,
+            String unit  // THÊM THAM SỐ unit
     ) {
         this.requisition = requisition;
         this.supplierProduct = supplierProduct;
@@ -135,9 +141,10 @@ public class SummaryRequisitionDTO {
         this.remarkComparison = remarkComparison;
         this.createdDate = createdDate;
         this.updatedDate = updatedDate;
+        this.unit = unit;  // GÁN unit
     }
 
-    // Inner class to hold department request details
+    // INNER CLASS
     @Schema(description = "Department request details")
     public static class DepartmentRequestDTO {
         @Schema(description = "Department ID", example = "temp_1758166905526")
@@ -147,255 +154,109 @@ public class SummaryRequisitionDTO {
         private String departmentName;
 
         @Schema(description = "Requested quantity", example = "2")
-        private Integer qty;
+        private BigDecimal qty;
 
         @Schema(description = "Approved buy quantity", example = "2")
-        private Integer buy;
+        private BigDecimal buy;
 
-        public DepartmentRequestDTO(String departmentId, String departmentName, Integer qty, Integer buy) {
+        public DepartmentRequestDTO(String departmentId, String departmentName, BigDecimal qty, BigDecimal buy) {
             this.departmentId = departmentId;
             this.departmentName = departmentName;
             this.qty = qty;
             this.buy = buy;
         }
 
-        public String getDepartmentId() {
-            return departmentId;
-        }
-
-        public void setDepartmentId(String departmentId) {
-            this.departmentId = departmentId;
-        }
-
-        public String getDepartmentName() {
-            return departmentName;
-        }
-
-        public void setDepartmentName(String departmentName) {
-            this.departmentName = departmentName;
-        }
-
-        public Integer getQty() {
-            return qty;
-        }
-
-        public void setQty(Integer qty) {
-            this.qty = qty;
-        }
-
-        public Integer getBuy() {
-            return buy;
-        }
-
-        public void setBuy(Integer buy) {
-            this.buy = buy;
-        }
+        // Getters & Setters
+        public String getDepartmentId() { return departmentId; }
+        public void setDepartmentId(String departmentId) { this.departmentId = departmentId; }
+        public String getDepartmentName() { return departmentName; }
+        public void setDepartmentName(String departmentName) { this.departmentName = departmentName; }
+        public BigDecimal getQty() { return qty; }
+        public void setQty(BigDecimal qty) { this.qty = qty; }
+        public BigDecimal getBuy() { return buy; }
+        public void setBuy(BigDecimal buy) { this.buy = buy; }
     }
 
-    // Getters and setters
-    public SummaryRequisition getRequisition() {
-        return requisition;
+    // GETTERS & SETTERS
+
+    public SummaryRequisition getRequisition() { return requisition; }
+    public void setRequisition(SummaryRequisition requisition) { this.requisition = requisition; }
+
+    public SupplierProduct getSupplierProduct() { return supplierProduct; }
+    public void setSupplierProduct(SupplierProduct supplierProduct) { this.supplierProduct = supplierProduct; }
+
+    public List<DepartmentRequestDTO> getDepartmentRequests() { return departmentRequests; }
+    public void setDepartmentRequests(List<DepartmentRequestDTO> departmentRequests) { this.departmentRequests = departmentRequests; }
+
+    public String getProductType1Name() { return productType1Name; }
+    public void setProductType1Name(String productType1Name) { this.productType1Name = productType1Name; }
+
+    public String getProductType2Name() { return productType2Name; }
+    public void setProductType2Name(String productType2Name) { this.productType2Name = productType2Name; }
+
+    public String getGroupId() { return groupId; }
+    public void setGroupId(String groupId) { this.groupId = groupId; }
+
+    public BigDecimal getTotalRequestQty() { return totalRequestQty; }
+    public void setTotalRequestQty(BigDecimal totalRequestQty) { this.totalRequestQty = totalRequestQty; }
+
+    public BigDecimal getSumBuy() { return sumBuy; }
+    public void setSumBuy(BigDecimal sumBuy) { this.sumBuy = sumBuy; }
+
+    public BigDecimal getStock() { return stock; }
+    public void setStock(BigDecimal stock) { this.stock = stock; }
+
+    public BigDecimal getOrderQty() { return orderQty; }
+    public void setOrderQty(BigDecimal orderQty) { this.orderQty = orderQty; }
+
+    public BigDecimal getTotalPrice() { return totalPrice; }
+    public void setTotalPrice(BigDecimal totalPrice) { this.totalPrice = totalPrice; }
+
+    public BigDecimal getPrice() { return price; }
+    public void setPrice(BigDecimal price) { this.price = price; }
+
+    public String getCurrency() { return currency; }
+    public void setCurrency(String currency) { this.currency = currency; }
+
+    public String getGoodType() { return goodType; }
+    public void setGoodType(String goodType) { this.goodType = goodType; }
+
+    public String getSupplierId() { return supplierId; }
+    public void setSupplierId(String supplierId) { this.supplierId = supplierId; }
+
+    public String getSupplierName() { return supplierName; }
+    public void setSupplierName(String supplierName) { this.supplierName = supplierName; }
+
+    public String getProductType1Id() { return productType1Id; }
+    public void setProductType1Id(String productType1Id) { this.productType1Id = productType1Id; }
+
+    public String getProductType2Id() { return productType2Id; }
+    public void setProductType2Id(String productType2Id) { this.productType2Id = productType2Id; }
+
+    public List<String> getImageUrls() { return imageUrls; }
+    public void setImageUrls(List<String> imageUrls) { this.imageUrls = imageUrls; }
+
+    public String getFullDescription() { return fullDescription; }
+    public void setFullDescription(String fullDescription) { this.fullDescription = fullDescription; }
+
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+
+    public String getRemarkComparison() { return remarkComparison; }
+    public void setRemarkComparison(String remarkComparison) { this.remarkComparison = remarkComparison; }
+
+    public String getCreatedDate() { return createdDate; }
+    public void setCreatedDate(String createdDate) { this.createdDate = createdDate; }
+
+    public String getUpdatedDate() { return updatedDate; }
+    public void setUpdatedDate(String updatedDate) { this.updatedDate = updatedDate; }
+
+    // GETTER & SETTER CHO unit
+    public String getUnit() {
+        return unit;
     }
 
-    public void setRequisition(SummaryRequisition requisition) {
-        this.requisition = requisition;
-        this.groupId = requisition != null ? requisition.getGroupId() : null;
-        this.supplierId = requisition != null ? requisition.getSupplierId() : null;
-        this.productType1Id = requisition != null ? requisition.getProductType1Id() : null;
-        this.productType2Id = requisition != null ? requisition.getProductType2Id() : null;
-        this.imageUrls = requisition != null ? requisition.getImageUrls() : null;
-        this.fullDescription = requisition != null ? requisition.getFullDescription() : null;
-        this.reason = requisition != null ? requisition.getReason() : null;
-        this.remarkComparison = requisition != null ? requisition.getRemarkComparison() : null;
-        this.createdDate = requisition != null && requisition.getCreatedAt() != null ? requisition.getCreatedAt().toString() : null;
-        this.updatedDate = requisition != null && requisition.getUpdatedAt() != null ? requisition.getUpdatedAt().toString() : null;
-    }
-
-    public SupplierProduct getSupplierProduct() {
-        return supplierProduct;
-    }
-
-    public void setSupplierProduct(SupplierProduct supplierProduct) {
-        this.supplierProduct = supplierProduct;
-        this.supplierName = supplierProduct != null ? supplierProduct.getSupplierName() : null;
-        this.price = supplierProduct != null ? supplierProduct.getPrice() : null;
-        this.currency = supplierProduct != null ? supplierProduct.getCurrency() : null;
-        this.goodType = supplierProduct != null ? supplierProduct.getGoodType() : null;
-    }
-
-    public List<DepartmentRequestDTO> getDepartmentRequests() {
-        return departmentRequests;
-    }
-
-    public void setDepartmentRequests(List<DepartmentRequestDTO> departmentRequests) {
-        this.departmentRequests = departmentRequests;
-    }
-
-    public String getProductType1Name() {
-        return productType1Name;
-    }
-
-    public void setProductType1Name(String productType1Name) {
-        this.productType1Name = productType1Name;
-    }
-
-    public String getProductType2Name() {
-        return productType2Name;
-    }
-
-    public void setProductType2Name(String productType2Name) {
-        this.productType2Name = productType2Name;
-    }
-
-    public String getGroupId() {
-        return groupId;
-    }
-
-    public void setGroupId(String groupId) {
-        this.groupId = groupId;
-    }
-
-    public Integer getTotalRequestQty() {
-        return totalRequestQty;
-    }
-
-    public void setTotalRequestQty(Integer totalRequestQty) {
-        this.totalRequestQty = totalRequestQty;
-    }
-
-    public Integer getSumBuy() {
-        return sumBuy;
-    }
-
-    public void setSumBuy(Integer sumBuy) {
-        this.sumBuy = sumBuy;
-    }
-
-    public BigDecimal getStock() {
-        return stock;
-    }
-
-    public void setStock(BigDecimal stock) {
-        this.stock = stock;
-    }
-
-    public BigDecimal getOrderQty() { // Changed to BigDecimal
-        return orderQty;
-    }
-
-    public void setOrderQty(BigDecimal orderQty) { // Changed to BigDecimal
-        this.orderQty = orderQty;
-    }
-
-    public BigDecimal getTotalPrice() {
-        return totalPrice;
-    }
-
-    public void setTotalPrice(BigDecimal totalPrice) {
-        this.totalPrice = totalPrice;
-    }
-
-    public BigDecimal getPrice() {
-        return price;
-    }
-
-    public void setPrice(BigDecimal price) {
-        this.price = price;
-    }
-
-    public String getCurrency() {
-        return currency;
-    }
-
-    public void setCurrency(String currency) {
-        this.currency = currency;
-    }
-
-    public String getGoodType() {
-        return goodType;
-    }
-
-    public void setGoodType(String goodType) {
-        this.goodType = goodType;
-    }
-
-    public String getSupplierId() {
-        return supplierId;
-    }
-
-    public void setSupplierId(String supplierId) {
-        this.supplierId = supplierId;
-    }
-
-    public String getSupplierName() {
-        return supplierName;
-    }
-
-    public void setSupplierName(String supplierName) {
-        this.supplierName = supplierName;
-    }
-
-    public String getProductType1Id() {
-        return productType1Id;
-    }
-
-    public void setProductType1Id(String productType1Id) {
-        this.productType1Id = productType1Id;
-    }
-
-    public String getProductType2Id() {
-        return productType2Id;
-    }
-
-    public void setProductType2Id(String productType2Id) {
-        this.productType2Id = productType2Id;
-    }
-
-    public List<String> getImageUrls() {
-        return imageUrls;
-    }
-
-    public void setImageUrls(List<String> imageUrls) {
-        this.imageUrls = imageUrls;
-    }
-
-    public String getFullDescription() {
-        return fullDescription;
-    }
-
-    public void setFullDescription(String fullDescription) {
-        this.fullDescription = fullDescription;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public String getRemarkComparison() {
-        return remarkComparison;
-    }
-
-    public void setRemarkComparison(String remarkComparison) {
-        this.remarkComparison = remarkComparison;
-    }
-
-    public String getCreatedDate() {
-        return createdDate;
-    }
-
-    public void setCreatedDate(String createdDate) {
-        this.createdDate = createdDate;
-    }
-
-    public String getUpdatedDate() {
-        return updatedDate;
-    }
-
-    public void setUpdatedDate(String updatedDate) {
-        this.updatedDate = updatedDate;
+    public void setUnit(String unit) {
+        this.unit = unit;
     }
 }

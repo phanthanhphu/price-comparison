@@ -3,9 +3,14 @@ package org.bsl.pricecomparison.controller;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.*;
 import org.bsl.pricecomparison.dto.*;
 import org.bsl.pricecomparison.enums.RequisitionType;
 import org.bsl.pricecomparison.model.*;
+import org.bsl.pricecomparison.repository.DepartmentRepository;
 import org.bsl.pricecomparison.repository.RequisitionMonthlyRepository;
 import org.bsl.pricecomparison.repository.SupplierProductRepository;
 import org.bsl.pricecomparison.request.CreateRequisitionMonthlyRequest;
@@ -27,6 +32,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
@@ -59,6 +65,9 @@ public class RequisitionMonthlyController {
 
     @Autowired
     private GroupSummaryRequisitionService groupSummaryRequisitionService;
+
+    @Autowired
+    private DepartmentRepository departmentRepository;
 
     private static final String UPLOAD_DIR = "./uploads/";
 
@@ -94,6 +103,51 @@ public class RequisitionMonthlyController {
                 supplier = supplierOptional.get();
             }
 
+            // Get dailyMedInventory + safeStock
+            BigDecimal dailyMedInventory = request.getDailyMedInventory() != null ? request.getDailyMedInventory() : BigDecimal.ZERO;
+            BigDecimal safeStock = request.getSafeStock() != null ? request.getSafeStock() : BigDecimal.ZERO;
+            BigDecimal requiredOrderQty = dailyMedInventory.add(safeStock); // Đây là orderQty bắt buộc
+
+            // Process department requisitions
+            List<DepartmentRequisitionMonthly> deptRequisitions = new ArrayList<>();
+            BigDecimal totalRequestQty = BigDecimal.ZERO;
+
+            if (request.getDepartmentRequisitions() != null && !request.getDepartmentRequisitions().isEmpty()) {
+                try {
+                    List<DepartmentRequisitionMonthly.DepartmentRequestDTO> deptDTOs = objectMapper.readValue(
+                            request.getDepartmentRequisitions(),
+                            new TypeReference<List<DepartmentRequisitionMonthly.DepartmentRequestDTO>>() {}
+                    );
+
+                    for (DepartmentRequisitionMonthly.DepartmentRequestDTO dto : deptDTOs) {
+                        BigDecimal qty = dto.getQty() != null ? dto.getQty() : BigDecimal.ZERO;
+                        BigDecimal buy = qty; // buy = qty (không cho edit)
+
+                        DepartmentRequisitionMonthly deptReq = new DepartmentRequisitionMonthly(
+                                dto.getId(),
+                                dto.getName(),
+                                qty,
+                                buy
+                        );
+                        deptRequisitions.add(deptReq);
+                        totalRequestQty = totalRequestQty.add(buy);
+                    }
+                } catch (JsonProcessingException e) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("message", "Invalid departmentRequisitions JSON format: " + e.getMessage()));
+                }
+            }
+
+            // === KIỂM TRA TỔNG YÊU CẦU PHẢI BẰNG DAILY + SAFE ===
+            if (totalRequestQty.compareTo(requiredOrderQty) != 0) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of(
+                                "message",
+                                String.format("Total request quantity (%.2f) must equal Daily Med Inventory + Safe Stock (%.2f)",
+                                        totalRequestQty, requiredOrderQty)
+                        ));
+            }
+
             // Create RequisitionMonthly entity
             RequisitionMonthly requisition = new RequisitionMonthly();
             requisition.setGroupId(request.getGroupId());
@@ -102,9 +156,8 @@ public class RequisitionMonthlyController {
             requisition.setOldSAPCode(request.getOldSAPCode());
             requisition.setHanaSAPCode(request.getHanaSAPCode());
             requisition.setUnit(supplier != null ? supplier.getUnit() : null);
-            requisition.setDailyMedInventory(request.getDailyMedInventory() != null ?
-                    request.getDailyMedInventory() : BigDecimal.ZERO);
-            requisition.setSafeStock(request.getSafeStock() != null ? request.getSafeStock() : BigDecimal.ZERO);
+            requisition.setDailyMedInventory(dailyMedInventory);
+            requisition.setSafeStock(safeStock);
             requisition.setPrice(supplier != null && supplier.getPrice() != null ? supplier.getPrice() : BigDecimal.ZERO);
             requisition.setGoodType(supplier != null && supplier.getGoodType() != null ? supplier.getGoodType() : "");
             requisition.setCurrency(supplier != null && supplier.getCurrency() != null ? supplier.getCurrency() : "VND");
@@ -120,51 +173,14 @@ public class RequisitionMonthlyController {
             requisition.setCreatedDate(LocalDateTime.now());
             requisition.setUpdatedDate(LocalDateTime.now());
 
-            // Process department requisitions
-            List<DepartmentRequisitionMonthly> deptRequisitions = new ArrayList<>();
-            if (request.getDepartmentRequisitions() != null && !request.getDepartmentRequisitions().isEmpty()) {
-                try {
-                    List<DepartmentRequisitionMonthly.DepartmentRequestDTO> deptDTOs = objectMapper.readValue(
-                            request.getDepartmentRequisitions(),
-                            new TypeReference<List<DepartmentRequisitionMonthly.DepartmentRequestDTO>>() {
-                            }
-                    );
-                    for (DepartmentRequisitionMonthly.DepartmentRequestDTO dto : deptDTOs) {
-                        deptRequisitions.add(new DepartmentRequisitionMonthly(
-                                dto.getId(),
-                                dto.getName(),
-                                dto.getQty(),
-                                dto.getBuy()
-                        ));
-                    }
-                } catch (JsonProcessingException e) {
-                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                            .body(Map.of("message", "Invalid departmentRequisitions JSON format: " + e.getMessage()));
-                }
-            }
+            // Gán department requisitions
             requisition.setDepartmentRequisitions(deptRequisitions);
 
-            // Calculate totalRequestQty
-            BigDecimal totalRequestQty = deptRequisitions.stream()
-                    .map(DepartmentRequisitionMonthly::getBuy)
-                    .filter(buy -> buy != null)
-                    .map(BigDecimal::valueOf)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            // Tính toán các trường
             requisition.setTotalRequestQty(totalRequestQty);
-
-            // Calculate useStockQty
-            BigDecimal useStockQty = (requisition.getDailyMedInventory() != null ? requisition.getDailyMedInventory() : BigDecimal.ZERO)
-                    .subtract(requisition.getSafeStock() != null ? requisition.getSafeStock() : BigDecimal.ZERO);
-            requisition.setUseStockQty(useStockQty);
-
-            // Calculate orderQty
-            BigDecimal orderQty = totalRequestQty.subtract(useStockQty);
-            requisition.setOrderQty(orderQty);
-
-            // Calculate amount
-            BigDecimal amount = (requisition.getPrice() != null ? requisition.getPrice() : BigDecimal.ZERO)
-                    .multiply(orderQty);
-            requisition.setAmount(amount);
+            requisition.setUseStockQty(BigDecimal.ZERO); // Không dùng nữa, để 0
+            requisition.setOrderQty(requiredOrderQty);   // orderQty = daily + safe
+            requisition.setAmount(requisition.getPrice().multiply(requiredOrderQty));
 
             // Handle image uploads
             List<String> imageUrls = new ArrayList<>();
@@ -173,14 +189,10 @@ public class RequisitionMonthlyController {
                 for (MultipartFile file : files) {
                     if (file != null && !file.isEmpty()) {
                         String imageUrl = saveImage(file);
-                        if (imageUrl != null) {
-                            imageUrls.add(imageUrl);
-                        }
+                        if (imageUrl != null) imageUrls.add(imageUrl);
                     }
                 }
             }
-
-            // Validate image count
             if (imageUrls.size() > 10) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body(Map.of("message", "Maximum 10 images allowed."));
@@ -190,7 +202,6 @@ public class RequisitionMonthlyController {
             // Save to database
             RequisitionMonthly savedRequisition = requisitionMonthlyRepository.save(requisition);
 
-            // Return success response
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("message", "Requisition created successfully", "data", savedRequisition));
 
@@ -250,13 +261,13 @@ public class RequisitionMonthlyController {
                         String resolvedProductType1Name = null;
                         if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
                             ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
-                            resolvedProductType1Name = productType1 != null ? productType1.getName() : "Unknown";
+                            resolvedProductType1Name = productType1 != null ? productType1.getName() : "";
                         }
 
                         String resolvedProductType2Name = null;
                         if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
                             ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
-                            resolvedProductType2Name = productType2 != null ? productType2.getName() : "Unknown";
+                            resolvedProductType2Name = productType2 != null ? productType2.getName() : "";
                         }
 
                         // Apply filters
@@ -351,13 +362,13 @@ public class RequisitionMonthlyController {
                     String resolvedProductType1Name = null;
                     if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
                         ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
-                        resolvedProductType1Name = productType1 != null ? productType1.getName() : "Unknown";
+                        resolvedProductType1Name = productType1 != null ? productType1.getName() : "";
                     }
 
                     String resolvedProductType2Name = null;
                     if (req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()) {
                         ProductType2 productType2 = productType2Service.getById(req.getProductType2Id());
-                        resolvedProductType2Name = productType2 != null ? productType2.getName() : "Unknown";
+                        resolvedProductType2Name = productType2 != null ? productType2.getName() : "";
                     }
 
                     return new RequisitionMonthlyDTO(
@@ -471,12 +482,12 @@ public class RequisitionMonthlyController {
 
             RequisitionMonthly requisition = requisitionOptional.get();
 
-            // Validate oldSAPCode
+            // Update oldSAPCode if provided
             if (request.getOldSAPCode() != null && !request.getOldSAPCode().isEmpty()) {
                 requisition.setOldSAPCode(request.getOldSAPCode());
             }
 
-            // Validate and set supplier
+            // Update supplier info if provided
             if (request.getSupplierId() != null && !request.getSupplierId().isEmpty()) {
                 Optional<SupplierProduct> supplierOptional = supplierRepository.findById(request.getSupplierId());
                 if (supplierOptional.isEmpty()) {
@@ -492,11 +503,10 @@ public class RequisitionMonthlyController {
                 requisition.setCurrency(supplier.getCurrency() != null ? supplier.getCurrency(): "VND");
             }
 
-            // Update fields if provided
+            // Update basic fields
             if (request.getGroupId() != null) requisition.setGroupId(request.getGroupId());
             if (request.getItemDescriptionEN() != null) requisition.setItemDescriptionEN(request.getItemDescriptionEN());
             if (request.getItemDescriptionVN() != null) requisition.setItemDescriptionVN(request.getItemDescriptionVN());
-            if (request.getOldSAPCode() != null) requisition.setOldSAPCode(request.getOldSAPCode());
             if (request.getHanaSAPCode() != null) requisition.setHanaSAPCode(request.getHanaSAPCode());
             if (request.getDailyMedInventory() != null) requisition.setDailyMedInventory(request.getDailyMedInventory());
             if (request.getSafeStock() != null) requisition.setSafeStock(request.getSafeStock());
@@ -508,7 +518,7 @@ public class RequisitionMonthlyController {
             if (request.getProductType2Id() != null) requisition.setProductType2Id(request.getProductType2Id());
             requisition.setType(RequisitionType.MONTHLY);
 
-            // Update department requisitions
+            // Update department requisitions using BigDecimal
             List<DepartmentRequisitionMonthly> deptRequisitions = requisition.getDepartmentRequisitions();
             if (request.getDepartmentRequisitions() != null && !request.getDepartmentRequisitions().isEmpty()) {
                 try {
@@ -520,8 +530,8 @@ public class RequisitionMonthlyController {
                             .map(dto -> new DepartmentRequisitionMonthly(
                                     dto.getId(),
                                     dto.getName(),
-                                    dto.getQty(),
-                                    dto.getBuy()
+                                    dto.getQty() != null ? dto.getQty() : BigDecimal.ZERO,
+                                    dto.getBuy() != null ? dto.getBuy() : BigDecimal.ZERO
                             ))
                             .collect(Collectors.toList());
                     requisition.setDepartmentRequisitions(deptRequisitions);
@@ -531,29 +541,29 @@ public class RequisitionMonthlyController {
                 }
             }
 
-            // Calculate totalRequestQty
+            // Recalculate totalRequestQty
             BigDecimal totalRequestQty = deptRequisitions.stream()
                     .map(DepartmentRequisitionMonthly::getBuy)
-                    .filter(Objects::nonNull)
-                    .map(BigDecimal::valueOf)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             requisition.setTotalRequestQty(totalRequestQty);
 
-            // Calculate useStockQty
+            // Recalculate useStockQty
             BigDecimal useStockQty = (requisition.getDailyMedInventory() != null ? requisition.getDailyMedInventory() : BigDecimal.ZERO)
                     .subtract(requisition.getSafeStock() != null ? requisition.getSafeStock() : BigDecimal.ZERO);
+            if (useStockQty.compareTo(BigDecimal.ZERO) < 0) useStockQty = BigDecimal.ZERO;
             requisition.setUseStockQty(useStockQty);
 
-            // Calculate orderQty
+            // Recalculate orderQty
             BigDecimal orderQty = totalRequestQty.subtract(useStockQty);
+            if (orderQty.compareTo(BigDecimal.ZERO) < 0) orderQty = BigDecimal.ZERO;
             requisition.setOrderQty(orderQty);
 
-            // Calculate amount
+            // Recalculate amount
             BigDecimal amount = (requisition.getPrice() != null ? requisition.getPrice() : BigDecimal.ZERO)
                     .multiply(orderQty);
             requisition.setAmount(amount);
 
-            // Handle image deletion (JSON array string)
+            // Handle images deletion
             List<String> currentImageUrls = requisition.getImageUrls() != null ? requisition.getImageUrls() : new ArrayList<>();
             if (request.getImagesToDelete() != null && !request.getImagesToDelete().isBlank()) {
                 try {
@@ -563,10 +573,7 @@ public class RequisitionMonthlyController {
                             try {
                                 String filePath = imageUrl.startsWith("/uploads/") ? "." + imageUrl : imageUrl;
                                 Path path = Paths.get(filePath);
-                                if (Files.exists(path)) {
-                                    Files.delete(path);
-                                    System.out.println("Deleted image: " + filePath);
-                                }
+                                if (Files.exists(path)) Files.delete(path);
                                 currentImageUrls.remove(imageUrl);
                             } catch (IOException e) {
                                 System.err.println("Error deleting image: " + imageUrl + ", error: " + e.getMessage());
@@ -585,14 +592,11 @@ public class RequisitionMonthlyController {
                 for (MultipartFile file : files) {
                     if (file != null && !file.isEmpty()) {
                         String imageUrl = saveImage(file);
-                        if (imageUrl != null) {
-                            currentImageUrls.add(imageUrl);
-                        }
+                        if (imageUrl != null) currentImageUrls.add(imageUrl);
                     }
                 }
             }
 
-            // Validate image count
             if (currentImageUrls.size() > 10) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body("Maximum 10 images allowed.");
@@ -602,10 +606,10 @@ public class RequisitionMonthlyController {
             // Update timestamp
             requisition.setUpdatedDate(LocalDateTime.now());
 
-            // Save to database
+            // Save
             RequisitionMonthly updatedRequisition = requisitionMonthlyRepository.save(requisition);
 
-            // Convert to DTO for response
+            // Response DTO
             UpdateRequisitionMonthlyDTO responseDTO = new UpdateRequisitionMonthlyDTO(
                     updatedRequisition.getId(),
                     updatedRequisition.getGroupId(),
@@ -658,13 +662,13 @@ public class RequisitionMonthlyController {
             // Resolve ProductType1 name
             if (requisition.getProductType1Id() != null && !requisition.getProductType1Id().isEmpty()) {
                 ProductType1 productType1 = productType1Service.getById(requisition.getProductType1Id());
-                requisition.setProductType1Name(productType1 != null ? productType1.getName() : "Unknown");
+                requisition.setProductType1Name(productType1 != null ? productType1.getName() : "");
             }
 
             // Resolve ProductType2 name
             if (requisition.getProductType2Id() != null && !requisition.getProductType2Id().isEmpty()) {
                 ProductType2 productType2 = productType2Service.getById(requisition.getProductType2Id());
-                requisition.setProductType2Name(productType2 != null ? productType2.getName() : "Unknown");
+                requisition.setProductType2Name(productType2 != null ? productType2.getName() : "");
             }
 
             return ResponseEntity.ok(requisition);
@@ -918,14 +922,16 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
                     .map(dept -> new MonthlyComparisonRequisitionDTO.DepartmentRequestDTO(
                             dept.getId(),
                             dept.getName(),
-                            dept.getQty() != null ? dept.getQty() : 0,
-                            dept.getBuy() != null ? dept.getBuy() : 0))
+                            dept.getQty() != null ? dept.getQty() : BigDecimal.ZERO,
+                            dept.getBuy() != null ? dept.getBuy() : BigDecimal.ZERO
+                    ))
                     .collect(Collectors.toList()) : Collections.emptyList();
 
+
     String type1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty() ?
-            productType1Service.getById(req.getProductType1Id()).getName() : "Unknown";
+            productType1Service.getById(req.getProductType1Id()).getName() : "";
     String type2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty() ?
-            productType2Service.getById(req.getProductType2Id()).getName() : "Unknown";
+            productType2Service.getById(req.getProductType2Id()).getName() : "";
 
     BigDecimal dailyMedInventory = req.getDailyMedInventory() != null ? req.getDailyMedInventory() : null;
     BigDecimal totalRequestQty = req.getTotalRequestQty() != null ? req.getTotalRequestQty() : null;
@@ -960,4 +966,354 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
             goodtype
     );
 }
+
+    @PostMapping(value = "/requisition-monthly/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Upload Requisition File",
+            description = "Upload Excel .xlsx file. Data starts from **row 9 (N9)**, column B (Item VN). " +
+                    "Columns: B=Item VN, C=Item EN, D=Hana SAP, G=Request, H=Inhand, I=Buy, J=Unit, M=Dept, N=Picture, O=Remarks"
+    )
+    public ResponseEntity<List<RequisitionMonthly>> uploadRequisitionFile(
+            @Parameter(description = "Excel .xlsx file") @RequestPart("file") MultipartFile file,
+            @Parameter(description = "Group ID", required = true) @RequestParam("groupId") String groupId) {
+
+        List<RequisitionMonthly> allMonthly = requisitionMonthlyRepository.findByGroupId(groupId);
+        Set<String> existingSapCodes = allMonthly.stream()
+                .map(RequisitionMonthly::getOldSAPCode)
+                .filter(code -> code != null && !code.trim().isEmpty() && !"NEW".equalsIgnoreCase(code.trim()))
+                .map(code -> code.trim().toUpperCase())
+                .collect(Collectors.toSet());
+
+        List<RequisitionMonthly> requisitions = new ArrayList<>();
+        Map<String, Integer> sapCodeMap = new HashMap<>();     // <sapCode, index>
+        Map<String, Integer> materialMap = new HashMap<>();    // <itemVN, index> for SAP = NEW
+
+        if (file == null || file.isEmpty()) {
+            return badRequest("No file uploaded.");
+        }
+        if (!file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
+            return badRequest("Only .xlsx files are allowed.");
+        }
+
+        try (InputStream is = file.getInputStream()) {
+            XSSFWorkbook workbook = new XSSFWorkbook(is);
+            Sheet sheet = workbook.getSheetAt(0);
+            if (sheet == null) {
+                return badRequest("Sheet not found.");
+            }
+
+            XSSFDrawing drawing = (XSSFDrawing) sheet.createDrawingPatriarch();
+            List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
+
+            // === BẮT ĐẦU TỪ DÒNG 9 (index = 8) ===
+            for (int i = 8; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                // === CỘT B (Item VN) - BẮT BUỘC ===
+                Cell itemVNCell = getMergedCellValue(sheet, i, 1, mergedRegions); // Cột B (index 1)
+                if (itemVNCell == null) {
+                    itemVNCell = row.getCell(1, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+                }
+                String itemVN = getCellValue(itemVNCell);
+
+                // Bỏ qua nếu cột B rỗng
+                if (itemVN == null || itemVN.trim().isEmpty()) {
+                    continue;
+                }
+
+                // === CÁC CỘT KHÁC ===
+                Cell itemENCell   = getMergedCellValue(sheet, i, 2, mergedRegions);  // Cột C
+                Cell sapCell      = getMergedCellValue(sheet, i, 3, mergedRegions);  // Cột D
+                Cell hanaCell     = getMergedCellValue(sheet, i, 4, mergedRegions);  // Cột E
+                Cell requestCell  = getMergedCellValue(sheet, i, 8, mergedRegions);  // Cột I
+                Cell unitCell     = getMergedCellValue(sheet, i, 9, mergedRegions);  // Cột J
+                Cell deptCell     = getMergedCellValue(sheet, i, 10, mergedRegions); // Cột K
+                Cell reasonCell   = getMergedCellValue(sheet, i, 14, mergedRegions); // Cột O (Remark)
+
+                String itemEN   = getCellValue(itemENCell);
+
+                // sapCode là String, dù Excel lưu số
+                String sapCode  = getCellValue(sapCell);
+                String hanaCode = getCellValue(hanaCell);
+
+                BigDecimal requestQty = parseBigDecimal(requestCell);
+                if (requestQty == null) requestQty = BigDecimal.ZERO;
+
+                // Inhand và Buy không còn trong file → mặc định 0
+                BigDecimal inhand = BigDecimal.ZERO;
+//                BigDecimal buy = requestQty.subtract(inhand).max(BigDecimal.ZERO); // = requestQty
+                BigDecimal buy = BigDecimal.ZERO;
+                String unit     = getCellValue(unitCell);
+                String deptName = getCellValue(deptCell);
+                String reason   = getCellValue(reasonCell); // Remark → reason
+
+                // === KIỂM TRA TRÙNG SAP CODE TRONG DB ===
+                boolean isSapValid = sapCode != null && !sapCode.trim().isEmpty() && !"NEW".equalsIgnoreCase(sapCode.trim());
+                if (isSapValid) {
+                    String normalizedSapCode = sapCode.trim().toUpperCase();
+                    if (existingSapCodes.contains(normalizedSapCode)) {
+                        return badRequest("SAP Code '" + sapCode + "' already exists in the system for this group.");
+                    }
+                }
+
+                // === XỬ LÝ HÌNH ẢNH (CỘT N - index 13) - SỬA CHÍNH XÁC VỚI MERGED CELL ===
+                List<String> imageUrls = new ArrayList<>();
+                for (XSSFShape shape : drawing.getShapes()) {
+                    if (shape instanceof XSSFPicture pic) {
+                        XSSFClientAnchor anchor = pic.getClientAnchor();
+                        // Kiểm tra hình có giao với hàng i và cột 13 (N)
+                        boolean inRow = anchor.getRow1() <= i && anchor.getRow2() >= i;
+                        boolean inCol = anchor.getCol1() <= 13 && anchor.getCol2() >= 13;
+                        if (inRow && inCol) {
+                            byte[] imgBytes = pic.getPictureData().getData();
+                            String imgPath = saveImage(imgBytes, "img_" + i + "_" + System.currentTimeMillis() + ".png");
+                            if (imgPath != null) {
+                                imageUrls.add(imgPath);
+                            }
+                        }
+                    }
+                }
+
+                // === XỬ LÝ DEPARTMENT ===
+                String deptId = null;
+                if (deptName != null && !deptName.trim().isEmpty()) {
+                    Department dept = departmentRepository.findByDepartmentName(deptName.trim());
+                    if (dept == null) {
+                        dept = new Department();
+                        dept.setDepartmentName(deptName.trim());
+                        dept = departmentRepository.save(dept);
+                    }
+                    deptId = dept.getId();
+                }
+
+                // === XÁC ĐỊNH KEY ĐỂ GỘP ===
+                boolean isSapNewOrEmpty = !isSapValid;
+                String groupKey = isSapNewOrEmpty
+                        ? itemVN.toLowerCase().trim()
+                        : sapCode.trim().toLowerCase();
+
+                Map<String, Integer> currentMap = isSapNewOrEmpty ? materialMap : sapCodeMap;
+
+                // === GỘP DỮ LIỆU TRONG FILE ===
+                if (currentMap.containsKey(groupKey)) {
+                    int idx = currentMap.get(groupKey);
+                    RequisitionMonthly existing = requisitions.get(idx);
+
+                    // Gộp theo phòng ban
+                    boolean deptExists = false;
+                    for (DepartmentRequisitionMonthly dr : existing.getDepartmentRequisitions()) {
+                        if (dr.getId() != null && dr.getId().equals(deptId)) {
+                            dr.setQty(dr.getQty().add(requestQty));
+                            dr.setBuy(dr.getBuy().add(buy));
+                            deptExists = true;
+                            break;
+                        }
+                    }
+                    if (!deptExists && deptId != null) {
+                        DepartmentRequisitionMonthly ndr = new DepartmentRequisitionMonthly();
+                        ndr.setId(deptId); ndr.setName(deptName);
+                        ndr.setQty(requestQty); ndr.setBuy(buy);
+                        existing.getDepartmentRequisitions().add(ndr);
+                    }
+
+                    existing.setTotalRequestQty(existing.getTotalRequestQty().add(requestQty));
+                    existing.setOrderQty(existing.getOrderQty().add(buy));
+
+                    if (existing.getUnit() == null && unit != null) existing.setUnit(unit);
+                    if (existing.getReason() == null && reason != null) existing.setReason(reason);
+
+                    if (!imageUrls.isEmpty()) {
+                        if (existing.getImageUrls() == null) {
+                            existing.setImageUrls(new ArrayList<>());
+                        }
+                        existing.getImageUrls().addAll(imageUrls);
+                    }
+
+                    continue;
+                }
+
+                // === TẠO MỚI ===
+                RequisitionMonthly req = new RequisitionMonthly();
+                req.setGroupId(groupId);
+                req.setCreatedDate(LocalDateTime.now());
+                req.setUpdatedDate(LocalDateTime.now());
+
+                if (isSapValid) req.setOldSAPCode(sapCode);
+                req.setItemDescriptionVN(itemVN);
+                req.setItemDescriptionEN(itemEN);
+                req.setTotalRequestQty(requestQty);
+                req.setOrderQty(buy);
+                req.setDailyMedInventory(inhand);
+                req.setUnit(unit);
+                req.setReason(reason);
+                req.setImageUrls(imageUrls.isEmpty() ? null : imageUrls);
+                req.setHanaSAPCode(hanaCode);
+
+                List<DepartmentRequisitionMonthly> deptList = new ArrayList<>();
+                if (deptId != null) {
+                    DepartmentRequisitionMonthly dr = new DepartmentRequisitionMonthly();
+                    dr.setId(deptId); dr.setName(deptName);
+                    dr.setQty(requestQty); dr.setBuy(buy);
+                    deptList.add(dr);
+                }
+                req.setDepartmentRequisitions(deptList);
+
+                requisitions.add(req);
+                currentMap.put(groupKey, requisitions.size() - 1);
+            }
+
+            if (requisitions.isEmpty()) {
+                return badRequest("No valid data found starting from row 6 (column B).");
+            }
+
+            List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+
+        } catch (Exception e) {
+            return badRequest("Error processing file: " + e.getMessage());
+        }
+    }
+
+    // === HELPER: Trả về lỗi nhanh ===
+    private ResponseEntity<List<RequisitionMonthly>> badRequest(String message) {
+        return ResponseEntity.badRequest().body(
+                Collections.singletonList(new RequisitionMonthly() {{ setRemark(message); }})
+        );
+    }
+    // Helper method to validate No (STT)
+    private boolean isValidNo(Cell cell) {
+        if (cell == null) return false;
+        return cell.getCellType() == CellType.NUMERIC; // Only accept numeric
+    }
+
+    // Helper method to get cell value
+    private String getCellValue(Cell cell) {
+        if (cell == null) return null;
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue().trim();
+            case NUMERIC:
+                // SAP Code có thể là số → chuyển thành String
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    return cell.getDateCellValue().toString();
+                }
+                return String.valueOf((long) cell.getNumericCellValue()); // Ép về long để tránh .0
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                try {
+                    return cell.getStringCellValue();
+                } catch (Exception e) {
+                    try {
+                        return String.valueOf((long) cell.getNumericCellValue());
+                    } catch (Exception ex) {
+                        return null;
+                    }
+                }
+            default:
+                return null;
+        }
+    }
+    // Helper method to parse Integer value
+    private Integer parseInteger(Cell cell) {
+        if (cell == null) return null;
+        try {
+            if (cell.getCellType() == CellType.NUMERIC) {
+                double value = cell.getNumericCellValue();
+                if (value == Math.floor(value) && !Double.isInfinite(value)) {
+                    return (int) value;
+                }
+                return null; // Non-integer value
+            } else if (cell.getCellType() == CellType.STRING) {
+                return Integer.parseInt(cell.getStringCellValue().trim());
+            } else if (cell.getCellType() == CellType.FORMULA) {
+                double value = cell.getNumericCellValue();
+                if (value == Math.floor(value) && !Double.isInfinite(value)) {
+                    return (int) value;
+                }
+                return null; // Non-integer value
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
+    }
+
+    // Helper method to parse Double value
+    private Double parseDouble(Cell cell) {
+        if (cell == null) return null;
+        try {
+            if (cell.getCellType() == CellType.NUMERIC) {
+                return cell.getNumericCellValue();
+            } else if (cell.getCellType() == CellType.STRING) {
+                return Double.parseDouble(cell.getStringCellValue().trim());
+            } else if (cell.getCellType() == CellType.FORMULA) {
+                return cell.getNumericCellValue();
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
+    }
+
+    // Helper method to parse BigDecimal value
+    private BigDecimal parseBigDecimal(Cell cell) {
+        if (cell == null) return null;
+        try {
+            if (cell.getCellType() == CellType.NUMERIC) {
+                return BigDecimal.valueOf(cell.getNumericCellValue());
+            } else if (cell.getCellType() == CellType.STRING) {
+                return new BigDecimal(cell.getStringCellValue().trim());
+            } else if (cell.getCellType() == CellType.FORMULA) {
+                return BigDecimal.valueOf(cell.getNumericCellValue());
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
+    }
+
+    // Helper method to get value from cell, handling merged cells
+    private Cell getMergedCellValue(Sheet sheet, int rowIndex, int colIndex, List<CellRangeAddress> mergedRegions) {
+        for (CellRangeAddress range : mergedRegions) {
+            if (range.isInRange(rowIndex, colIndex)) {
+                Row firstRow = sheet.getRow(range.getFirstRow());
+                return firstRow.getCell(range.getFirstColumn(), Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
+            }
+        }
+        Row row = sheet.getRow(rowIndex);
+        if (row == null) return null;
+        return row.getCell(colIndex, Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
+    }
+
+    private String saveImage(byte[] imageBytes, String originalFileName) throws IOException {
+        if (imageBytes == null || imageBytes.length == 0) {
+            return null;
+        }
+
+        String contentType = "image/png"; // Mặc định là PNG, có thể điều chỉnh
+        if (!Arrays.asList("image/jpeg", "image/png", "image/gif").contains(contentType)) {
+            throw new IOException("Only JPEG, PNG, and GIF files are allowed");
+        }
+
+        String fileName = System.currentTimeMillis() + "_" + originalFileName;
+        Path path = Paths.get(UPLOAD_DIR + fileName);
+
+        Files.createDirectories(path.getParent());
+        Files.write(path, imageBytes); // Ghi byte[] trực tiếp vào file
+
+        return "/uploads/" + fileName;
+    }
+
+    private boolean isValidStt(Cell cell) {
+        if (cell == null) return false;
+        try {
+            double sttValue = cell.getNumericCellValue();
+            int sttInt = (int) sttValue;
+            return sttValue == sttInt && sttInt >= 1;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

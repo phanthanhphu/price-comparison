@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMin;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Collections;
 
 @Schema(description = "DTO for comparison requisition details")
 public class MonthlyComparisonRequisitionDTO {
@@ -101,6 +102,7 @@ public class MonthlyComparisonRequisitionDTO {
     @Schema(description = "Good type of the selected supplier", example = "Electronics")
     private String goodtype;
 
+    // ================= Constructor Full =================
     public MonthlyComparisonRequisitionDTO(
             String englishName,
             String vietnameseName,
@@ -134,7 +136,7 @@ public class MonthlyComparisonRequisitionDTO {
         this.hanaSapCode = hanaSapCode;
         this.suppliers = suppliers;
         this.remarkComparison = remarkComparison;
-        this.departmentRequests = departmentRequests;
+        this.departmentRequests = departmentRequests != null ? departmentRequests : Collections.emptyList();
         this.amount = amount;
         this.amtDifference = amtDifference;
         this.percentage = percentage;
@@ -155,206 +157,83 @@ public class MonthlyComparisonRequisitionDTO {
         this.goodtype = goodtype;
     }
 
-    public String getEnglishName() {
-        return englishName;
-    }
+    // ================= Getter/Setter =================
+    public String getEnglishName() { return englishName; }
+    public void setEnglishName(String englishName) { this.englishName = englishName; }
 
-    public void setEnglishName(String englishName) {
-        this.englishName = englishName;
-    }
+    public String getVietnameseName() { return vietnameseName; }
+    public void setVietnameseName(String vietnameseName) { this.vietnameseName = vietnameseName; }
 
-    public String getVietnameseName() {
-        return vietnameseName;
-    }
+    public String getOldSapCode() { return oldSapCode; }
+    public void setOldSapCode(String oldSapCode) { this.oldSapCode = oldSapCode; }
 
-    public void setVietnameseName(String vietnameseName) {
-        this.vietnameseName = vietnameseName;
-    }
+    public String getHanaSapCode() { return hanaSapCode; }
+    public void setHanaSapCode(String hanaSapCode) { this.hanaSapCode = hanaSapCode; }
 
-    public String getOldSapCode() {
-        return oldSapCode;
-    }
+    public List<SupplierDTO> getSuppliers() { return suppliers; }
+    public void setSuppliers(List<SupplierDTO> suppliers) { this.suppliers = suppliers; }
 
-    public void setOldSapCode(String oldSapCode) {
-        this.oldSapCode = oldSapCode;
-    }
+    public String getRemarkComparison() { return remarkComparison; }
+    public void setRemarkComparison(String remarkComparison) { this.remarkComparison = remarkComparison; }
 
-    public String getHanaSapCode() {
-        return hanaSapCode;
-    }
+    public List<DepartmentRequestDTO> getDepartmentRequests() { return departmentRequests; }
+    public void setDepartmentRequests(List<DepartmentRequestDTO> departmentRequests) { this.departmentRequests = departmentRequests; }
 
-    public void setHanaSapCode(String hanaSapCode) {
-        this.hanaSapCode = hanaSapCode;
-    }
+    public BigDecimal getAmount() { return amount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
 
-    public List<SupplierDTO> getSuppliers() {
-        return suppliers;
-    }
+    public BigDecimal getAmtDifference() { return amtDifference; }
+    public void setAmtDifference(BigDecimal amtDifference) { this.amtDifference = amtDifference; }
 
-    public void setSuppliers(List<SupplierDTO> suppliers) {
-        this.suppliers = suppliers;
-    }
+    public BigDecimal getPercentage() { return percentage; }
+    public void setPercentage(BigDecimal percentage) { this.percentage = percentage; }
 
-    public String getRemarkComparison() {
-        return remarkComparison;
-    }
+    public BigDecimal getHighestPrice() { return highestPrice; }
+    public void setHighestPrice(BigDecimal highestPrice) { this.highestPrice = highestPrice; }
 
-    public void setRemarkComparison(String remarkComparison) {
-        this.remarkComparison = remarkComparison;
-    }
+    public Boolean getIsBestPrice() { return isBestPrice; }
+    public void setIsBestPrice(Boolean isBestPrice) { this.isBestPrice = isBestPrice; }
 
-    public List<DepartmentRequestDTO> getDepartmentRequests() {
-        return departmentRequests;
-    }
+    public String getType1() { return type1; }
+    public void setType1(String type1) { this.type1 = type1; }
 
-    public void setDepartmentRequests(List<DepartmentRequestDTO> departmentRequests) {
-        this.departmentRequests = departmentRequests;
-    }
+    public String getType2() { return type2; }
+    public void setType2(String type2) { this.type2 = type2; }
 
-    public BigDecimal getAmount() {
-        return amount;
-    }
+    public String getType1Name() { return type1Name; }
+    public void setType1Name(String type1Name) { this.type1Name = type1Name; }
 
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
+    public String getType2Name() { return type2Name; }
+    public void setType2Name(String type2Name) { this.type2Name = type2Name; }
 
-    public BigDecimal getAmtDifference() {
-        return amtDifference;
-    }
+    public String getUnit() { return unit; }
+    public void setUnit(String unit) { this.unit = unit; }
 
-    public void setAmtDifference(BigDecimal amtDifference) {
-        this.amtDifference = amtDifference;
-    }
+    public BigDecimal getDailyMedInventory() { return dailyMedInventory; }
+    public void setDailyMedInventory(BigDecimal dailyMedInventory) { this.dailyMedInventory = dailyMedInventory; }
 
-    public BigDecimal getPercentage() {
-        return percentage;
-    }
+    public BigDecimal getTotalRequestQty() { return totalRequestQty; }
+    public void setTotalRequestQty(BigDecimal totalRequestQty) { this.totalRequestQty = totalRequestQty; }
 
-    public void setPercentage(BigDecimal percentage) {
-        this.percentage = percentage;
-    }
+    public BigDecimal getSafeStock() { return safeStock; }
+    public void setSafeStock(BigDecimal safeStock) { this.safeStock = safeStock; }
 
-    public BigDecimal getHighestPrice() {
-        return highestPrice;
-    }
+    public BigDecimal getUseStockQty() { return useStockQty; }
+    public void setUseStockQty(BigDecimal useStockQty) { this.useStockQty = useStockQty; }
 
-    public void setHighestPrice(BigDecimal highestPrice) {
-        this.highestPrice = highestPrice;
-    }
+    public BigDecimal getOrderQty() { return orderQty; }
+    public void setOrderQty(BigDecimal orderQty) { this.orderQty = orderQty; }
 
-    public Boolean getIsBestPrice() {
-        return isBestPrice;
-    }
+    public BigDecimal getPrice() { return price; }
+    public void setPrice(BigDecimal price) { this.price = price; }
 
-    public void setIsBestPrice(Boolean isBestPrice) {
-        this.isBestPrice = isBestPrice;
-    }
+    public String getCurrency() { return currency; }
+    public void setCurrency(String currency) { this.currency = currency; }
 
-    public String getType1() {
-        return type1;
-    }
+    public String getGoodtype() { return goodtype; }
+    public void setGoodtype(String goodtype) { this.goodtype = goodtype; }
 
-    public void setType1(String type1) {
-        this.type1 = type1;
-    }
-
-    public String getType2() {
-        return type2;
-    }
-
-    public void setType2(String type2) {
-        this.type2 = type2;
-    }
-
-    public String getType1Name() {
-        return type1Name;
-    }
-
-    public void setType1Name(String type1Name) {
-        this.type1Name = type1Name;
-    }
-
-    public String getType2Name() {
-        return type2Name;
-    }
-
-    public void setType2Name(String type2Name) {
-        this.type2Name = type2Name;
-    }
-
-    public String getUnit() {
-        return unit;
-    }
-
-    public void setUnit(String unit) {
-        this.unit = unit;
-    }
-
-    public BigDecimal getDailyMedInventory() {
-        return dailyMedInventory;
-    }
-
-    public void setDailyMedInventory(BigDecimal dailyMedInventory) {
-        this.dailyMedInventory = dailyMedInventory;
-    }
-
-    public BigDecimal getTotalRequestQty() {
-        return totalRequestQty;
-    }
-
-    public void setTotalRequestQty(BigDecimal totalRequestQty) {
-        this.totalRequestQty = totalRequestQty;
-    }
-
-    public BigDecimal getSafeStock() {
-        return safeStock;
-    }
-
-    public void setSafeStock(BigDecimal safeStock) {
-        this.safeStock = safeStock;
-    }
-
-    public BigDecimal getUseStockQty() {
-        return useStockQty;
-    }
-
-    public void setUseStockQty(BigDecimal useStockQty) {
-        this.useStockQty = useStockQty;
-    }
-
-    public BigDecimal getOrderQty() {
-        return orderQty;
-    }
-
-    public void setOrderQty(BigDecimal orderQty) {
-        this.orderQty = orderQty;
-    }
-
-    public BigDecimal getPrice() {
-        return price;
-    }
-
-    public void setPrice(BigDecimal price) {
-        this.price = price;
-    }
-
-    public String getCurrency() {
-        return currency;
-    }
-
-    public void setCurrency(String currency) {
-        this.currency = currency;
-    }
-
-    public String getGoodtype() {
-        return goodtype;
-    }
-
-    public void setGoodtype(String goodtype) {
-        this.goodtype = goodtype;
-    }
-
+    // ================= Supplier DTO =================
     @Schema(description = "Supplier details")
     public static class SupplierDTO {
         @Schema(description = "Price", example = "100.0")
@@ -366,7 +245,7 @@ public class MonthlyComparisonRequisitionDTO {
         private String supplierName;
 
         @Schema(description = "Is selected (1 for selected, 0 for not selected)", example = "1")
-        private Integer isSelected;
+        private Integer isSelected; // INT
 
         @Schema(description = "Unit", example = "pcs")
         private String unit;
@@ -382,47 +261,23 @@ public class MonthlyComparisonRequisitionDTO {
             this.isBestPrice = isBestPrice;
         }
 
-        public BigDecimal getPrice() {
-            return price;
-        }
+        public BigDecimal getPrice() { return price; }
+        public void setPrice(BigDecimal price) { this.price = price; }
 
-        public void setPrice(BigDecimal price) {
-            this.price = price;
-        }
+        public String getSupplierName() { return supplierName; }
+        public void setSupplierName(String supplierName) { this.supplierName = supplierName; }
 
-        public String getSupplierName() {
-            return supplierName;
-        }
+        public Integer getIsSelected() { return isSelected; }
+        public void setIsSelected(Integer isSelected) { this.isSelected = isSelected; }
 
-        public void setSupplierName(String supplierName) {
-            this.supplierName = supplierName;
-        }
+        public String getUnit() { return unit; }
+        public void setUnit(String unit) { this.unit = unit; }
 
-        public Integer getIsSelected() {
-            return isSelected;
-        }
-
-        public void setIsSelected(Integer isSelected) {
-            this.isSelected = isSelected;
-        }
-
-        public String getUnit() {
-            return unit;
-        }
-
-        public void setUnit(String unit) {
-            this.unit = unit;
-        }
-
-        public Boolean getIsBestPrice() {
-            return isBestPrice;
-        }
-
-        public void setIsBestPrice(Boolean isBestPrice) {
-            this.isBestPrice = isBestPrice;
-        }
+        public Boolean getIsBestPrice() { return isBestPrice; }
+        public void setIsBestPrice(Boolean isBestPrice) { this.isBestPrice = isBestPrice; }
     }
 
+    // ================= Department DTO =================
     @Schema(description = "Department request details")
     public static class DepartmentRequestDTO {
         @Schema(description = "Department ID", example = "dept1")
@@ -432,48 +287,28 @@ public class MonthlyComparisonRequisitionDTO {
         private String departmentName;
 
         @Schema(description = "Requested quantity", example = "10")
-        private Integer qty;
+        private BigDecimal qty; // BigDecimal
 
         @Schema(description = "Approved buy quantity", example = "8")
-        private Integer buy;
+        private BigDecimal buy; // BigDecimal
 
-        public DepartmentRequestDTO(String departmentId, String departmentName, Integer qty, Integer buy) {
+        public DepartmentRequestDTO(String departmentId, String departmentName, BigDecimal qty, BigDecimal buy) {
             this.departmentId = departmentId;
             this.departmentName = departmentName;
             this.qty = qty;
             this.buy = buy;
         }
 
-        public String getDepartmentId() {
-            return departmentId;
-        }
+        public String getDepartmentId() { return departmentId; }
+        public void setDepartmentId(String departmentId) { this.departmentId = departmentId; }
 
-        public void setDepartmentId(String departmentId) {
-            this.departmentId = departmentId;
-        }
+        public String getDepartmentName() { return departmentName; }
+        public void setDepartmentName(String departmentName) { this.departmentName = departmentName; }
 
-        public String getDepartmentName() {
-            return departmentName;
-        }
+        public BigDecimal getQty() { return qty; }
+        public void setQty(BigDecimal qty) { this.qty = qty; }
 
-        public void setDepartmentName(String departmentName) {
-            this.departmentName = departmentName;
-        }
-
-        public Integer getQty() {
-            return qty;
-        }
-
-        public void setQty(Integer qty) {
-            this.qty = qty;
-        }
-
-        public Integer getBuy() {
-            return buy;
-        }
-
-        public void setBuy(Integer buy) {
-            this.buy = buy;
-        }
+        public BigDecimal getBuy() { return buy; }
+        public void setBuy(BigDecimal buy) { this.buy = buy; }
     }
 }

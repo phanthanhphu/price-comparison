@@ -39,6 +39,9 @@ public class SummaryRequisition {
     @Schema(description = "Hana SAP code of the item", example = "HANA456")
     private String hanaSapCode;
 
+    @Schema(description = "Unit of measure for the item", example = "PC")
+    private String unit;  // THÊM TRƯỜNG UNIT
+
     @Indexed
     @Schema(description = "Map of department request quantities")
     private Map<String, DepartmentQty> departmentRequestQty;
@@ -111,6 +114,7 @@ public class SummaryRequisition {
             String vietnameseName,
             String oldSapCode,
             String hanaSapCode,
+            String unit,  // THÊM UNIT VÀO CONSTRUCTOR
             Map<String, DepartmentQty> departmentRequestQty,
             BigDecimal stock,
             LocalDateTime dateStock,
@@ -126,7 +130,7 @@ public class SummaryRequisition {
             LocalDateTime updatedAt,
             String fullDescription,
             List<String> imageUrls,
-            RequisitionType type // Thêm tham số type
+            RequisitionType type
     ) {
         this.id = id;
         this.no = no;
@@ -134,6 +138,7 @@ public class SummaryRequisition {
         this.vietnameseName = vietnameseName;
         this.oldSapCode = oldSapCode;
         this.hanaSapCode = hanaSapCode;
+        this.unit = unit;  // GÁN GIÁ TRỊ CHO UNIT
         this.departmentRequestQty = departmentRequestQty;
         this.stock = stock;
         this.dateStock = dateStock;
@@ -170,6 +175,14 @@ public class SummaryRequisition {
 
     public String getHanaSapCode() { return hanaSapCode; }
     public void setHanaSapCode(String hanaSapCode) { this.hanaSapCode = hanaSapCode; }
+
+    public String getUnit() {  // GETTER UNIT
+        return unit;
+    }
+
+    public void setUnit(String unit) {  // SETTER UNIT
+        this.unit = unit;
+    }
 
     public Map<String, DepartmentQty> getDepartmentRequestQty() { return departmentRequestQty; }
     public void setDepartmentRequestQty(Map<String, DepartmentQty> departmentRequestQty) {

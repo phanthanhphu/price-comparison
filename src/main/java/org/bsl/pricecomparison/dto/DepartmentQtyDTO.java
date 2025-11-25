@@ -1,16 +1,18 @@
 package org.bsl.pricecomparison.dto;
 
+import java.math.BigDecimal;
+
 public class DepartmentQtyDTO {
     private String departmentId;
     private String departmentName;
-    private double qty;
-    private double buy;
+    private BigDecimal qty;
+    private BigDecimal buy;
 
-    public DepartmentQtyDTO(String departmentId, String departmentName, double qty, double buy) {
+    public DepartmentQtyDTO(String departmentId, String departmentName, BigDecimal qty, BigDecimal buy) {
         this.departmentId = departmentId;
         this.departmentName = departmentName;
-        this.qty = qty;
-        this.buy = buy;
+        this.qty = qty != null ? qty : BigDecimal.ZERO;
+        this.buy = buy != null ? buy : BigDecimal.ZERO;
     }
 
     // Getters and Setters
@@ -30,19 +32,19 @@ public class DepartmentQtyDTO {
         this.departmentName = departmentName;
     }
 
-    public double getQty() {
+    public BigDecimal getQty() {
         return qty;
     }
 
-    public void setQty(double qty) {
-        this.qty = qty;
+    public void setQty(BigDecimal qty) {
+        this.qty = qty != null ? qty : BigDecimal.ZERO;
     }
 
-    public double getBuy() {
+    public BigDecimal getBuy() {
         return buy;
     }
 
-    public void setBuy(double buy) {
-        this.buy = buy;
+    public void setBuy(BigDecimal buy) {
+        this.buy = buy != null ? buy : BigDecimal.ZERO;
     }
 }

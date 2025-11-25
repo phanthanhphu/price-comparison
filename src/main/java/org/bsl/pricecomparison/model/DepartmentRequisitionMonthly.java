@@ -3,6 +3,8 @@ package org.bsl.pricecomparison.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.math.BigDecimal;
+
 public class DepartmentRequisitionMonthly {
 
     @Schema(description = "Department ID", example = "dept1")
@@ -12,15 +14,15 @@ public class DepartmentRequisitionMonthly {
     private String name;
 
     @Schema(description = "Requested quantity", example = "10")
-    private Integer qty;
+    private BigDecimal qty;
 
     @Schema(description = "Approved buy quantity", example = "8")
-    private Integer buy;
+    private BigDecimal buy;
 
     public DepartmentRequisitionMonthly() {
     }
 
-    public DepartmentRequisitionMonthly(String id, String name, Integer qty, Integer buy) {
+    public DepartmentRequisitionMonthly(String id, String name, BigDecimal qty, BigDecimal buy) {
         this.id = id;
         this.name = name;
         this.qty = qty;
@@ -43,19 +45,19 @@ public class DepartmentRequisitionMonthly {
         this.name = name;
     }
 
-    public Integer getQty() {
+    public BigDecimal getQty() {
         return qty;
     }
 
-    public void setQty(Integer qty) {
+    public void setQty(BigDecimal qty) {
         this.qty = qty;
     }
 
-    public Integer getBuy() {
+    public BigDecimal getBuy() {
         return buy;
     }
 
-    public void setBuy(Integer buy) {
+    public void setBuy(BigDecimal buy) {
         this.buy = buy;
     }
 
@@ -69,15 +71,15 @@ public class DepartmentRequisitionMonthly {
         private String name;
 
         @Schema(description = "Requested quantity", example = "10")
-        private Integer qty;
+        private BigDecimal qty;
 
         @Schema(description = "Approved buy quantity", example = "8")
-        private Integer buy;
+        private BigDecimal buy;
 
         public DepartmentRequestDTO() {
         }
 
-        public DepartmentRequestDTO(String id, String name, Integer qty, Integer buy) {
+        public DepartmentRequestDTO(String id, String name, BigDecimal qty, BigDecimal buy) {
             this.id = id;
             this.name = name;
             this.qty = qty;
@@ -100,19 +102,19 @@ public class DepartmentRequisitionMonthly {
             this.name = name;
         }
 
-        public Integer getQty() {
+        public BigDecimal getQty() {
             return qty;
         }
 
-        public void setQty(Integer qty) {
+        public void setQty(BigDecimal qty) {
             this.qty = qty;
         }
 
-        public Integer getBuy() {
+        public BigDecimal getBuy() {
             return buy;
         }
 
-        public void setBuy(Integer buy) {
+        public void setBuy(BigDecimal buy) {
             this.buy = buy;
         }
     }
