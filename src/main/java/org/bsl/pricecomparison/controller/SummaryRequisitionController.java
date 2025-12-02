@@ -478,13 +478,28 @@ public class SummaryRequisitionController {
             RequisitionMonthly saved = requisitionMonthlyRepository.save(updated);
 
             UpdateRequisitionMonthlyDTO dto = new UpdateRequisitionMonthlyDTO(
-                    saved.getId(), saved.getGroupId(), saved.getProductType1Id(), saved.getProductType2Id(),
-                    saved.getItemDescriptionEN(), saved.getItemDescriptionVN(), saved.getOldSAPCode(), saved.getHanaSAPCode(),
-                    saved.getUnit(), saved.getDepartmentRequisitions(), saved.getDailyMedInventory(), null,
-                    saved.getTotalRequestQty(), null, // useStockQty không dùng
-                    saved.getOrderQty(), saved.getAmount(),
-                    saved.getPrice(), saved.getSupplierName(), saved.getCreatedDate(), saved.getUpdatedDate(),
-                    saved.getFullDescription(), saved.getReason(), saved.getRemark(), saved.getRemarkComparison(),
+                    saved.getId(),
+                    saved.getGroupId(),
+                    saved.getProductType1Id(),
+                    saved.getProductType2Id(),
+                    saved.getItemDescriptionEN(),
+                    saved.getItemDescriptionVN(),
+                    saved.getOldSAPCode(),
+                    saved.getHanaSAPCode(),
+                    saved.getUnit(),
+                    saved.getDepartmentRequisitions(),
+                    saved.getDailyMedInventory(),
+                    saved.getTotalRequestQty(),
+                    saved.getOrderQty(),
+                    saved.getAmount(),
+                    saved.getPrice(),
+                    saved.getSupplierName(),
+                    saved.getCreatedDate(),
+                    saved.getUpdatedDate(),
+                    saved.getFullDescription(),
+                    saved.getReason(),
+                    saved.getRemark(),
+                    saved.getRemarkComparison(),
                     saved.getImageUrls()
             );
 
@@ -1061,7 +1076,7 @@ public class SummaryRequisitionController {
                     if (shape instanceof XSSFPicture) {
                         XSSFPicture pic = (XSSFPicture) shape;
                         XSSFClientAnchor anchor = pic.getClientAnchor();
-                        if (anchor.getCol1() == 13 && anchor.getRow1() <= i && anchor.getRow2() >= i) {
+                        if (anchor.getCol1() == 15 && anchor.getRow1() <= i && anchor.getRow2() >= i) {
                             byte[] imgBytes = pic.getPictureData().getData();
                             String imgPath = saveImage(imgBytes, "img_" + i + "_" + System.currentTimeMillis() + ".png");
                             if (imgPath != null) {
@@ -1636,7 +1651,7 @@ public class SummaryRequisitionController {
         if (req.getDepartmentRequestQty() != null) {
             for (Object value : req.getDepartmentRequestQty().values()) {
                 if (value instanceof DepartmentQty deptQty) {
-                    requestQty += deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
+                    requestQty += deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
                 } else if (value instanceof Double qty) {
                     requestQty += qty.intValue();
                 }

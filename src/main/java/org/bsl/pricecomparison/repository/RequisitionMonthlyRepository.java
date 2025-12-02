@@ -1,5 +1,6 @@
 package org.bsl.pricecomparison.repository;
 
+import org.bsl.pricecomparison.dto.UpdateRequisitionMonthlyDTO;
 import org.bsl.pricecomparison.model.RequisitionMonthly;
 import org.bson.types.ObjectId;
 import org.springframework.data.domain.Page;
@@ -18,6 +19,9 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
 
     List<RequisitionMonthly> findByGroupId(String groupId);
 
+    List<UpdateRequisitionMonthlyDTO> findRequestByGroupId(String groupId);
+
+
     Page<RequisitionMonthly> findByGroupId(String groupId, Pageable pageable);
 
     Optional<RequisitionMonthly> findByGroupIdAndOldSAPCode(String groupId, String oldSAPCode);
@@ -32,4 +36,7 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
     boolean existsBySupplierId(String supplierId);
 
     boolean existsByGroupId(String groupId);
+
+    @Query("{'groupId': ?0, 'oldSAPCode': ?1}")
+    long countByGroupIdAndOldSAPCode(String groupId, String oldSAPCode);
 }

@@ -1,14 +1,13 @@
 package org.bsl.pricecomparison.dto;
 
 import org.bsl.pricecomparison.model.DepartmentRequisitionMonthly;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.DecimalMin;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public class UpdateRequisitionMonthlyDTO {
+
     private String id;
     private String groupId;
     private String productType1Name;
@@ -20,32 +19,19 @@ public class UpdateRequisitionMonthlyDTO {
     private String unit;
     private List<DepartmentRequisitionMonthly> departmentRequisitions;
 
-    @NotNull(message = "Total not issued quantity is required")
-    @DecimalMin(value = "0.0", inclusive = true, message = "Total not issued quantity must be non-negative")
-    private BigDecimal totalNotIssuedQty;
+    // Số lượng MED xác nhận (trước đây là dailyMedInventory)
+    private BigDecimal confirmedMedQuantity;
 
-    @NotNull(message = "In hand quantity is required")
-    @DecimalMin(value = "0.0", inclusive = true, message = "In hand quantity must be non-negative")
-    private BigDecimal inHand;
-
-    @NotNull(message = "Total requested quantity is required")
-    @DecimalMin(value = "0.0", inclusive = true, message = "Total requested quantity must be non-negative")
+    // Tổng số lượng các khoa yêu cầu (phải bằng confirmedMedQuantity)
     private BigDecimal totalRequestQty;
 
-    @NotNull(message = "Actual in hand quantity is required")
-    @DecimalMin(value = "0.0", inclusive = true, message = "Actual in hand quantity must be non-negative")
-    private BigDecimal actualInHand;
-
-    @NotNull(message = "Order quantity is required")
-    @DecimalMin(value = "0.0", inclusive = true, message = "Order quantity must be non-negative")
+    // Số lượng đặt hàng = totalRequestQty (không trừ stock nữa)
     private BigDecimal orderQty;
 
-    @NotNull(message = "Amount is required")
-    @DecimalMin(value = "0.0", inclusive = true, message = "Amount must be non-negative")
+    // Thành tiền
     private BigDecimal amount;
 
-    @NotNull(message = "Price is required")
-    @DecimalMin(value = "0.0", inclusive = true, message = "Price must be non-negative")
+    // Đơn giá
     private BigDecimal price;
 
     private String supplierName;
@@ -57,33 +43,17 @@ public class UpdateRequisitionMonthlyDTO {
     private String remarkComparison;
     private List<String> imageUrls;
 
-    public UpdateRequisitionMonthlyDTO(
-            String id,
-            String groupId,
-            String productType1Name,
-            String productType2Name,
-            String itemDescriptionEN,
-            String itemDescriptionVN,
-            String oldSAPCode,
-            String sapCodeNewSAP,
-            String unit,
-            List<DepartmentRequisitionMonthly> departmentRequisitions,
-            BigDecimal totalNotIssuedQty,
-            BigDecimal inHand,
-            BigDecimal totalRequestQty,
-            BigDecimal actualInHand,
-            BigDecimal orderQty,
-            BigDecimal amount,
-            BigDecimal price,
-            String supplierName,
-            LocalDateTime createdDate,
-            LocalDateTime updatedDate,
-            String fullDescription,
-            String reason,
-            String remark,
-            String remarkComparison,
-            List<String> imageUrls
-    ) {
+
+    private CompletedSupplierDTO selectedSupplier;
+
+    public UpdateRequisitionMonthlyDTO(String id, String groupId, String productType1Name,
+                                       String productType2Name, String itemDescriptionEN,
+                                       String itemDescriptionVN, String oldSAPCode, String sapCodeNewSAP,
+                                       String unit, List<DepartmentRequisitionMonthly> departmentRequisitions,
+                                       BigDecimal confirmedMedQuantity, BigDecimal totalRequestQty, BigDecimal orderQty,
+                                       BigDecimal amount, BigDecimal price, String supplierName, LocalDateTime createdDate,
+                                       LocalDateTime updatedDate, String fullDescription, String reason, String remark,
+                                       String remarkComparison, List<String> imageUrls, CompletedSupplierDTO selectedSupplier) {
         this.id = id;
         this.groupId = groupId;
         this.productType1Name = productType1Name;
@@ -94,10 +64,8 @@ public class UpdateRequisitionMonthlyDTO {
         this.sapCodeNewSAP = sapCodeNewSAP;
         this.unit = unit;
         this.departmentRequisitions = departmentRequisitions;
-        this.totalNotIssuedQty = totalNotIssuedQty;
-        this.inHand = inHand;
+        this.confirmedMedQuantity = confirmedMedQuantity;
         this.totalRequestQty = totalRequestQty;
-        this.actualInHand = actualInHand;
         this.orderQty = orderQty;
         this.amount = amount;
         this.price = price;
@@ -109,9 +77,9 @@ public class UpdateRequisitionMonthlyDTO {
         this.remark = remark;
         this.remarkComparison = remarkComparison;
         this.imageUrls = imageUrls;
+        this.selectedSupplier = selectedSupplier;
     }
 
-    // Getters and setters
     public String getId() {
         return id;
     }
@@ -192,20 +160,12 @@ public class UpdateRequisitionMonthlyDTO {
         this.departmentRequisitions = departmentRequisitions;
     }
 
-    public BigDecimal getTotalNotIssuedQty() {
-        return totalNotIssuedQty;
+    public BigDecimal getConfirmedMedQuantity() {
+        return confirmedMedQuantity;
     }
 
-    public void setTotalNotIssuedQty(BigDecimal totalNotIssuedQty) {
-        this.totalNotIssuedQty = totalNotIssuedQty;
-    }
-
-    public BigDecimal getInHand() {
-        return inHand;
-    }
-
-    public void setInHand(BigDecimal inHand) {
-        this.inHand = inHand;
+    public void setConfirmedMedQuantity(BigDecimal confirmedMedQuantity) {
+        this.confirmedMedQuantity = confirmedMedQuantity;
     }
 
     public BigDecimal getTotalRequestQty() {
@@ -214,14 +174,6 @@ public class UpdateRequisitionMonthlyDTO {
 
     public void setTotalRequestQty(BigDecimal totalRequestQty) {
         this.totalRequestQty = totalRequestQty;
-    }
-
-    public BigDecimal getActualInHand() {
-        return actualInHand;
-    }
-
-    public void setActualInHand(BigDecimal actualInHand) {
-        this.actualInHand = actualInHand;
     }
 
     public BigDecimal getOrderQty() {
@@ -310,5 +262,13 @@ public class UpdateRequisitionMonthlyDTO {
 
     public void setImageUrls(List<String> imageUrls) {
         this.imageUrls = imageUrls;
+    }
+
+    public CompletedSupplierDTO getSelectedSupplier() {
+        return selectedSupplier;
+    }
+
+    public void setSelectedSupplier(CompletedSupplierDTO selectedSupplier) {
+        this.selectedSupplier = selectedSupplier;
     }
 }

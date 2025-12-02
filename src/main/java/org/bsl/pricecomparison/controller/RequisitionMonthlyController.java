@@ -106,7 +106,6 @@ public class RequisitionMonthlyController {
             // Get dailyMedInventory + safeStock
             BigDecimal dailyMedInventory = request.getDailyMedInventory() != null ? request.getDailyMedInventory() : BigDecimal.ZERO;
             BigDecimal safeStock = request.getSafeStock() != null ? request.getSafeStock() : BigDecimal.ZERO;
-            BigDecimal requiredOrderQty = dailyMedInventory.add(safeStock); // Đây là orderQty bắt buộc
 
             // Process department requisitions
             List<DepartmentRequisitionMonthly> deptRequisitions = new ArrayList<>();
@@ -121,7 +120,7 @@ public class RequisitionMonthlyController {
 
                     for (DepartmentRequisitionMonthly.DepartmentRequestDTO dto : deptDTOs) {
                         BigDecimal qty = dto.getQty() != null ? dto.getQty() : BigDecimal.ZERO;
-                        BigDecimal buy = qty; // buy = qty (không cho edit)
+                        BigDecimal buy = dto.getBuy() != null ? dto.getBuy() : BigDecimal.ZERO;
 
                         DepartmentRequisitionMonthly deptReq = new DepartmentRequisitionMonthly(
                                 dto.getId(),
@@ -130,22 +129,12 @@ public class RequisitionMonthlyController {
                                 buy
                         );
                         deptRequisitions.add(deptReq);
-                        totalRequestQty = totalRequestQty.add(buy);
+                        totalRequestQty = totalRequestQty.add(qty);
                     }
                 } catch (JsonProcessingException e) {
                     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                             .body(Map.of("message", "Invalid departmentRequisitions JSON format: " + e.getMessage()));
                 }
-            }
-
-            // === KIỂM TRA TỔNG YÊU CẦU PHẢI BẰNG DAILY + SAFE ===
-            if (totalRequestQty.compareTo(requiredOrderQty) != 0) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of(
-                                "message",
-                                String.format("Total request quantity (%.2f) must equal Daily Med Inventory + Safe Stock (%.2f)",
-                                        totalRequestQty, requiredOrderQty)
-                        ));
             }
 
             // Create RequisitionMonthly entity
@@ -179,8 +168,8 @@ public class RequisitionMonthlyController {
             // Tính toán các trường
             requisition.setTotalRequestQty(totalRequestQty);
             requisition.setUseStockQty(BigDecimal.ZERO); // Không dùng nữa, để 0
-            requisition.setOrderQty(requiredOrderQty);   // orderQty = daily + safe
-            requisition.setAmount(requisition.getPrice().multiply(requiredOrderQty));
+            requisition.setOrderQty(dailyMedInventory);
+            requisition.setAmount(requisition.getPrice().multiply(dailyMedInventory));
 
             // Handle image uploads
             List<String> imageUrls = new ArrayList<>();
@@ -473,7 +462,7 @@ public class RequisitionMonthlyController {
             @PathVariable String id,
             @ModelAttribute UpdateRequisitionMonthlyRequest request) {
         try {
-            // Validate ID
+            // 1. Validate ID
             Optional<RequisitionMonthly> requisitionOptional = requisitionMonthlyRepository.findById(id);
             if (requisitionOptional.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -482,12 +471,12 @@ public class RequisitionMonthlyController {
 
             RequisitionMonthly requisition = requisitionOptional.get();
 
-            // Update oldSAPCode if provided
+            // 2. Update oldSAPCode if provided
             if (request.getOldSAPCode() != null && !request.getOldSAPCode().isEmpty()) {
                 requisition.setOldSAPCode(request.getOldSAPCode());
             }
 
-            // Update supplier info if provided
+            // 3. Update supplier info if provided
             if (request.getSupplierId() != null && !request.getSupplierId().isEmpty()) {
                 Optional<SupplierProduct> supplierOptional = supplierRepository.findById(request.getSupplierId());
                 if (supplierOptional.isEmpty()) {
@@ -499,17 +488,17 @@ public class RequisitionMonthlyController {
                 requisition.setSupplierName(supplier.getSupplierName());
                 requisition.setUnit(supplier.getUnit());
                 requisition.setPrice(supplier.getPrice() != null ? supplier.getPrice() : BigDecimal.ZERO);
-                requisition.setGoodType(supplier.getGoodType() != null ? supplier.getGoodType(): "");
-                requisition.setCurrency(supplier.getCurrency() != null ? supplier.getCurrency(): "VND");
+                requisition.setGoodType(supplier.getGoodType() != null ? supplier.getGoodType() : "");
+                requisition.setCurrency(supplier.getCurrency() != null ? supplier.getCurrency() : "VND");
             }
 
-            // Update basic fields
+            // 4. Update basic fields
             if (request.getGroupId() != null) requisition.setGroupId(request.getGroupId());
             if (request.getItemDescriptionEN() != null) requisition.setItemDescriptionEN(request.getItemDescriptionEN());
             if (request.getItemDescriptionVN() != null) requisition.setItemDescriptionVN(request.getItemDescriptionVN());
             if (request.getHanaSAPCode() != null) requisition.setHanaSAPCode(request.getHanaSAPCode());
             if (request.getDailyMedInventory() != null) requisition.setDailyMedInventory(request.getDailyMedInventory());
-            if (request.getSafeStock() != null) requisition.setSafeStock(request.getSafeStock());
+            // ĐÃ BỎ: safeStock
             if (request.getFullDescription() != null) requisition.setFullDescription(request.getFullDescription());
             if (request.getReason() != null) requisition.setReason(request.getReason());
             if (request.getRemark() != null) requisition.setRemark(request.getRemark());
@@ -518,7 +507,7 @@ public class RequisitionMonthlyController {
             if (request.getProductType2Id() != null) requisition.setProductType2Id(request.getProductType2Id());
             requisition.setType(RequisitionType.MONTHLY);
 
-            // Update department requisitions using BigDecimal
+            // 5. Update department requisitions
             List<DepartmentRequisitionMonthly> deptRequisitions = requisition.getDepartmentRequisitions();
             if (request.getDepartmentRequisitions() != null && !request.getDepartmentRequisitions().isEmpty()) {
                 try {
@@ -541,29 +530,31 @@ public class RequisitionMonthlyController {
                 }
             }
 
-            // Recalculate totalRequestQty
-            BigDecimal totalRequestQty = deptRequisitions.stream()
-                    .map(DepartmentRequisitionMonthly::getBuy)
+            // 6. TÍNH TOÁN MỚI: orderQty = Confirmed MED Quantity (dailyMedInventory)
+            BigDecimal medConfirmedQty = requisition.getDailyMedInventory() != null
+                    ? requisition.getDailyMedInventory()
+                    : BigDecimal.ZERO;
+
+// Tổng qty yêu cầu từ các khoa (chỉ để lưu thông tin, không dùng tính orderQty nữa)
+            BigDecimal totalRequestQtyFromDepts = deptRequisitions.stream()
+                    .map(DepartmentRequisitionMonthly::getQty)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            requisition.setTotalRequestQty(totalRequestQty);
 
-            // Recalculate useStockQty
-            BigDecimal useStockQty = (requisition.getDailyMedInventory() != null ? requisition.getDailyMedInventory() : BigDecimal.ZERO)
-                    .subtract(requisition.getSafeStock() != null ? requisition.getSafeStock() : BigDecimal.ZERO);
-            if (useStockQty.compareTo(BigDecimal.ZERO) < 0) useStockQty = BigDecimal.ZERO;
-            requisition.setUseStockQty(useStockQty);
+// Cập nhật các trường tổng
+            requisition.setTotalRequestQty(totalRequestQtyFromDepts);
 
-            // Recalculate orderQty
-            BigDecimal orderQty = totalRequestQty.subtract(useStockQty);
-            if (orderQty.compareTo(BigDecimal.ZERO) < 0) orderQty = BigDecimal.ZERO;
-            requisition.setOrderQty(orderQty);
+// Không còn trừ stock
+            requisition.setUseStockQty(BigDecimal.ZERO);
 
-            // Recalculate amount
+// ORDERQTY = MED CONFIRMED QUANTITY (YÊU CẦU MỚI)
+            requisition.setOrderQty(medConfirmedQty);
+
+// Tính amount = price × orderQty (dùng Confirmed MED làm số lượng đặt hàng)
             BigDecimal amount = (requisition.getPrice() != null ? requisition.getPrice() : BigDecimal.ZERO)
-                    .multiply(orderQty);
+                    .multiply(medConfirmedQty);
             requisition.setAmount(amount);
 
-            // Handle images deletion
+            // 8. Handle images deletion (giữ nguyên)
             List<String> currentImageUrls = requisition.getImageUrls() != null ? requisition.getImageUrls() : new ArrayList<>();
             if (request.getImagesToDelete() != null && !request.getImagesToDelete().isBlank()) {
                 try {
@@ -586,7 +577,7 @@ public class RequisitionMonthlyController {
                 }
             }
 
-            // Handle new image uploads
+            // 9. Handle new image uploads (giữ nguyên)
             List<MultipartFile> files = request.getFiles();
             if (files != null && !files.isEmpty()) {
                 for (MultipartFile file : files) {
@@ -603,13 +594,9 @@ public class RequisitionMonthlyController {
             }
             requisition.setImageUrls(currentImageUrls);
 
-            // Update timestamp
+            // 10. Update timestamp & save
             requisition.setUpdatedDate(LocalDateTime.now());
-
-            // Save
             RequisitionMonthly updatedRequisition = requisitionMonthlyRepository.save(requisition);
-
-            // Response DTO
             UpdateRequisitionMonthlyDTO responseDTO = new UpdateRequisitionMonthlyDTO(
                     updatedRequisition.getId(),
                     updatedRequisition.getGroupId(),
@@ -621,13 +608,17 @@ public class RequisitionMonthlyController {
                     updatedRequisition.getHanaSAPCode(),
                     updatedRequisition.getUnit(),
                     updatedRequisition.getDepartmentRequisitions(),
+
                     updatedRequisition.getDailyMedInventory(),
-                    updatedRequisition.getSafeStock(),
+
                     updatedRequisition.getTotalRequestQty(),
-                    updatedRequisition.getUseStockQty(),
+
                     updatedRequisition.getOrderQty(),
+
                     updatedRequisition.getAmount(),
+
                     updatedRequisition.getPrice(),
+
                     updatedRequisition.getSupplierName(),
                     updatedRequisition.getCreatedDate(),
                     updatedRequisition.getUpdatedDate(),
@@ -635,13 +626,15 @@ public class RequisitionMonthlyController {
                     updatedRequisition.getReason(),
                     updatedRequisition.getRemark(),
                     updatedRequisition.getRemarkComparison(),
-                    updatedRequisition.getImageUrls()
+                    updatedRequisition.getImageUrls(),
+                    null
             );
 
             return ResponseEntity.ok(responseDTO);
 
         } catch (Exception e) {
             System.err.println("Error processing request: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Unexpected error: " + e.getMessage());
         }
@@ -809,7 +802,7 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
     String goodtype = "";
 
     if (sapCode != null && !sapCode.isEmpty()) {
-        List<SupplierProduct> suppliers = supplierProductRepository.findBySapCodeAndCurrency(sapCode, currency);
+        List<SupplierProduct> suppliers = supplierProductRepository.findBySapCodeAndCurrencyIgnoreCase(sapCode, currency);
 
         Map<String, List<SupplierProduct>> supplierGroups = suppliers.stream()
                 .collect(Collectors.groupingBy(
@@ -1058,18 +1051,28 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
                 }
 
                 // === XỬ LÝ HÌNH ẢNH (CỘT N - index 13) - SỬA CHÍNH XÁC VỚI MERGED CELL ===
+                // === XỬ LÝ HÌNH ẢNH (CỘT O - index 14) - ĐÃ ĐỒNG NHẤT VỚI MONTHLY ===
                 List<String> imageUrls = new ArrayList<>();
                 for (XSSFShape shape : drawing.getShapes()) {
                     if (shape instanceof XSSFPicture pic) {
                         XSSFClientAnchor anchor = pic.getClientAnchor();
-                        // Kiểm tra hình có giao với hàng i và cột 13 (N)
+
                         boolean inRow = anchor.getRow1() <= i && anchor.getRow2() >= i;
-                        boolean inCol = anchor.getCol1() <= 13 && anchor.getCol2() >= 13;
+                        boolean inCol = anchor.getCol1() <= 14 && anchor.getCol2() >= 14;
+
                         if (inRow && inCol) {
-                            byte[] imgBytes = pic.getPictureData().getData();
-                            String imgPath = saveImage(imgBytes, "img_" + i + "_" + System.currentTimeMillis() + ".png");
-                            if (imgPath != null) {
-                                imageUrls.add(imgPath);
+                            try {
+                                byte[] imgBytes = pic.getPictureData().getData();
+                                String mimeType = pic.getPictureData().getMimeType();
+                                String ext = getImageExtension(mimeType);
+                                String fileName = "req_" + groupId + "_" + (i + 1) + "_" + System.currentTimeMillis() + ext;
+
+                                String imgPath = saveImage(imgBytes, fileName, mimeType);
+                                if (imgPath != null) {
+                                    imageUrls.add(imgPath);
+                                }
+                            } catch (Exception e) {
+                                System.err.println("Image save failed at row " + (i + 1) + ": " + e.getMessage());
                             }
                         }
                     }
@@ -1181,11 +1184,6 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
                 Collections.singletonList(new RequisitionMonthly() {{ setRemark(message); }})
         );
     }
-    // Helper method to validate No (STT)
-    private boolean isValidNo(Cell cell) {
-        if (cell == null) return false;
-        return cell.getCellType() == CellType.NUMERIC; // Only accept numeric
-    }
 
     // Helper method to get cell value
     private String getCellValue(Cell cell) {
@@ -1214,30 +1212,6 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
             default:
                 return null;
         }
-    }
-    // Helper method to parse Integer value
-    private Integer parseInteger(Cell cell) {
-        if (cell == null) return null;
-        try {
-            if (cell.getCellType() == CellType.NUMERIC) {
-                double value = cell.getNumericCellValue();
-                if (value == Math.floor(value) && !Double.isInfinite(value)) {
-                    return (int) value;
-                }
-                return null; // Non-integer value
-            } else if (cell.getCellType() == CellType.STRING) {
-                return Integer.parseInt(cell.getStringCellValue().trim());
-            } else if (cell.getCellType() == CellType.FORMULA) {
-                double value = cell.getNumericCellValue();
-                if (value == Math.floor(value) && !Double.isInfinite(value)) {
-                    return (int) value;
-                }
-                return null; // Non-integer value
-            }
-        } catch (Exception e) {
-            return null;
-        }
-        return null;
     }
 
     // Helper method to parse Double value
@@ -1287,6 +1261,33 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
         return row.getCell(colIndex, Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
     }
 
+    private String saveImage(byte[] imageBytes, String fileName, String mimeType) throws IOException {
+        if (imageBytes == null || imageBytes.length == 0) return null;
+
+        Set<String> allowed = Set.of("image/jpeg", "image/jpg", "image/png", "image/gif", "image/bmp", "image/webp");
+        if (!allowed.contains(mimeType)) {
+            System.err.println("Skipped unsupported format: " + mimeType);
+            return null;
+        }
+
+        Path path = Paths.get(UPLOAD_DIR).resolve(fileName);
+        Files.createDirectories(path.getParent());
+        Files.write(path, imageBytes);
+
+        return "/uploads/" + fileName;
+    }
+
+    private String getImageExtension(String mimeType) {
+        return switch (mimeType) {
+            case "image/jpeg", "image/jpg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            case "image/bmp" -> ".bmp";
+            case "image/webp" -> ".webp";
+            default -> ".png";
+        };
+    }
+
     private String saveImage(byte[] imageBytes, String originalFileName) throws IOException {
         if (imageBytes == null || imageBytes.length == 0) {
             return null;
@@ -1315,5 +1316,90 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public void autoSelectBestSupplierAndSave(
+            List<UpdateRequisitionMonthlyDTO> dtoList,
+            String currency) {
+
+        if (dtoList == null || dtoList.isEmpty()) return;
+        if (currency == null || currency.isBlank()) currency = "VND";
+
+        Map<String, RequisitionMonthly> entityMap = dtoList.stream()
+                .collect(Collectors.toMap(
+                        UpdateRequisitionMonthlyDTO::getId,
+                        dto -> requisitionMonthlyRepository.findById(dto.getId())
+                                .orElseThrow(() -> new RuntimeException("Item not found: " + dto.getId()))
+                ));
+
+        for (UpdateRequisitionMonthlyDTO dto : dtoList) {
+            String sapCode = dto.getOldSAPCode();
+            String itemDescVN = dto.getItemDescriptionVN();
+
+            String searchKey = null;
+            boolean useSapCode = sapCode != null
+                    && !sapCode.trim().isEmpty()
+                    && !"NEW".equalsIgnoreCase(sapCode.trim());
+
+            if (useSapCode) {
+                searchKey = sapCode.trim();
+            } else if (itemDescVN != null && !itemDescVN.trim().isEmpty()) {
+                searchKey = itemDescVN.trim();
+            } else {
+                continue;
+            }
+
+            // Tìm supplier
+            List<SupplierProduct> suppliers = new ArrayList<>();
+            if (useSapCode) {
+                suppliers = supplierProductRepository
+                        .findBySapCodeAndCurrencyIgnoreCase(searchKey, currency);
+            }
+            if (suppliers.isEmpty()) {
+                suppliers = supplierProductRepository
+                        .findByItemNoContainingIgnoreCaseAndCurrency(searchKey, currency);
+            }
+
+            if (suppliers.isEmpty()) continue;
+
+            // TÌM NHÀ CUNG CẤP GIÁ RẺ NHẤT
+            SupplierProduct best = suppliers.stream()
+                    .filter(sp -> sp.getPrice() != null)
+                    .min(Comparator.comparing(SupplierProduct::getPrice))
+                    .orElse(null);
+
+            if (best == null) continue;
+
+            // TẠO CompletedSupplierDTO CHO GIÁ TỐT NHẤT
+            CompletedSupplierDTO bestDto = new CompletedSupplierDTO(
+                    best.getId(),
+                    best.getSupplierName(),
+                    best.getPrice(),
+                    best.getUnit(),
+                    1,           // isSelected = 1
+                    true         // isBestPrice = true
+            );
+
+            // GÁN VÀO DTO (chính xác field bạn có)
+            dto.setSelectedSupplier(bestDto);
+            dto.setPrice(best.getPrice());
+            dto.setSupplierName(best.getSupplierName());
+            if (dto.getOrderQty() != null) {
+                dto.setAmount(best.getPrice().multiply(dto.getOrderQty()));
+            }
+
+            // GÁN VÀO ENTITY ĐỂ LƯU DB
+            RequisitionMonthly entity = entityMap.get(dto.getId());
+            entity.setSupplierId(best.getId());
+            entity.setSupplierName(best.getSupplierName());
+            entity.setPrice(best.getPrice());
+            entity.setUnit(best.getUnit() != null ? best.getUnit() : entity.getUnit());
+            if (entity.getOrderQty() != null) {
+                entity.setAmount(best.getPrice().multiply(entity.getOrderQty()));
+            }
+        }
+
+        // SAVEALL – LƯU TẤT CẢ VÀO DB
+        requisitionMonthlyRepository.saveAll(entityMap.values());
     }
 }

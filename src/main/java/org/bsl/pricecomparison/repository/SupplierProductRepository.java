@@ -37,18 +37,12 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
     @Query("{ 'sapCode': { $regex: ?0, $options: 'i' }, 'currency': { $regex: ?1, $options: 'i' } }")
     List<SupplierProduct> findBySapCodeAndCurrency(String sapCode, String currency);
 
+
+    @Query("{ 'sapCode': { $regex: '^?0$', $options: 'i' }, 'currency': { $regex: '^?1$', $options: 'i' } }")
+    List<SupplierProduct> findBySapCodeAndCurrencyIgnoreCase(String sapCode, String currency);
+
     Optional<SupplierProduct> findById(String id);
 
-    // 🔥 CASE-INSENSITIVE SEARCH với MongoDB Text Index
-    @Query("{'supplierName': { $regex: ?0, $options: 'i' }}")
-    List<SupplierProduct> findBySupplierNameContainingIgnoreCase(String supplierName);
-
-    // 🔥 OPTIMIZED: Find by multiple supplier IDs
-    @Query("{'_id': { $in: ?0 }}")
-    List<SupplierProduct> findByIds(List<String> ids);
-
-
-    // 🔥 THÊM VÀO CUỐI SupplierProductRepository.java
-    @Query("{ 'sapCode': { $in: ?0 }, 'currency': { $in: ?1 } }")
-    List<SupplierProduct> findBySapCodesAndCurrencies(List<String> sapCodes, Set<String> currencies);
+    @Query("{ 'itemNo': { $regex: ?0, $options: 'i' }, 'currency': { $regex: '^?1$', $options: 'i' } }")
+    List<SupplierProduct> findByItemNoContainingIgnoreCaseAndCurrency(String itemNo, String currency);
 }
