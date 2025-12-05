@@ -500,7 +500,10 @@ public class SummaryRequisitionController {
                     saved.getReason(),
                     saved.getRemark(),
                     saved.getRemarkComparison(),
-                    saved.getImageUrls()
+                    saved.getImageUrls(),
+                    null,
+                    null,
+                    null
             );
 
             return ResponseEntity.ok(dto);
@@ -1071,12 +1074,38 @@ public class SummaryRequisitionController {
                 String reason   = getCellValue(reasonCell);
 
                 // === XỬ LÝ HÌNH ẢNH (CỘT N - index 13) - ĐÃ SỬA CHÍNH XÁC ===
+//                List<String> imageUrls = new ArrayList<>();
+//                for (XSSFShape shape : drawing.getShapes()) {
+//                    if (shape instanceof XSSFPicture) {
+//                        XSSFPicture pic = (XSSFPicture) shape;
+//                        XSSFClientAnchor anchor = pic.getClientAnchor();
+//                        if (anchor.getCol1() == 14 && anchor.getRow1() <= i && anchor.getRow2() >= i) {
+//                            byte[] imgBytes = pic.getPictureData().getData();
+//                            String imgPath = saveImage(imgBytes, "img_" + i + "_" + System.currentTimeMillis() + ".png");
+//                            if (imgPath != null) {
+//                                imageUrls.add(imgPath);
+//                            }
+//                        }
+//                    }
+//                }
+
                 List<String> imageUrls = new ArrayList<>();
+
                 for (XSSFShape shape : drawing.getShapes()) {
                     if (shape instanceof XSSFPicture) {
                         XSSFPicture pic = (XSSFPicture) shape;
                         XSSFClientAnchor anchor = pic.getClientAnchor();
-                        if (anchor.getCol1() == 15 && anchor.getRow1() <= i && anchor.getRow2() >= i) {
+
+                        int col1 = anchor.getCol1();
+                        int col2 = anchor.getCol2();
+                        int row1 = anchor.getRow1();
+                        int row2 = anchor.getRow2();
+
+                        // Cho phép ảnh nằm ở cột O hoặc lệch sang P (Excel hay bị)
+                        boolean colMatches = (col1 == 14 || col1 == 15 || (col1 <= 14 && col2 >= 14));
+                        boolean rowMatches = (row1 <= i && i <= row2);
+
+                        if (colMatches && rowMatches) {
                             byte[] imgBytes = pic.getPictureData().getData();
                             String imgPath = saveImage(imgBytes, "img_" + i + "_" + System.currentTimeMillis() + ".png");
                             if (imgPath != null) {
@@ -1085,6 +1114,7 @@ public class SummaryRequisitionController {
                         }
                     }
                 }
+
 
                 // === XỬ LÝ DEPARTMENT ===
                 String deptId = null;
@@ -1189,11 +1219,6 @@ public class SummaryRequisitionController {
                 Collections.singletonList(new RequisitionMonthly() {{ setRemark(message); }})
         );
     }
-    // Helper method to validate No (STT)
-    private boolean isValidNo(Cell cell) {
-        if (cell == null) return false;
-        return cell.getCellType() == CellType.NUMERIC; // Only accept numeric
-    }
 
     // Helper method to get cell value
     private String getCellValue(Cell cell) {
@@ -1208,48 +1233,6 @@ public class SummaryRequisitionController {
             default:
                 return null;
         }
-    }
-
-    // Helper method to parse Integer value
-    private Integer parseInteger(Cell cell) {
-        if (cell == null) return null;
-        try {
-            if (cell.getCellType() == CellType.NUMERIC) {
-                double value = cell.getNumericCellValue();
-                if (value == Math.floor(value) && !Double.isInfinite(value)) {
-                    return (int) value;
-                }
-                return null; // Non-integer value
-            } else if (cell.getCellType() == CellType.STRING) {
-                return Integer.parseInt(cell.getStringCellValue().trim());
-            } else if (cell.getCellType() == CellType.FORMULA) {
-                double value = cell.getNumericCellValue();
-                if (value == Math.floor(value) && !Double.isInfinite(value)) {
-                    return (int) value;
-                }
-                return null; // Non-integer value
-            }
-        } catch (Exception e) {
-            return null;
-        }
-        return null;
-    }
-
-    // Helper method to parse Double value
-    private Double parseDouble(Cell cell) {
-        if (cell == null) return null;
-        try {
-            if (cell.getCellType() == CellType.NUMERIC) {
-                return cell.getNumericCellValue();
-            } else if (cell.getCellType() == CellType.STRING) {
-                return Double.parseDouble(cell.getStringCellValue().trim());
-            } else if (cell.getCellType() == CellType.FORMULA) {
-                return cell.getNumericCellValue();
-            }
-        } catch (Exception e) {
-            return null;
-        }
-        return null;
     }
 
     // Helper method to parse BigDecimal value
@@ -1299,17 +1282,6 @@ public class SummaryRequisitionController {
         Files.write(path, imageBytes); // Ghi byte[] trực tiếp vào file
 
         return "/uploads/" + fileName;
-    }
-
-    private boolean isValidStt(Cell cell) {
-        if (cell == null) return false;
-        try {
-            double sttValue = cell.getNumericCellValue();
-            int sttInt = (int) sttValue;
-            return sttValue == sttInt && sttInt >= 1;
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     @GetMapping("/search/comparison")

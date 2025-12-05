@@ -11,6 +11,8 @@ import java.util.Collections;
 @Schema(description = "DTO for comparison requisition details")
 public class MonthlyComparisonRequisitionDTO {
 
+    private String id;
+
     @Schema(description = "English name", example = "Product XYZ")
     private String englishName;
 
@@ -102,41 +104,20 @@ public class MonthlyComparisonRequisitionDTO {
     @Schema(description = "Good type of the selected supplier", example = "Electronics")
     private String goodtype;
 
-    // ================= Constructor Full =================
-    public MonthlyComparisonRequisitionDTO(
-            String englishName,
-            String vietnameseName,
-            String oldSapCode,
-            String hanaSapCode,
-            List<SupplierDTO> suppliers,
-            String remarkComparison,
-            List<DepartmentRequestDTO> departmentRequests,
-            BigDecimal amount,
-            BigDecimal amtDifference,
-            BigDecimal percentage,
-            BigDecimal highestPrice,
-            Boolean isBestPrice,
-            String type1,
-            String type2,
-            String type1Name,
-            String type2Name,
-            String unit,
-            BigDecimal dailyMedInventory,
-            BigDecimal totalRequestQty,
-            BigDecimal safeStock,
-            BigDecimal useStockQty,
-            BigDecimal orderQty,
-            BigDecimal price,
-            String currency,
-            String goodtype
-    ) {
+    public MonthlyComparisonRequisitionDTO(String id, String englishName, String vietnameseName, String oldSapCode,
+                                           String hanaSapCode, List<SupplierDTO> suppliers, String remarkComparison,
+                                           List<DepartmentRequestDTO> departmentRequests, BigDecimal amount, BigDecimal amtDifference,
+                                           BigDecimal percentage, BigDecimal highestPrice, Boolean isBestPrice, String type1, String type2,
+                                           String type1Name, String type2Name, String unit, BigDecimal dailyMedInventory, BigDecimal totalRequestQty,
+                                           BigDecimal safeStock, BigDecimal useStockQty, BigDecimal orderQty, BigDecimal price, String currency, String goodtype) {
+        this.id = id;
         this.englishName = englishName;
         this.vietnameseName = vietnameseName;
         this.oldSapCode = oldSapCode;
         this.hanaSapCode = hanaSapCode;
         this.suppliers = suppliers;
         this.remarkComparison = remarkComparison;
-        this.departmentRequests = departmentRequests != null ? departmentRequests : Collections.emptyList();
+        this.departmentRequests = departmentRequests;
         this.amount = amount;
         this.amtDifference = amtDifference;
         this.percentage = percentage;
@@ -155,6 +136,14 @@ public class MonthlyComparisonRequisitionDTO {
         this.price = price;
         this.currency = currency;
         this.goodtype = goodtype;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
     }
 
     // ================= Getter/Setter =================

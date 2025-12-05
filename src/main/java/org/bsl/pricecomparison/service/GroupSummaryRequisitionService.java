@@ -159,9 +159,9 @@ public class GroupSummaryRequisitionService {
 
         String trimmedStatus = newStatus.trim();
 
-        // 3. Check user role (Admin or Leader) → bypass transition rules
+        // 3. Kiểm tra role của user (ADMIN hoặc LEADER)
         boolean isAdminOrLeader = false;
-        if (userId != null && !userId.trim().isEmpty()) {
+        if (userId != null && !userId.isBlank()) {
             Optional<User> userOpt = userService.findById(userId);
             if (userOpt.isPresent()) {
                 String role = userOpt.get().getRole();
@@ -169,7 +169,13 @@ public class GroupSummaryRequisitionService {
             }
         }
 
-        // 4. Enforce status transition for non-privileged users
+        // 4. CASE ĐẶC BIỆT: Chỉ Admin/Leader mới được chuyển sang COMPLETED
+        if ("COMPLETED".equalsIgnoreCase(trimmedStatus) && !isAdminOrLeader) {
+            throw new IllegalArgumentException(
+                    "Only users with role ADMIN or LEADER are allowed to change status to COMPLETED");
+        }
+
+        // 5. Với user thường (không phải Admin/Leader) → vẫn phải tuân thủ quy tắc transition
         if (!isAdminOrLeader) {
             String currentStatus = group.getStatus();
             if (currentStatus == null) {
@@ -180,11 +186,12 @@ public class GroupSummaryRequisitionService {
                         "Invalid status transition from '" + currentStatus + "' to '" + trimmedStatus + "'");
             }
         }
+        // Admin/Leader được bỏ qua transition rule (như cũ)
 
-        // 5. Apply the new status
+        // 6. Apply the new status
         group.setStatus(trimmedStatus);
 
-        // 6. Save and return
+        // 7. Save and return
         GroupSummaryRequisition saved = groupSummaryRequisitionRepository.save(group);
         return Optional.of(saved);
     }

@@ -35,6 +35,9 @@ public class GroupSummaryRequisitionController {
     @Autowired
     private RequisitionMonthlyRepository requisitionMonthlyRepository;
 
+    @Autowired
+    private RequisitionMonthlyController requisitionMonthlyController;
+
     @PostMapping
     public ResponseEntity<?> createGroupSummaryRequisition(@RequestBody GroupSummaryRequisition groupSummaryRequisition) {
         try {
@@ -119,7 +122,9 @@ public class GroupSummaryRequisitionController {
         try {
             Optional<GroupSummaryRequisition> updated = groupSummaryRequisitionService
                     .updateStatusOnly(groupId, newStatus, userId);
-
+            if (newStatus.equals("Completed")) {
+                requisitionMonthlyController.autoSelectBestSupplierAndSave(groupId, updated.get().getCurrency());
+            }
             return updated
                     .map(g -> ResponseEntity.ok(Map.of(
                             "message", "Status updated successfully!"

@@ -679,7 +679,8 @@ public class SupplierProductController {
                 dto.setProductType1Id(Objects.toString(product.getProductType1Id(), ""));
                 dto.setProductType2Id(Objects.toString(product.getProductType2Id(), ""));
                 dto.setPrice(product.getPrice() != null ? product.getPrice() : BigDecimal.ZERO);
-
+                dto.setCreatedAt(product.getCreatedAt());
+                dto.setUpdatedAt(product.getUpdatedAt());
                 if (product.getProductType1Id() != null && !product.getProductType1Id().isEmpty()) {
                     productType1Repository.findById(product.getProductType1Id()).ifPresent(type1 -> {
                         dto.setProductType1Name(Objects.toString(type1.getName(), ""));

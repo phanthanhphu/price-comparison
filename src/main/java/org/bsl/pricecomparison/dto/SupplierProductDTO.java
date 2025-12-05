@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.Pattern;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -11,6 +12,7 @@ import java.util.List;
  * Represents a supplier product with validated fields for frontend consumption.
  */
 public class SupplierProductDTO {
+
     private String id;
     private String supplierCode;
     private String supplierName;
@@ -28,7 +30,7 @@ public class SupplierProductDTO {
 
     private String size;
 
-    /** Price as BigDecimal, serialized as string with currency-specific formatting (e.g., "1000000" for VND, "22.00" for USD/EURO) */
+    /** Price as BigDecimal, serialized as string with currency-specific formatting */
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private BigDecimal price;
 
@@ -38,6 +40,15 @@ public class SupplierProductDTO {
     private String productType1Name;
     private String productType2Id;
     private String productType2Name;
+
+    // NEW: Timestamp fields – formatted as ISO 8601 (e.g., "2025-04-05T10:30:45")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime createdAt;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime updatedAt;
+
+    // === GETTERS & SETTERS ===
 
     public String getId() {
         return id;
@@ -181,5 +192,22 @@ public class SupplierProductDTO {
 
     public void setProductType2Name(String productType2Name) {
         this.productType2Name = productType2Name;
+    }
+
+    // NEW: createdAt & updatedAt
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

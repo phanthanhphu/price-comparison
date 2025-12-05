@@ -4,6 +4,7 @@ import org.bsl.pricecomparison.model.DepartmentRequisitionMonthly;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 
 public class UpdateRequisitionMonthlyDTO {
@@ -19,22 +20,13 @@ public class UpdateRequisitionMonthlyDTO {
     private String unit;
     private List<DepartmentRequisitionMonthly> departmentRequisitions;
 
-    // Số lượng MED xác nhận (trước đây là dailyMedInventory)
     private BigDecimal confirmedMedQuantity;
-
-    // Tổng số lượng các khoa yêu cầu (phải bằng confirmedMedQuantity)
     private BigDecimal totalRequestQty;
-
-    // Số lượng đặt hàng = totalRequestQty (không trừ stock nữa)
     private BigDecimal orderQty;
-
-    // Thành tiền
     private BigDecimal amount;
-
-    // Đơn giá
     private BigDecimal price;
-
     private String supplierName;
+
     private LocalDateTime createdDate;
     private LocalDateTime updatedDate;
     private String fullDescription;
@@ -42,18 +34,13 @@ public class UpdateRequisitionMonthlyDTO {
     private String remark;
     private String remarkComparison;
     private List<String> imageUrls;
-
+    private String statusBestPrice;
 
     private CompletedSupplierDTO selectedSupplier;
 
-    public UpdateRequisitionMonthlyDTO(String id, String groupId, String productType1Name,
-                                       String productType2Name, String itemDescriptionEN,
-                                       String itemDescriptionVN, String oldSAPCode, String sapCodeNewSAP,
-                                       String unit, List<DepartmentRequisitionMonthly> departmentRequisitions,
-                                       BigDecimal confirmedMedQuantity, BigDecimal totalRequestQty, BigDecimal orderQty,
-                                       BigDecimal amount, BigDecimal price, String supplierName, LocalDateTime createdDate,
-                                       LocalDateTime updatedDate, String fullDescription, String reason, String remark,
-                                       String remarkComparison, List<String> imageUrls, CompletedSupplierDTO selectedSupplier) {
+    private List<CompletedSupplierDTO> supplierComparisonList;
+
+    public UpdateRequisitionMonthlyDTO(String id, String groupId, String productType1Name, String productType2Name, String itemDescriptionEN, String itemDescriptionVN, String oldSAPCode, String sapCodeNewSAP, String unit, List<DepartmentRequisitionMonthly> departmentRequisitions, BigDecimal confirmedMedQuantity, BigDecimal totalRequestQty, BigDecimal orderQty, BigDecimal amount, BigDecimal price, String supplierName, LocalDateTime createdDate, LocalDateTime updatedDate, String fullDescription, String reason, String remark, String remarkComparison, List<String> imageUrls, String statusBestPrice, CompletedSupplierDTO selectedSupplier, List<CompletedSupplierDTO> supplierComparisonList) {
         this.id = id;
         this.groupId = groupId;
         this.productType1Name = productType1Name;
@@ -77,7 +64,9 @@ public class UpdateRequisitionMonthlyDTO {
         this.remark = remark;
         this.remarkComparison = remarkComparison;
         this.imageUrls = imageUrls;
+        this.statusBestPrice = statusBestPrice;
         this.selectedSupplier = selectedSupplier;
+        this.supplierComparisonList = supplierComparisonList;
     }
 
     public String getId() {
@@ -264,11 +253,27 @@ public class UpdateRequisitionMonthlyDTO {
         this.imageUrls = imageUrls;
     }
 
+    public String getStatusBestPrice() {
+        return statusBestPrice;
+    }
+
+    public void setStatusBestPrice(String statusBestPrice) {
+        this.statusBestPrice = statusBestPrice;
+    }
+
     public CompletedSupplierDTO getSelectedSupplier() {
         return selectedSupplier;
     }
 
     public void setSelectedSupplier(CompletedSupplierDTO selectedSupplier) {
         this.selectedSupplier = selectedSupplier;
+    }
+
+    public List<CompletedSupplierDTO> getSupplierComparisonList() {
+        return supplierComparisonList;
+    }
+
+    public void setSupplierComparisonList(List<CompletedSupplierDTO> supplierComparisonList) {
+        this.supplierComparisonList = supplierComparisonList;
     }
 }

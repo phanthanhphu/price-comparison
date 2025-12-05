@@ -29,6 +29,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
@@ -535,21 +536,21 @@ public class RequisitionMonthlyController {
                     ? requisition.getDailyMedInventory()
                     : BigDecimal.ZERO;
 
-// Tổng qty yêu cầu từ các khoa (chỉ để lưu thông tin, không dùng tính orderQty nữa)
+            // Tổng qty yêu cầu từ các khoa (chỉ để lưu thông tin, không dùng tính orderQty nữa)
             BigDecimal totalRequestQtyFromDepts = deptRequisitions.stream()
                     .map(DepartmentRequisitionMonthly::getQty)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-// Cập nhật các trường tổng
+            // Cập nhật các trường tổng
             requisition.setTotalRequestQty(totalRequestQtyFromDepts);
 
-// Không còn trừ stock
+            // Không còn trừ stock
             requisition.setUseStockQty(BigDecimal.ZERO);
 
-// ORDERQTY = MED CONFIRMED QUANTITY (YÊU CẦU MỚI)
+            // ORDERQTY = MED CONFIRMED QUANTITY (YÊU CẦU MỚI)
             requisition.setOrderQty(medConfirmedQty);
 
-// Tính amount = price × orderQty (dùng Confirmed MED làm số lượng đặt hàng)
+            // Tính amount = price × orderQty (dùng Confirmed MED làm số lượng đặt hàng)
             BigDecimal amount = (requisition.getPrice() != null ? requisition.getPrice() : BigDecimal.ZERO)
                     .multiply(medConfirmedQty);
             requisition.setAmount(amount);
@@ -627,6 +628,8 @@ public class RequisitionMonthlyController {
                     updatedRequisition.getRemark(),
                     updatedRequisition.getRemarkComparison(),
                     updatedRequisition.getImageUrls(),
+                    null,
+                    null,
                     null
             );
 
@@ -640,6 +643,54 @@ public class RequisitionMonthlyController {
         }
     }
 
+    @PatchMapping("/requisition-monthly/{id}/best-price")
+    public ResponseEntity<?> updateBestPriceAndRemark(
+            @PathVariable String id,
+            @RequestBody UpdateStatusBestPriceRequest request) {
+
+        try {
+            // 1. Find requisition
+            Optional<RequisitionMonthly> optional = requisitionMonthlyRepository.findById(id);
+            if (optional.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Requisition not found with ID: " + id);
+            }
+
+            RequisitionMonthly requisition = optional.get();
+
+            // 2. Update fields if provided
+            if (request.getStatusBestPrice() != null && !request.getStatusBestPrice().trim().isEmpty()) {
+                requisition.setStatusBestPrice(request.getStatusBestPrice().trim());
+            }
+
+            if (request.getRemarkComparison() != null) {
+                requisition.setRemarkComparison(request.getRemarkComparison());
+            }
+
+            // 3. Always update timestamp
+            requisition.setUpdatedDate(LocalDateTime.now());
+
+            // 4. Save
+            requisitionMonthlyRepository.save(requisition);
+
+            // 5. Return success message
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Updated successfully!");
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "Update failed. Please try again.");
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(error);
+        }
+    }
 
     @GetMapping("/requisition-monthly/{id}")
     public ResponseEntity<?> getRequisitionMonthlyById(@PathVariable String id) {
@@ -906,7 +957,20 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
             .filter(Objects::nonNull)
             .min(BigDecimal::compareTo)
             .orElse(null);
-    Boolean isBestPrice = price != null && minPrice != null && price.equals(minPrice);
+
+    Boolean isBestPrice = false;
+    String statusBestPrice = req.getStatusBestPrice();
+    if (statusBestPrice == null || statusBestPrice.trim().isEmpty() || "EMPTY".equalsIgnoreCase(statusBestPrice.trim())) {
+        isBestPrice = price != null && minPrice != null && price.equals(minPrice);
+    }
+    else {
+        String trimmed = statusBestPrice.trim();
+        if ("Yes".equalsIgnoreCase(trimmed)) {
+            isBestPrice = Boolean.TRUE;
+        } else if("No".equalsIgnoreCase(trimmed)){
+            isBestPrice = Boolean.FALSE;
+        }
+    }
 
     // === DEPARTMENT REQUESTS ===
     List<MonthlyComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequisitions() != null ?
@@ -932,6 +996,7 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
     BigDecimal useStockQty = req.getUseStockQty() != null ? req.getUseStockQty() : null;
 
     return new MonthlyComparisonRequisitionDTO(
+            req.getId(),
             req.getItemDescriptionEN(),
             req.getItemDescriptionVN(),
             req.getOldSAPCode(),
@@ -1318,11 +1383,12 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
         }
     }
 
-    public void autoSelectBestSupplierAndSave(
-            List<UpdateRequisitionMonthlyDTO> dtoList,
-            String currency) {
+    @Transactional
+    public void autoSelectBestSupplierAndSave(String groupId, String currency) {
 
+        List<UpdateRequisitionMonthlyDTO> dtoList = requisitionMonthlyRepository.findRequestByGroupId(groupId);
         if (dtoList == null || dtoList.isEmpty()) return;
+
         if (currency == null || currency.isBlank()) currency = "VND";
 
         Map<String, RequisitionMonthly> entityMap = dtoList.stream()
@@ -1333,73 +1399,64 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
                 ));
 
         for (UpdateRequisitionMonthlyDTO dto : dtoList) {
-            String sapCode = dto.getOldSAPCode();
-            String itemDescVN = dto.getItemDescriptionVN();
-
             String searchKey = null;
-            boolean useSapCode = sapCode != null
-                    && !sapCode.trim().isEmpty()
-                    && !"NEW".equalsIgnoreCase(sapCode.trim());
+            boolean useSapCode = dto.getOldSAPCode() != null
+                    && !dto.getOldSAPCode().trim().isEmpty()
+                    && !"NEW".equalsIgnoreCase(dto.getOldSAPCode().trim());
 
             if (useSapCode) {
-                searchKey = sapCode.trim();
-            } else if (itemDescVN != null && !itemDescVN.trim().isEmpty()) {
-                searchKey = itemDescVN.trim();
+                searchKey = dto.getOldSAPCode().trim();
+            } else if (dto.getItemDescriptionVN() != null && !dto.getItemDescriptionVN().trim().isEmpty()) {
+                searchKey = dto.getItemDescriptionVN().trim();
             } else {
+                dto.setSupplierComparisonList(Collections.emptyList());
                 continue;
             }
 
-            // Tìm supplier
             List<SupplierProduct> suppliers = new ArrayList<>();
             if (useSapCode) {
-                suppliers = supplierProductRepository
-                        .findBySapCodeAndCurrencyIgnoreCase(searchKey, currency);
+                suppliers = supplierProductRepository.findBySapCodeAndCurrencyIgnoreCase(searchKey, currency);
             }
             if (suppliers.isEmpty()) {
-                suppliers = supplierProductRepository
-                        .findByItemNoContainingIgnoreCaseAndCurrency(searchKey, currency);
+                suppliers = supplierProductRepository.findByItemNoContainingIgnoreCaseAndCurrency(searchKey, currency);
+            }
+            if (suppliers.isEmpty()) {
+                dto.setSupplierComparisonList(Collections.emptyList());
+                continue;
             }
 
-            if (suppliers.isEmpty()) continue;
-
-            // TÌM NHÀ CUNG CẤP GIÁ RẺ NHẤT
-            SupplierProduct best = suppliers.stream()
+            List<CompletedSupplierDTO> comparisonList = suppliers.stream()
                     .filter(sp -> sp.getPrice() != null)
-                    .min(Comparator.comparing(SupplierProduct::getPrice))
-                    .orElse(null);
+                    .map(sp -> new CompletedSupplierDTO(
+                            sp.getId(),
+                            sp.getSupplierName(),
+                            sp.getPrice(),
+                            sp.getUnit(),
+                            0,
+                            false
+                    ))
+                    .sorted(Comparator.comparing(CompletedSupplierDTO::getPrice))
+                    .collect(Collectors.toList());
 
-            if (best == null) continue;
-
-            // TẠO CompletedSupplierDTO CHO GIÁ TỐT NHẤT
-            CompletedSupplierDTO bestDto = new CompletedSupplierDTO(
-                    best.getId(),
-                    best.getSupplierName(),
-                    best.getPrice(),
-                    best.getUnit(),
-                    1,           // isSelected = 1
-                    true         // isBestPrice = true
-            );
-
-            // GÁN VÀO DTO (chính xác field bạn có)
-            dto.setSelectedSupplier(bestDto);
-            dto.setPrice(best.getPrice());
-            dto.setSupplierName(best.getSupplierName());
-            if (dto.getOrderQty() != null) {
-                dto.setAmount(best.getPrice().multiply(dto.getOrderQty()));
+            if (comparisonList.isEmpty()) {
+                dto.setSupplierComparisonList(Collections.emptyList());
+                continue;
             }
 
-            // GÁN VÀO ENTITY ĐỂ LƯU DB
-            RequisitionMonthly entity = entityMap.get(dto.getId());
-            entity.setSupplierId(best.getId());
-            entity.setSupplierName(best.getSupplierName());
-            entity.setPrice(best.getPrice());
-            entity.setUnit(best.getUnit() != null ? best.getUnit() : entity.getUnit());
-            if (entity.getOrderQty() != null) {
-                entity.setAmount(best.getPrice().multiply(entity.getOrderQty()));
+            String currentStatus = dto.getStatusBestPrice();
+            if (currentStatus == null || currentStatus.trim().isEmpty()) {
+                BigDecimal bestPrice = comparisonList.get(0).getPrice();
+                boolean isCurrentlyBest = dto.getPrice() != null
+                        && dto.getPrice().compareTo(bestPrice) == 0;
+                entityMap.get(dto.getId()).setStatusBestPrice(isCurrentlyBest ? "Yes" : "No");
             }
+
+            comparisonList.get(0).setIsSelected(1);
+            comparisonList.get(0).setIsBestPrice(true);
+            dto.setSupplierComparisonList(comparisonList);
+            entityMap.get(dto.getId()).setSupplierComparisonList(comparisonList);
         }
 
-        // SAVEALL – LƯU TẤT CẢ VÀO DB
         requisitionMonthlyRepository.saveAll(entityMap.values());
     }
 }
