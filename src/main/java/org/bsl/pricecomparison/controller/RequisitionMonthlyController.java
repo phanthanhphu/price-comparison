@@ -1123,7 +1123,7 @@ private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthl
                         XSSFClientAnchor anchor = pic.getClientAnchor();
 
                         boolean inRow = anchor.getRow1() <= i && anchor.getRow2() >= i;
-                        boolean inCol = anchor.getCol1() <= 14 && anchor.getCol2() >= 14;
+                        boolean inCol = anchor.getCol1() <= 13 && anchor.getCol2() >= 13;
 
                         if (inRow && inCol) {
                             try {

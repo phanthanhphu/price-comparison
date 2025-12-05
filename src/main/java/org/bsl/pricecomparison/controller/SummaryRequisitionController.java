@@ -1073,22 +1073,6 @@ public class SummaryRequisitionController {
                 String deptName = getCellValue(deptCell);
                 String reason   = getCellValue(reasonCell);
 
-                // === XỬ LÝ HÌNH ẢNH (CỘT N - index 13) - ĐÃ SỬA CHÍNH XÁC ===
-//                List<String> imageUrls = new ArrayList<>();
-//                for (XSSFShape shape : drawing.getShapes()) {
-//                    if (shape instanceof XSSFPicture) {
-//                        XSSFPicture pic = (XSSFPicture) shape;
-//                        XSSFClientAnchor anchor = pic.getClientAnchor();
-//                        if (anchor.getCol1() == 14 && anchor.getRow1() <= i && anchor.getRow2() >= i) {
-//                            byte[] imgBytes = pic.getPictureData().getData();
-//                            String imgPath = saveImage(imgBytes, "img_" + i + "_" + System.currentTimeMillis() + ".png");
-//                            if (imgPath != null) {
-//                                imageUrls.add(imgPath);
-//                            }
-//                        }
-//                    }
-//                }
-
                 List<String> imageUrls = new ArrayList<>();
 
                 for (XSSFShape shape : drawing.getShapes()) {
