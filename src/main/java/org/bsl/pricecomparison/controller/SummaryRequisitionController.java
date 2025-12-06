@@ -1528,166 +1528,174 @@ public class SummaryRequisitionController {
     }
 
     private ComparisonRequisitionDTO convertToDtos(SummaryRequisition req, String currency, boolean removeDuplicateSuppliers) {
-        List<ComparisonRequisitionDTO.SupplierDTO> suppliers;
+        List<ComparisonRequisitionDTO.SupplierDTO> suppliers = Collections.emptyList();
 
-        String sapCode = req.getOldSapCode() != null && !req.getOldSapCode().isEmpty() ? req.getOldSapCode() : null;
+        String sapCode = req.getOldSapCode() != null && !req.getOldSapCode().isEmpty() ? req.getOldSapCode().trim() : null;
         String selectedSupplierId = req.getSupplierId();
 
-        String unit = req.getUnit();
+        String unit = req.getUnit() != null ? req.getUnit() : "";
         String goodType = null;
-
-        if (sapCode != null && sapCode.length() >= 3) {
-            List<SupplierProduct> supplierProducts = (currency != null && !currency.isEmpty()) ?
-                    supplierProductRepository.findBySapCodeAndCurrency(sapCode, currency) :
-                    supplierProductRepository.findBySapCode(sapCode);
-
-            suppliers = supplierProducts.stream()
-                    .map(sp -> new ComparisonRequisitionDTO.SupplierDTO(
-                            sp.getPrice(),
-                            sp.getSupplierName(),
-                            selectedSupplierId != null && !selectedSupplierId.isEmpty() && selectedSupplierId.equals(sp.getId()) ? 1 : 0,
-                            sp.getUnit()))
-                    .collect(Collectors.toList());
-
-            // Remove duplicate suppliers based on supplierName, keeping the one with the lowest price
-            if (removeDuplicateSuppliers) {
-                Map<String, ComparisonRequisitionDTO.SupplierDTO> supplierMap = new LinkedHashMap<>();
-                for (ComparisonRequisitionDTO.SupplierDTO supplier : suppliers) {
-                    String supplierName = supplier.getSupplierName();
-                    if (!supplierMap.containsKey(supplierName)) {
-                        supplierMap.put(supplierName, supplier);
-                    } else {
-                        ComparisonRequisitionDTO.SupplierDTO existing = supplierMap.get(supplierName);
-                        if (supplier.getPrice() != null && (existing.getPrice() == null || supplier.getPrice().compareTo(existing.getPrice()) < 0)) {
-                            supplierMap.put(supplierName, supplier);
-                        }
-                    }
-                }
-                suppliers = new ArrayList<>(supplierMap.values());
-            }
-
-            // Sort suppliers by price (ascending, nulls last)
-            suppliers = suppliers.stream()
-                    .sorted(Comparator.comparing(ComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(BigDecimal::compareTo)))
-                    .collect(Collectors.toList());
-
-            if (selectedSupplierId != null && !selectedSupplierId.isEmpty()) {
-                SupplierProduct selectedSupplier = supplierProducts.stream()
-                        .filter(sp -> sp.getId().equals(selectedSupplierId))
-                        .findFirst()
-                        .orElse(null);
-                if (selectedSupplier != null) {
-                    unit = selectedSupplier != null && selectedSupplier.getUnit() != null
-                            ? selectedSupplier.getUnit()
-                            : (req.getUnit() != null ? req.getUnit() : "");
-                    currency = selectedSupplier.getCurrency() != null ? selectedSupplier.getCurrency() : currency;
-                    goodType = selectedSupplier.getGoodType() != null ? selectedSupplier.getGoodType() : null;
-
-                    // If duplicates were removed, ensure selected supplier is in the list
-                    if (removeDuplicateSuppliers) {
-                        boolean isSelectedInList = suppliers.stream()
-                                .anyMatch(s -> s.getIsSelected() == 1);
-                        if (!isSelectedInList && selectedSupplier != null) {
-                            ComparisonRequisitionDTO.SupplierDTO selectedSupplierDTO = suppliers.stream()
-                                    .filter(s -> s.getSupplierName().equals(selectedSupplier.getSupplierName()))
-                                    .findFirst()
-                                    .orElse(null);
-                            if (selectedSupplierDTO != null) {
-                                selectedSupplierDTO.setIsSelected(1);
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            suppliers = Collections.emptyList();
-        }
-
-        int requestQty = 0;
-        if (req.getDepartmentRequestQty() != null) {
-            for (Object value : req.getDepartmentRequestQty().values()) {
-                if (value instanceof DepartmentQty deptQty) {
-                    requestQty += deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
-                } else if (value instanceof Double qty) {
-                    requestQty += qty.intValue();
-                }
-            }
-        }
-
-        BigDecimal orderQty = req.getOrderQty() != null && req.getOrderQty().compareTo(BigDecimal.ZERO) != 0 ? req.getOrderQty() : BigDecimal.ZERO;
-
         BigDecimal selectedPrice = null;
         BigDecimal highestPrice = null;
         BigDecimal lowestPrice = null;
         boolean isBestPrice = false;
 
-        if (!suppliers.isEmpty()) {
-            selectedPrice = suppliers.stream()
-                    .filter(dto -> dto.getIsSelected() == 1)
-                    .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
-                    .filter(price -> price != null)
-                    .findFirst()
-                    .orElse(null);
+        // === CHỈ KHI CÓ selectedSupplierId + sapCode HỢP LỆ MỚI QUERY DB ===
+        if (selectedSupplierId != null && !selectedSupplierId.isEmpty() && sapCode != null && sapCode.length() >= 3) {
+            List<SupplierProduct> supplierProducts = (currency != null && !currency.isEmpty())
+                    ? supplierProductRepository.findBySapCodeAndCurrency(sapCode, currency)
+                    : supplierProductRepository.findBySapCode(sapCode);
 
-            highestPrice = suppliers.stream()
-                    .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
-                    .filter(price -> price != null)
-                    .max(BigDecimal::compareTo)
-                    .orElse(null);
+            if (!supplierProducts.isEmpty()) {
+                // Tìm supplier được chọn trước để lấy thông tin chính xác
+                SupplierProduct selectedSupplier = supplierProducts.stream()
+                        .filter(sp -> selectedSupplierId.equals(sp.getId()))
+                        .findFirst()
+                        .orElse(null);
 
-            lowestPrice = suppliers.stream()
-                    .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
-                    .filter(price -> price != null)
-                    .min(BigDecimal::compareTo)
-                    .orElse(null);
+                // Cập nhật unit, currency, goodType từ selected supplier (nếu có)
+                if (selectedSupplier != null) {
+                    unit = selectedSupplier.getUnit() != null ? selectedSupplier.getUnit() : unit;
+                    currency = selectedSupplier.getCurrency() != null ? selectedSupplier.getCurrency() : currency;
+                    goodType = selectedSupplier.getGoodType();
+                    selectedPrice = selectedSupplier.getPrice();
+                }
 
-            if (selectedPrice != null && lowestPrice != null) {
-                isBestPrice = selectedPrice.compareTo(lowestPrice) == 0;
+                // Map tất cả supplier ra DTO
+                List<ComparisonRequisitionDTO.SupplierDTO> allSuppliers = supplierProducts.stream()
+                        .map(sp -> new ComparisonRequisitionDTO.SupplierDTO(
+                                sp.getPrice(),
+                                sp.getSupplierName(),
+                                selectedSupplierId.equals(sp.getId()) ? 1 : 0,
+                                sp.getUnit()
+                        ))
+                        .collect(Collectors.toList());
+
+                // Xử lý loại bỏ duplicate theo tên nhà cung cấp, giữ giá thấp nhất
+                if (removeDuplicateSuppliers) {
+                    Map<String, ComparisonRequisitionDTO.SupplierDTO> uniqueMap = new LinkedHashMap<>();
+
+                    for (ComparisonRequisitionDTO.SupplierDTO dto : allSuppliers) {
+                        String key = dto.getSupplierName();
+                        ComparisonRequisitionDTO.SupplierDTO existing = uniqueMap.get(key);
+
+                        if (existing == null) {
+                            uniqueMap.put(key, dto);
+                        } else {
+                            // Ưu tiên giữ lại supplier được chọn
+                            if (dto.getIsSelected() == 1) {
+                                uniqueMap.put(key, dto);
+                            } else if (existing.getIsSelected() == 0) {
+                                // Nếu chưa có cái nào được chọn → giữ giá thấp hơn
+                                if (dto.getPrice() != null && (existing.getPrice() == null || dto.getPrice().compareTo(existing.getPrice()) < 0)) {
+                                    uniqueMap.put(key, dto);
+                                }
+                            }
+                        }
+                    }
+                    suppliers = new ArrayList<>(uniqueMap.values());
+                } else {
+                    suppliers = allSuppliers;
+                }
+
+                // Sắp xếp theo giá tăng dần
+                suppliers = suppliers.stream()
+                        .sorted(Comparator.comparing(
+                                ComparisonRequisitionDTO.SupplierDTO::getPrice,
+                                Comparator.nullsLast(BigDecimal::compareTo)))
+                        .collect(Collectors.toList());
+
+                // Tính giá cao nhất và thấp nhất từ danh sách đã lọc
+                highestPrice = suppliers.stream()
+                        .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
+                        .filter(Objects::nonNull)
+                        .max(BigDecimal::compareTo)
+                        .orElse(null);
+
+                lowestPrice = suppliers.stream()
+                        .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
+                        .filter(Objects::nonNull)
+                        .min(BigDecimal::compareTo)
+                        .orElse(null);
+
+                // Đảm bảo selected supplier luôn có trong danh sách (tránh mất do remove duplicate)
+                if (removeDuplicateSuppliers && selectedSupplier != null) {
+                    boolean hasSelected = suppliers.stream().anyMatch(s -> s.getIsSelected() == 1);
+                    if (!hasSelected) {
+                        suppliers.stream()
+                                .filter(s -> s.getSupplierName().equals(selectedSupplier.getSupplierName()))
+                                .findFirst()
+                                .ifPresent(s -> s.setIsSelected(1));
+                    }
+                }
+            }
+        }
+        // === Tính toán số lượng & thành tiền ===
+        int requestQty = 0;
+        if (req.getDepartmentRequestQty() != null) {
+            for (Object value : req.getDepartmentRequestQty().values()) {
+                if (value instanceof DepartmentQty deptQty) {
+                    requestQty += deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
+                } else if (value instanceof Number number) {
+                    requestQty += number.intValue();
+                }
             }
         }
 
-        BigDecimal amtVnd = selectedPrice != null && orderQty != null ? selectedPrice.multiply(orderQty) : BigDecimal.ZERO;
+        BigDecimal orderQty = req.getOrderQty() != null && req.getOrderQty().compareTo(BigDecimal.ZERO) != 0
+                ? req.getOrderQty() : BigDecimal.ZERO;
 
-        BigDecimal amtDifference = (amtVnd != null && highestPrice != null && orderQty != null && orderQty.compareTo(BigDecimal.ZERO) != 0)
-                ? amtVnd.subtract(highestPrice.multiply(orderQty))
-                : BigDecimal.ZERO;
+        BigDecimal amtVnd = selectedPrice != null ? selectedPrice.multiply(orderQty) : BigDecimal.ZERO;
+        BigDecimal highestAmount = highestPrice != null ? highestPrice.multiply(orderQty) : BigDecimal.ZERO;
+        BigDecimal amtDifference = amtVnd.subtract(highestAmount);
 
-        BigDecimal percentage = (amtVnd != null && amtDifference != null && amtVnd.compareTo(BigDecimal.ZERO) != 0)
-                ? amtDifference.divide(amtVnd, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
-                : BigDecimal.ZERO;
+        BigDecimal percentage = BigDecimal.ZERO;
+        if (amtVnd.compareTo(BigDecimal.ZERO) != 0) {
+            percentage = amtDifference.divide(amtVnd, 6, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100));
+        }
 
-        List<ComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null ?
-                req.getDepartmentRequestQty().entrySet().stream()
-                        .filter(entry -> entry.getKey() != null && !entry.getKey().isEmpty())
-                        .map(entry -> {
-                            String deptId = entry.getKey();
-                            Object value = entry.getValue();
-                            Integer qty = 0;
-                            Integer buy = 0;
+        // Kiểm tra giá tốt nhất
+        if (selectedPrice != null && lowestPrice != null) {
+            isBestPrice = selectedPrice.compareTo(lowestPrice) == 0;
+        }
 
-                            if (value instanceof DepartmentQty deptQty) {
-                                qty = deptQty.getQty() != null ? deptQty.getQty().intValue() : 0;
-                                buy = deptQty.getBuy() != null ? deptQty.getBuy().intValue() : 0;
-                            } else if (value instanceof Double doubleQty) {
-                                qty = doubleQty.intValue();
-                                buy = qty;
-                            }
+        // === Department requests ===
+        List<ComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequestQty() != null
+                ? req.getDepartmentRequestQty().entrySet().stream()
+                .filter(e -> e.getKey() != null && !e.getKey().isEmpty())
+                .map(e -> {
+                    String deptId = e.getKey();
+                    Object val = e.getValue();
+                    int qty = 0, buy = 0;
 
-                            Department dept = departmentRepository.findById(deptId).orElse(null);
-                            String deptName = dept != null ? dept.getDepartmentName() : "Unknown";
-                            return new ComparisonRequisitionDTO.DepartmentRequestDTO(deptId, deptName, qty, buy);
-                        })
-                        .collect(Collectors.toList()) :
-                Collections.emptyList();
+                    if (val instanceof DepartmentQty dq) {
+                        qty = dq.getQty() != null ? dq.getQty().intValue() : 0;
+                        buy = dq.getBuy() != null ? dq.getBuy().intValue() : 0;
+                    } else if (val instanceof Number n) {
+                        qty = buy = n.intValue();
+                    }
 
-        String type1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()
-                ? (productType1Service.getById(req.getProductType1Id()) != null
-                ? productType1Service.getById(req.getProductType1Id()).getName() : "")
-                : "";
-        String type2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty()
-                ? (productType2Service.getById(req.getProductType2Id()) != null
-                ? productType2Service.getById(req.getProductType2Id()).getName() : "")
-                : "";
+                    String deptName = departmentRepository.findById(deptId)
+                            .map(Department::getDepartmentName)
+                            .orElse("Unknown");
+
+                    return new ComparisonRequisitionDTO.DepartmentRequestDTO(deptId, deptName, qty, buy);
+                })
+                .collect(Collectors.toList())
+                : Collections.emptyList();
+
+        // Product type names
+        String type1Name = Optional.ofNullable(req.getProductType1Id())
+                .filter(id -> !id.isEmpty())
+                .map(id -> productType1Service.getById(id))
+                .map(ProductType1::getName)
+                .orElse("");
+
+        String type2Name = Optional.ofNullable(req.getProductType2Id())
+                .filter(id -> !id.isEmpty())
+                .map(id -> productType2Service.getById(id))
+                .map(ProductType2::getName)
+                .orElse("");
 
         return new ComparisonRequisitionDTO(
                 req.getEnglishName(),

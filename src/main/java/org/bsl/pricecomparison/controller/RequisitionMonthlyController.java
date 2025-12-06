@@ -843,187 +843,179 @@ public class RequisitionMonthlyController {
         return ResponseEntity.ok(response);
     }
 
-private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthly req, String currency, Boolean removeDuplicateSuppliers) {
-    List<MonthlyComparisonRequisitionDTO.SupplierDTO> supplierDTOs = new ArrayList<>();
+    private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthly req, String currency, Boolean removeDuplicateSuppliers) {
+        List<MonthlyComparisonRequisitionDTO.SupplierDTO> supplierDTOs = new ArrayList<>();
 
-    String sapCode = req.getOldSAPCode() != null && !req.getOldSAPCode().isEmpty() ? req.getOldSAPCode() : null;
-    String selectedSupplierId = req.getSupplierId();
+        String sapCode = req.getOldSAPCode() != null && !req.getOldSAPCode().isEmpty() ? req.getOldSAPCode() : null;
+        String selectedSupplierId = req.getSupplierId();
 
-    String unit = req.getUnit() != null ? req.getUnit() : "";
-    String goodtype = "";
+        String unit = req.getUnit() != null ? req.getUnit() : "";
+        String goodtype = "";
+        BigDecimal price = null; // sẽ gán sau nếu có selected supplier
 
-    if (sapCode != null && !sapCode.isEmpty()) {
-        List<SupplierProduct> suppliers = supplierProductRepository.findBySapCodeAndCurrencyIgnoreCase(sapCode, currency);
+        // === CHỈ KHI CÓ supplierId MỚI ĐI TÌM SUPPLIER PRODUCT ===
+        if (selectedSupplierId != null && !selectedSupplierId.isEmpty() && sapCode != null && !sapCode.isEmpty()) {
+            List<SupplierProduct> suppliers = supplierProductRepository.findBySapCodeAndCurrencyIgnoreCase(sapCode, currency);
 
-        Map<String, List<SupplierProduct>> supplierGroups = suppliers.stream()
-                .collect(Collectors.groupingBy(
-                        sp -> sp.getSupplierName() + "|" + sp.getSapCode() + "|" + sp.getCurrency(),
-                        Collectors.toList()
-                ));
+            // Xử lý loại bỏ duplicate nếu cần
+            Map<String, List<SupplierProduct>> supplierGroups = suppliers.stream()
+                    .collect(Collectors.groupingBy(
+                            sp -> sp.getSupplierName() + "|" + sp.getSapCode() + "|" + sp.getCurrency(),
+                            Collectors.toList()
+                    ));
 
-        List<SupplierProduct> filteredSuppliers = new ArrayList<>();
-        if (Boolean.TRUE.equals(removeDuplicateSuppliers)) {
-            for (List<SupplierProduct> group : supplierGroups.values()) {
-                if (group.size() > 1) {
-                    Optional<SupplierProduct> selectedSupplier = group.stream()
-                            .filter(sp -> selectedSupplierId != null && selectedSupplierId.equals(sp.getId()))
-                            .findFirst();
-                    if (selectedSupplier.isPresent()) {
-                        filteredSuppliers.add(selectedSupplier.get());
+            List<SupplierProduct> filteredSuppliers = new ArrayList<>();
+            if (Boolean.TRUE.equals(removeDuplicateSuppliers)) {
+                for (List<SupplierProduct> group : supplierGroups.values()) {
+                    if (group.size() > 1) {
+                        Optional<SupplierProduct> selected = group.stream()
+                                .filter(sp -> selectedSupplierId.equals(sp.getId()))
+                                .findFirst();
+                        if (selected.isPresent()) {
+                            filteredSuppliers.add(selected.get());
+                        } else {
+                            group.stream()
+                                    .filter(sp -> sp.getPrice() != null)
+                                    .min(Comparator.comparing(SupplierProduct::getPrice, Comparator.nullsLast(BigDecimal::compareTo)))
+                                    .ifPresent(filteredSuppliers::add);
+                        }
                     } else {
-                        group.stream()
-                                .filter(sp -> sp.getPrice() != null)
-                                .min(Comparator.comparing(SupplierProduct::getPrice, Comparator.nullsLast(BigDecimal::compareTo)))
-                                .ifPresent(filteredSuppliers::add);
+                        filteredSuppliers.addAll(group);
                     }
-                } else {
-                    filteredSuppliers.addAll(group);
                 }
+            } else {
+                filteredSuppliers.addAll(suppliers);
             }
-        } else {
-            filteredSuppliers.addAll(suppliers);
+
+            // Tính giá thấp nhất toàn cục (dùng để đánh dấu best price)
+            BigDecimal globalMinPrice = filteredSuppliers.stream()
+                    .map(SupplierProduct::getPrice)
+                    .filter(Objects::nonNull)
+                    .min(BigDecimal::compareTo)
+                    .orElse(null);
+
+            supplierDTOs = filteredSuppliers.stream()
+                    .map(sp -> {
+                        boolean isBestPrice = !Boolean.TRUE.equals(removeDuplicateSuppliers)
+                                && globalMinPrice != null
+                                && sp.getPrice() != null
+                                && sp.getPrice().compareTo(globalMinPrice) == 0;
+                        return new MonthlyComparisonRequisitionDTO.SupplierDTO(
+                                sp.getPrice(),
+                                sp.getSupplierName(),
+                                selectedSupplierId.equals(sp.getId()) ? 1 : 0,
+                                sp.getUnit(),
+                                isBestPrice
+                        );
+                    })
+                    .sorted(Comparator.comparing(
+                            MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice,
+                            Comparator.nullsLast(BigDecimal::compareTo)))
+                    .collect(Collectors.toList());
+
+            // Lấy thông tin của selected supplier để cập nhật unit, currency, goodtype
+            Optional<SupplierProduct> selectedSupplier = suppliers.stream()
+                    .filter(sp -> selectedSupplierId.equals(sp.getId()))
+                    .findFirst();
+
+            if (selectedSupplier.isPresent()) {
+                SupplierProduct sp = selectedSupplier.get();
+                unit = sp.getUnit() != null ? sp.getUnit() : unit;
+                currency = sp.getCurrency() != null ? sp.getCurrency() : currency;
+                goodtype = sp.getGoodType() != null ? sp.getGoodType() : goodtype;
+                price = sp.getPrice(); // giá của nhà cung cấp được chọn
+            }
         }
 
-        BigDecimal globalMinPrice = filteredSuppliers.stream()
-                .map(SupplierProduct::getPrice)
+        // === Nếu KHÔNG có supplierId → vẫn có thể lấy giá từ req (nếu có lưu trước đó) ===
+        if (price == null && req.getPrice() != null) {
+            price = req.getPrice(); // fallback nếu đã lưu giá trước đó
+        }
+
+        // === Các tính toán còn lại giữ nguyên ===
+        BigDecimal highestPrice = supplierDTOs.stream()
+                .map(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice)
+                .filter(Objects::nonNull)
+                .max(BigDecimal::compareTo)
+                .orElse(null);
+
+        BigDecimal orderQty = req.getOrderQty() != null ? req.getOrderQty() : BigDecimal.ZERO;
+        BigDecimal amount = price != null ? price.multiply(orderQty) : BigDecimal.ZERO;
+        BigDecimal highestAmount = highestPrice != null ? highestPrice.multiply(orderQty) : BigDecimal.ZERO;
+        BigDecimal amtDifference = highestAmount != null ? amount.subtract(highestAmount) : BigDecimal.ZERO;
+
+        BigDecimal percentage = BigDecimal.ZERO;
+        if (amount.compareTo(BigDecimal.ZERO) != 0 && highestAmount.compareTo(BigDecimal.ZERO) != 0) {
+            percentage = amtDifference.divide(amount, 6, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100));
+        }
+
+        BigDecimal minPrice = supplierDTOs.stream()
+                .map(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice)
                 .filter(Objects::nonNull)
                 .min(BigDecimal::compareTo)
                 .orElse(null);
 
-        supplierDTOs = filteredSuppliers.stream()
-                .map(sp -> {
-                    boolean isBestPrice = !Boolean.TRUE.equals(removeDuplicateSuppliers) && globalMinPrice != null && sp.getPrice() != null && sp.getPrice().equals(globalMinPrice);
-                    return new MonthlyComparisonRequisitionDTO.SupplierDTO(
-                            sp.getPrice(),
-                            sp.getSupplierName(),
-                            selectedSupplierId != null && selectedSupplierId.equals(sp.getId()) ? 1 : 0,
-                            sp.getUnit(),
-                            isBestPrice
-                    );
-                })
-                .sorted(Comparator.comparing(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice, Comparator.nullsLast(BigDecimal::compareTo)))
-                .collect(Collectors.toList());
-
-        if (selectedSupplierId != null && !selectedSupplierId.isEmpty()) {
-            Optional<SupplierProduct> selectedSupplier = suppliers.stream()
-                    .filter(sp -> sp.getId().equals(selectedSupplierId))
-                    .findFirst();
-            if (selectedSupplier.isPresent()) {
-                unit = selectedSupplier.get().getUnit() != null ? selectedSupplier.get().getUnit() : unit;
-                currency = selectedSupplier.get().getCurrency() != null ? selectedSupplier.get().getCurrency() : currency;
-                goodtype = selectedSupplier.get().getGoodType() != null ? selectedSupplier.get().getGoodType() : "";
-            }
+        Boolean isBestPrice = false;
+        String statusBestPrice = req.getStatusBestPrice();
+        if (statusBestPrice == null || statusBestPrice.trim().isEmpty() || "EMPTY".equalsIgnoreCase(statusBestPrice.trim())) {
+            isBestPrice = price != null && minPrice != null && price.compareTo(minPrice) == 0;
+        } else {
+            isBestPrice = "Yes".equalsIgnoreCase(statusBestPrice.trim());
         }
+
+        // Department requests
+        List<MonthlyComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequisitions() != null ?
+                req.getDepartmentRequisitions().stream()
+                        .filter(Objects::nonNull)
+                        .map(dept -> new MonthlyComparisonRequisitionDTO.DepartmentRequestDTO(
+                                dept.getId(),
+                                dept.getName(),
+                                dept.getQty() != null ? dept.getQty() : BigDecimal.ZERO,
+                                dept.getBuy() != null ? dept.getBuy() : BigDecimal.ZERO
+                        ))
+                        .collect(Collectors.toList()) : Collections.emptyList();
+
+        // Product type names (giữ nguyên)
+        String type1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty() ?
+                productType1Service.getById(req.getProductType1Id()).getName() : "";
+        String type2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty() ?
+                productType2Service.getById(req.getProductType2Id()).getName() : "";
+
+        // Các field khác
+        BigDecimal dailyMedInventory = req.getDailyMedInventory();
+        BigDecimal totalRequestQty = req.getTotalRequestQty();
+        BigDecimal safeStock = req.getSafeStock();
+        BigDecimal useStockQty = req.getUseStockQty();
+
+        return new MonthlyComparisonRequisitionDTO(
+                req.getId(),
+                req.getItemDescriptionEN(),
+                req.getItemDescriptionVN(),
+                req.getOldSAPCode(),
+                req.getHanaSAPCode(),
+                supplierDTOs,
+                req.getRemarkComparison(),
+                departmentRequests,
+                amount,
+                amtDifference,
+                percentage,
+                highestPrice,
+                isBestPrice,
+                req.getProductType1Id(),
+                req.getProductType2Id(),
+                type1Name,
+                type2Name,
+                unit,
+                dailyMedInventory,
+                totalRequestQty,
+                safeStock,
+                useStockQty,
+                orderQty,
+                price,
+                currency,
+                goodtype
+        );
     }
-
-    // === LẤY GIÁ NHÀ CUNG CẤP ĐƯỢC CHỌN ===
-    BigDecimal price = supplierDTOs.stream()
-            .filter(dto -> dto.getIsSelected() == 1)
-            .map(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice)
-            .filter(Objects::nonNull)
-            .findFirst()
-            .orElse(null);
-
-    // === LẤY GIÁ CAO NHẤT ===
-    BigDecimal highestPrice = supplierDTOs.stream()
-            .map(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice)
-            .filter(Objects::nonNull)
-            .max(BigDecimal::compareTo)
-            .orElse(null);
-
-    // === SỐ LƯỢNG ĐẶT HÀNG ===
-    BigDecimal orderQty = req.getOrderQty() != null ? req.getOrderQty() : BigDecimal.ZERO;
-
-    // === TÍNH AMOUNT ===
-    BigDecimal amount = price != null ? price.multiply(orderQty) : BigDecimal.ZERO;
-
-    // === TÍNH HIGHEST AMOUNT ===
-    BigDecimal highestAmount = highestPrice != null ? highestPrice.multiply(orderQty) : BigDecimal.ZERO;
-
-    // === TÍNH amtDifference ===
-    BigDecimal amtDifference = amount.subtract(highestAmount);
-
-    // === TÍNH percentage THEO CÔNG THỨC BẠN MUỐN ===
-    BigDecimal percentage = BigDecimal.ZERO;
-    if (amount.compareTo(BigDecimal.ZERO) != 0) {
-        percentage = amtDifference
-                .divide(amount, 6, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100));
-    }
-
-    // === KIỂM TRA GIÁ TỐT NHẤT ===
-    BigDecimal minPrice = supplierDTOs.stream()
-            .map(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice)
-            .filter(Objects::nonNull)
-            .min(BigDecimal::compareTo)
-            .orElse(null);
-
-    Boolean isBestPrice = false;
-    String statusBestPrice = req.getStatusBestPrice();
-    if (statusBestPrice == null || statusBestPrice.trim().isEmpty() || "EMPTY".equalsIgnoreCase(statusBestPrice.trim())) {
-        isBestPrice = price != null && minPrice != null && price.equals(minPrice);
-    }
-    else {
-        String trimmed = statusBestPrice.trim();
-        if ("Yes".equalsIgnoreCase(trimmed)) {
-            isBestPrice = Boolean.TRUE;
-        } else if("No".equalsIgnoreCase(trimmed)){
-            isBestPrice = Boolean.FALSE;
-        }
-    }
-
-    // === DEPARTMENT REQUESTS ===
-    List<MonthlyComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests = req.getDepartmentRequisitions() != null ?
-            req.getDepartmentRequisitions().stream()
-                    .filter(Objects::nonNull)
-                    .map(dept -> new MonthlyComparisonRequisitionDTO.DepartmentRequestDTO(
-                            dept.getId(),
-                            dept.getName(),
-                            dept.getQty() != null ? dept.getQty() : BigDecimal.ZERO,
-                            dept.getBuy() != null ? dept.getBuy() : BigDecimal.ZERO
-                    ))
-                    .collect(Collectors.toList()) : Collections.emptyList();
-
-
-    String type1Name = req.getProductType1Id() != null && !req.getProductType1Id().isEmpty() ?
-            productType1Service.getById(req.getProductType1Id()).getName() : "";
-    String type2Name = req.getProductType2Id() != null && !req.getProductType2Id().isEmpty() ?
-            productType2Service.getById(req.getProductType2Id()).getName() : "";
-
-    BigDecimal dailyMedInventory = req.getDailyMedInventory() != null ? req.getDailyMedInventory() : null;
-    BigDecimal totalRequestQty = req.getTotalRequestQty() != null ? req.getTotalRequestQty() : null;
-    BigDecimal safeStock = req.getSafeStock() != null ? req.getSafeStock() : null;
-    BigDecimal useStockQty = req.getUseStockQty() != null ? req.getUseStockQty() : null;
-
-    return new MonthlyComparisonRequisitionDTO(
-            req.getId(),
-            req.getItemDescriptionEN(),
-            req.getItemDescriptionVN(),
-            req.getOldSAPCode(),
-            req.getHanaSAPCode(),
-            supplierDTOs,
-            req.getRemarkComparison(),
-            departmentRequests,
-            amount,
-            amtDifference,
-            percentage,
-            highestPrice,
-            isBestPrice,
-            req.getProductType1Id(),
-            req.getProductType2Id(),
-            type1Name,
-            type2Name,
-            unit,
-            dailyMedInventory,
-            totalRequestQty,
-            safeStock,
-            useStockQty,
-            orderQty,
-            price,
-            currency,
-            goodtype
-    );
-}
 
     @PostMapping(value = "/requisition-monthly/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
