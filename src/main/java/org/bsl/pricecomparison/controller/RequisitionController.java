@@ -47,27 +47,26 @@ public class RequisitionController {
             @RequestParam(required = false) String departmentName,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "createdDate,desc") String sort) {
+            @RequestParam(defaultValue = "createdDate,desc") String sort
+    ) {
 
-        // === SỬA SORT: CHỈ CHO PHÉP createdDate / updatedDate ===
+        // === SORT: chỉ cho phép createdDate / updatedDate ===
         String[] sortParams = sort.split(",");
         String field = sortParams[0].trim();
         String direction = sortParams.length > 1 ? sortParams[1].trim() : "desc";
 
-        // Validate field
         if (!"createdDate".equalsIgnoreCase(field) && !"updatedDate".equalsIgnoreCase(field)) {
             field = "createdDate";
             direction = "desc";
         }
 
-        // Validate direction
         if (!"asc".equalsIgnoreCase(direction) && !"desc".equalsIgnoreCase(direction)) {
-            direction = "desc";  // SỬA: replace → "desc"
+            direction = "desc";
         }
 
         Sort sortObj = Sort.by(Sort.Direction.fromString(direction), field);
         Pageable pageable = PageRequest.of(page, size, sortObj);
-        // === HẾT SỬA ===
+        // === hết SORT ===
 
         String type = null;
         if (typeId != null && !typeId.isBlank()) {
@@ -90,28 +89,78 @@ public class RequisitionController {
                 .collect(Collectors.toList());
 
         Page<RequisitionMonthlyDTO> dtoPage = new PageImpl<>(dtoList, pageable, pageResult.getTotalElements());
-
         return ResponseEntity.ok(dtoPage);
     }
 
     private RequisitionMonthlyDTO toDTO(RequisitionMonthly rm) {
+        // Resolve name theo id (fallback sang field cache trong document)
         String p1Name = productType1Service.getNameById(rm.getProductType1Id());
         String p2Name = productType2Service.getNameById(rm.getProductType2Id());
 
-        return new RequisitionMonthlyDTO(
-                rm.getId(), rm.getGroupId(),
-                p1Name != null ? p1Name : rm.getProductType1Name(),
-                p2Name != null ? p2Name : rm.getProductType2Name(),
-                rm.getItemDescriptionEN(), rm.getItemDescriptionVN(),
-                rm.getOldSAPCode(), rm.getHanaSAPCode(), rm.getUnit(),
-                rm.getDepartmentRequisitions(),
-                rm.getDailyMedInventory(), rm.getSafeStock(),
-                rm.getTotalRequestQty(), rm.getUseStockQty(), rm.getOrderQty(),
-                rm.getAmount(), rm.getPrice(), rm.getCurrency(),
-                rm.getGoodType(), rm.getSupplierName(),
-                rm.getCreatedDate(), rm.getUpdatedDate(),
-                rm.getFullDescription(), rm.getReason(), rm.getRemark(),
-                rm.getRemarkComparison(), rm.getImageUrls(), rm.getType()
-        );
+        RequisitionMonthlyDTO dto = new RequisitionMonthlyDTO();
+
+        dto.setId(rm.getId());
+        dto.setGroupId(rm.getGroupId());
+
+        // product types
+        dto.setProductType1Id(rm.getProductType1Id());
+        dto.setProductType2Id(rm.getProductType2Id());
+        dto.setProductType1Name(p1Name != null ? p1Name : rm.getProductType1Name());
+        dto.setProductType2Name(p2Name != null ? p2Name : rm.getProductType2Name());
+
+        // item
+        dto.setItemDescriptionEN(rm.getItemDescriptionEN());
+        dto.setItemDescriptionVN(rm.getItemDescriptionVN());
+        dto.setOldSAPCode(rm.getOldSAPCode());
+        dto.setHanaSAPCode(rm.getHanaSAPCode());
+        dto.setUnit(rm.getUnit());
+
+        // departments
+        dto.setDepartmentRequisitions(rm.getDepartmentRequisitions());
+
+        // qty/amount
+        dto.setDailyMedInventory(rm.getDailyMedInventory());
+        dto.setStock(rm.getStock());
+        dto.setTotalRequestQty(rm.getTotalRequestQty());
+        dto.setSafeStock(rm.getSafeStock());
+        dto.setUseStockQty(rm.getUseStockQty());
+        dto.setOrderQty(rm.getOrderQty());
+        dto.setAmount(rm.getAmount());
+        dto.setPrice(rm.getPrice());
+
+        dto.setCurrency(rm.getCurrency());
+        dto.setGoodType(rm.getGoodType());
+
+        // supplier
+        dto.setSupplierId(rm.getSupplierId());
+        dto.setSupplierName(rm.getSupplierName());
+
+        // dates
+        dto.setCreatedDate(rm.getCreatedDate());
+        dto.setUpdatedDate(rm.getUpdatedDate());
+
+        // audit email
+        dto.setCreatedByEmail(rm.getCreatedByEmail());
+        dto.setUpdatedByEmail(rm.getUpdatedByEmail());
+        dto.setCompletedByEmail(rm.getCompletedByEmail());
+        dto.setUncompletedByEmail(rm.getUncompletedByEmail());
+
+        // completion
+        dto.setCompletedDate(rm.getCompletedDate());
+        dto.setIsCompleted(rm.getIsCompleted()); // null-safe handled trong setter DTO nếu bạn set như mình đã gợi ý
+
+        // extra
+        dto.setImageUrls(rm.getImageUrls());
+        dto.setFullDescription(rm.getFullDescription());
+        dto.setReason(rm.getReason());
+        dto.setRemark(rm.getRemark());
+        dto.setRemarkComparison(rm.getRemarkComparison());
+
+        // type + comparison
+        dto.setType(rm.getType());
+        dto.setSupplierComparisonList(rm.getSupplierComparisonList());
+        dto.setStatusBestPrice(rm.getStatusBestPrice());
+
+        return dto;
     }
 }

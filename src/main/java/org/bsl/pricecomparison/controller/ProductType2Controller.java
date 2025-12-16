@@ -57,7 +57,7 @@ public class ProductType2Controller {
             // If SupplierProduct references exist
             if (!supplierProducts.isEmpty()) {
                 List<String> conflictingItems = supplierProducts.stream()
-                        .map(SupplierProduct::getItemNo)
+                        .map(SupplierProduct::getHanaSapCode)
                         .filter(itemName -> itemName != null)
                         .collect(Collectors.toList());
 
@@ -93,7 +93,7 @@ public class ProductType2Controller {
             // If SupplierProduct references exist
             if (!supplierProducts.isEmpty()) {
                 List<String> conflictingItems = supplierProducts.stream()
-                        .map(SupplierProduct::getItemNo)
+                        .map(SupplierProduct::getHanaSapCode)
                         .filter(itemName -> itemName != null)
                         .collect(Collectors.toList());
 

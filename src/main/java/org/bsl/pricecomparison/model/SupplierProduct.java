@@ -27,20 +27,23 @@ public class SupplierProduct {
     @NotBlank(message = "SAP code is required")
     private String sapCode;
 
-    private String itemNo; // Renamed from productFullName
+    // Đổi tên từ itemNo → hanaSapCode
+    private String hanaSapCode;
 
-    @NotBlank(message = "Item description is required")
-    private String itemDescription; // Renamed from productShortName
+    // Đổi tên từ itemDescription → itemDescriptionEN
+    @NotBlank(message = "Item description (EN) is required")
+    private String itemDescriptionEN;
 
-    private String fullDescription; // Added
+    // Đổi tên từ fullDescription → itemDescriptionVN
+    private String itemDescriptionVN;
 
-    private String materialGroupFullDescription; // Added
+    private String materialGroupFullDescription;
 
     @NotBlank(message = "Currency is required")
-    private String currency; // Added
+    private String currency;
 
     @NotBlank(message = "Good type is required")
-    private String goodType; // Added
+    private String goodType;
 
     private String size;
 
@@ -67,14 +70,15 @@ public class SupplierProduct {
     public SupplierProduct() {
     }
 
+    // Constructor đã được cập nhật tên các trường
     public SupplierProduct(
             String id,
             String supplierCode,
             String supplierName,
             String sapCode,
-            String itemNo,
-            String itemDescription,
-            String fullDescription,
+            String hanaSapCode,
+            String itemDescriptionEN,
+            String itemDescriptionVN,
             String materialGroupFullDescription,
             String currency,
             String goodType,
@@ -89,9 +93,9 @@ public class SupplierProduct {
         this.supplierCode = supplierCode;
         this.supplierName = supplierName;
         this.sapCode = sapCode;
-        this.itemNo = itemNo;
-        this.itemDescription = itemDescription;
-        this.fullDescription = fullDescription;
+        this.hanaSapCode = hanaSapCode;
+        this.itemDescriptionEN = itemDescriptionEN;
+        this.itemDescriptionVN = itemDescriptionVN;
         this.materialGroupFullDescription = materialGroupFullDescription;
         this.currency = currency;
         this.goodType = goodType;
@@ -103,7 +107,8 @@ public class SupplierProduct {
         this.productType2Id = productType2Id;
     }
 
-    // Getters and Setters
+    // Getters and Setters (đã đổi tên)
+
     public String getId() {
         return id;
     }
@@ -136,28 +141,28 @@ public class SupplierProduct {
         this.sapCode = sapCode;
     }
 
-    public String getItemNo() {
-        return itemNo;
+    public String getHanaSapCode() {
+        return hanaSapCode;
     }
 
-    public void setItemNo(String itemNo) {
-        this.itemNo = itemNo;
+    public void setHanaSapCode(String hanaSapCode) {
+        this.hanaSapCode = hanaSapCode;
     }
 
-    public String getItemDescription() {
-        return itemDescription;
+    public String getItemDescriptionEN() {
+        return itemDescriptionEN;
     }
 
-    public void setItemDescription(String itemDescription) {
-        this.itemDescription = itemDescription;
+    public void setItemDescriptionEN(String itemDescriptionEN) {
+        this.itemDescriptionEN = itemDescriptionEN;
     }
 
-    public String getFullDescription() {
-        return fullDescription;
+    public String getItemDescriptionVN() {
+        return itemDescriptionVN;
     }
 
-    public void setFullDescription(String fullDescription) {
-        this.fullDescription = fullDescription;
+    public void setItemDescriptionVN(String itemDescriptionVN) {
+        this.itemDescriptionVN = itemDescriptionVN;
     }
 
     public String getMaterialGroupFullDescription() {

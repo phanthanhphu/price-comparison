@@ -45,4 +45,10 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
 
     @Query("{ 'itemNo': { $regex: ?0, $options: 'i' }, 'currency': { $regex: '^?1$', $options: 'i' } }")
     List<SupplierProduct> findByItemNoContainingIgnoreCaseAndCurrency(String itemNo, String currency);
+
+    @Query(value = "{'supplierName': ?0, 'sapCode': ?1, 'price': ?2}", exists = true)
+    boolean existsBySupplierNameAndSapCodeAndPrice(String supplierName, String sapCode, BigDecimal price);
+
+    @Query("{'supplierName': ?0, 'sapCode': ?1, 'price': ?2, '_id': { $ne: ?3 }}")
+    boolean existsBySupplierNameAndSapCodeAndPriceAndIdNot(String supplierName, String sapCode, BigDecimal price, String id);
 }

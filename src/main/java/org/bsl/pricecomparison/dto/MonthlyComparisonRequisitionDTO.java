@@ -1,12 +1,12 @@
 package org.bsl.pricecomparison.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Collections;
 
 @Schema(description = "DTO for comparison requisition details")
 public class MonthlyComparisonRequisitionDTO {
@@ -104,12 +104,53 @@ public class MonthlyComparisonRequisitionDTO {
     @Schema(description = "Good type of the selected supplier", example = "Electronics")
     private String goodtype;
 
-    public MonthlyComparisonRequisitionDTO(String id, String englishName, String vietnameseName, String oldSapCode,
-                                           String hanaSapCode, List<SupplierDTO> suppliers, String remarkComparison,
-                                           List<DepartmentRequestDTO> departmentRequests, BigDecimal amount, BigDecimal amtDifference,
-                                           BigDecimal percentage, BigDecimal highestPrice, Boolean isBestPrice, String type1, String type2,
-                                           String type1Name, String type2Name, String unit, BigDecimal dailyMedInventory, BigDecimal totalRequestQty,
-                                           BigDecimal safeStock, BigDecimal useStockQty, BigDecimal orderQty, BigDecimal price, String currency, String goodtype) {
+    // ================= LAST PURCHASE fields =================
+
+    @Schema(description = "Last purchase supplier name (latest completed requisition, matched by supplierId + code + currency, excluding current item)")
+    private String lastPurchaseSupplierName;
+
+    @Schema(description = "Last purchase date (prefer completedDate; fallback updatedDate/createdDate)")
+    private LocalDateTime lastPurchaseDate;
+
+    @Schema(description = "Last purchase price")
+    private BigDecimal lastPurchasePrice;
+
+    @Schema(description = "Last purchase order quantity")
+    private BigDecimal lastPurchaseOrderQty;
+
+    // ================= Constructors =================
+
+    /**
+     * ✅ Original constructor (keep for backward compatibility)
+     */
+    public MonthlyComparisonRequisitionDTO(
+            String id,
+            String englishName,
+            String vietnameseName,
+            String oldSapCode,
+            String hanaSapCode,
+            List<SupplierDTO> suppliers,
+            String remarkComparison,
+            List<DepartmentRequestDTO> departmentRequests,
+            BigDecimal amount,
+            BigDecimal amtDifference,
+            BigDecimal percentage,
+            BigDecimal highestPrice,
+            Boolean isBestPrice,
+            String type1,
+            String type2,
+            String type1Name,
+            String type2Name,
+            String unit,
+            BigDecimal dailyMedInventory,
+            BigDecimal totalRequestQty,
+            BigDecimal safeStock,
+            BigDecimal useStockQty,
+            BigDecimal orderQty,
+            BigDecimal price,
+            String currency,
+            String goodtype
+    ) {
         this.id = id;
         this.englishName = englishName;
         this.vietnameseName = vietnameseName;
@@ -138,15 +179,60 @@ public class MonthlyComparisonRequisitionDTO {
         this.goodtype = goodtype;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
+    /**
+     * ✅ New constructor with LAST PURCHASE fields (optional usage)
+     */
+    public MonthlyComparisonRequisitionDTO(
+            String id,
+            String englishName,
+            String vietnameseName,
+            String oldSapCode,
+            String hanaSapCode,
+            List<SupplierDTO> suppliers,
+            String remarkComparison,
+            List<DepartmentRequestDTO> departmentRequests,
+            BigDecimal amount,
+            BigDecimal amtDifference,
+            BigDecimal percentage,
+            BigDecimal highestPrice,
+            Boolean isBestPrice,
+            String type1,
+            String type2,
+            String type1Name,
+            String type2Name,
+            String unit,
+            BigDecimal dailyMedInventory,
+            BigDecimal totalRequestQty,
+            BigDecimal safeStock,
+            BigDecimal useStockQty,
+            BigDecimal orderQty,
+            BigDecimal price,
+            String currency,
+            String goodtype,
+            String lastPurchaseSupplierName,
+            LocalDateTime lastPurchaseDate,
+            BigDecimal lastPurchasePrice,
+            BigDecimal lastPurchaseOrderQty
+    ) {
+        this(
+                id, englishName, vietnameseName, oldSapCode, hanaSapCode,
+                suppliers, remarkComparison, departmentRequests,
+                amount, amtDifference, percentage, highestPrice, isBestPrice,
+                type1, type2, type1Name, type2Name, unit,
+                dailyMedInventory, totalRequestQty, safeStock, useStockQty,
+                orderQty, price, currency, goodtype
+        );
+        this.lastPurchaseSupplierName = lastPurchaseSupplierName;
+        this.lastPurchaseDate = lastPurchaseDate;
+        this.lastPurchasePrice = lastPurchasePrice;
+        this.lastPurchaseOrderQty = lastPurchaseOrderQty;
     }
 
     // ================= Getter/Setter =================
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+
     public String getEnglishName() { return englishName; }
     public void setEnglishName(String englishName) { this.englishName = englishName; }
 
@@ -222,9 +308,33 @@ public class MonthlyComparisonRequisitionDTO {
     public String getGoodtype() { return goodtype; }
     public void setGoodtype(String goodtype) { this.goodtype = goodtype; }
 
+    // ================= LAST PURCHASE Getter/Setter =================
+
+    public String getLastPurchaseSupplierName() { return lastPurchaseSupplierName; }
+    public void setLastPurchaseSupplierName(String lastPurchaseSupplierName) {
+        this.lastPurchaseSupplierName = lastPurchaseSupplierName;
+    }
+
+    public LocalDateTime getLastPurchaseDate() { return lastPurchaseDate; }
+    public void setLastPurchaseDate(LocalDateTime lastPurchaseDate) {
+        this.lastPurchaseDate = lastPurchaseDate;
+    }
+
+    public BigDecimal getLastPurchasePrice() { return lastPurchasePrice; }
+    public void setLastPurchasePrice(BigDecimal lastPurchasePrice) {
+        this.lastPurchasePrice = lastPurchasePrice;
+    }
+
+    public BigDecimal getLastPurchaseOrderQty() { return lastPurchaseOrderQty; }
+    public void setLastPurchaseOrderQty(BigDecimal lastPurchaseOrderQty) {
+        this.lastPurchaseOrderQty = lastPurchaseOrderQty;
+    }
+
     // ================= Supplier DTO =================
+
     @Schema(description = "Supplier details")
     public static class SupplierDTO {
+
         @Schema(description = "Price", example = "100.0")
         @NotNull(message = "Supplier price is required")
         @DecimalMin(value = "0.0", inclusive = true, message = "Supplier price must be non-negative")
@@ -234,13 +344,15 @@ public class MonthlyComparisonRequisitionDTO {
         private String supplierName;
 
         @Schema(description = "Is selected (1 for selected, 0 for not selected)", example = "1")
-        private Integer isSelected; // INT
+        private Integer isSelected;
 
         @Schema(description = "Unit", example = "pcs")
         private String unit;
 
         @Schema(description = "Indicates if this supplier has the best price", example = "true")
         private Boolean isBestPrice;
+
+        public SupplierDTO() {}
 
         public SupplierDTO(BigDecimal price, String supplierName, Integer isSelected, String unit, Boolean isBestPrice) {
             this.price = price;
@@ -267,8 +379,10 @@ public class MonthlyComparisonRequisitionDTO {
     }
 
     // ================= Department DTO =================
+
     @Schema(description = "Department request details")
     public static class DepartmentRequestDTO {
+
         @Schema(description = "Department ID", example = "dept1")
         private String departmentId;
 
@@ -276,10 +390,12 @@ public class MonthlyComparisonRequisitionDTO {
         private String departmentName;
 
         @Schema(description = "Requested quantity", example = "10")
-        private BigDecimal qty; // BigDecimal
+        private BigDecimal qty;
 
         @Schema(description = "Approved buy quantity", example = "8")
-        private BigDecimal buy; // BigDecimal
+        private BigDecimal buy;
+
+        public DepartmentRequestDTO() {}
 
         public DepartmentRequestDTO(String departmentId, String departmentName, BigDecimal qty, BigDecimal buy) {
             this.departmentId = departmentId;

@@ -1,4 +1,5 @@
 // src/main/java/org/bsl/pricecomparison/model/SummaryRequisition.java
+
 package org.bsl.pricecomparison.model;
 
 import org.bsl.pricecomparison.enums.RequisitionType;
@@ -40,7 +41,7 @@ public class SummaryRequisition {
     private String hanaSapCode;
 
     @Schema(description = "Unit of measure for the item", example = "PC")
-    private String unit;  // THÊM TRƯỜNG UNIT
+    private String unit;
 
     @Indexed
     @Schema(description = "Map of department request quantities")
@@ -96,49 +97,51 @@ public class SummaryRequisition {
     @Schema(description = "List of image URLs", example = "[\"http://example.com/image1.jpg\"]")
     private List<String> imageUrls;
 
-    // === THÊM TRƯỜNG TYPE ===
     @Field("type")
     @Indexed
-    @Schema(description = "Type of requisition", example = "SUMMARY", allowableValues = {"MONTHLY", "SUMMARY"})
+    @Schema(description = "Type of requisition", example = "SUMMARY", allowableValues = {"MONTHLY", "SUMMARY", "WEEKLY"})
     private RequisitionType type;
 
-    // === CONSTRUCTORS ===
+    @Field("statusBestPrice")
+    @Schema(description = "Best price indicator: 'Yes' = using lowest price, 'No' = cheaper supplier available")
+    private String statusBestPrice;
+
+    // ==================== NEW COMPLETION FIELDS ====================
+
+    @Field("completedDate")
+    @Schema(description = "Date and time when this requisition was marked as completed", example = "2025-08-10T14:30:00")
+    private LocalDateTime completedDate;
+
+    @Field("isCompleted")
+    @Schema(description = "Completion status: true = Completed, false = Not completed", example = "true")
+    private Boolean isCompleted = false;   // default false
+
+    // ==================== CONSTRUCTORS ====================
+
     public SummaryRequisition() {
-        this.type = RequisitionType.WEEKLY;
+        this.type = RequisitionType.WEEKLY; // hoặc SUMMARY tùy nghiệp vụ
+        this.isCompleted = false;
     }
 
-    public SummaryRequisition(
-            String id,
-            int no,
-            String englishName,
-            String vietnameseName,
-            String oldSapCode,
-            String hanaSapCode,
-            String unit,  // THÊM UNIT VÀO CONSTRUCTOR
-            Map<String, DepartmentQty> departmentRequestQty,
-            BigDecimal stock,
-            LocalDateTime dateStock,
-            BigDecimal orderQty,
-            String reason,
-            String remark,
-            String remarkComparison,
-            String supplierId,
-            String groupId,
-            String productType1Id,
-            String productType2Id,
-            LocalDateTime createdAt,
-            LocalDateTime updatedAt,
-            String fullDescription,
-            List<String> imageUrls,
-            RequisitionType type
-    ) {
+    // Full constructor (cập nhật thêm 2 field mới)
+    public SummaryRequisition(String id, int no, String englishName, String vietnameseName,
+                              String oldSapCode, String hanaSapCode, String unit,
+                              Map<String, DepartmentQty> departmentRequestQty,
+                              BigDecimal stock, LocalDateTime dateStock,
+                              BigDecimal orderQty, String reason, String remark,
+                              String remarkComparison, String supplierId,
+                              String groupId, String productType1Id, String productType2Id,
+                              LocalDateTime createdAt, LocalDateTime updatedAt,
+                              String fullDescription, List<String> imageUrls,
+                              RequisitionType type, String statusBestPrice,
+                              LocalDateTime completedDate, Boolean isCompleted) {
         this.id = id;
         this.no = no;
         this.englishName = englishName;
         this.vietnameseName = vietnameseName;
         this.oldSapCode = oldSapCode;
         this.hanaSapCode = hanaSapCode;
-        this.unit = unit;  // GÁN GIÁ TRỊ CHO UNIT
+        this.unit = unit;
         this.departmentRequestQty = departmentRequestQty;
         this.stock = stock;
         this.dateStock = dateStock;
@@ -154,10 +157,21 @@ public class SummaryRequisition {
         this.updatedAt = updatedAt;
         this.fullDescription = fullDescription;
         this.imageUrls = imageUrls;
-        this.type = type != null ? type : RequisitionType.WEEKLY;
+        this.type = type;
+        this.statusBestPrice = statusBestPrice;
+        this.completedDate = completedDate;
+        this.isCompleted = isCompleted != null ? isCompleted : false;
+
+        // Auto set completedDate nếu isCompleted = true mà chưa có ngày
+        if (Boolean.TRUE.equals(this.isCompleted) && this.completedDate == null) {
+            this.completedDate = LocalDateTime.now();
+        }
     }
 
-    // === GETTERS & SETTERS ===
+    // ==================== GETTERS & SETTERS ====================
+
+    // Các getter/setter cũ giữ nguyên (không thay đổi)
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
@@ -176,18 +190,11 @@ public class SummaryRequisition {
     public String getHanaSapCode() { return hanaSapCode; }
     public void setHanaSapCode(String hanaSapCode) { this.hanaSapCode = hanaSapCode; }
 
-    public String getUnit() {  // GETTER UNIT
-        return unit;
-    }
-
-    public void setUnit(String unit) {  // SETTER UNIT
-        this.unit = unit;
-    }
+    public String getUnit() { return unit; }
+    public void setUnit(String unit) { this.unit = unit; }
 
     public Map<String, DepartmentQty> getDepartmentRequestQty() { return departmentRequestQty; }
-    public void setDepartmentRequestQty(Map<String, DepartmentQty> departmentRequestQty) {
-        this.departmentRequestQty = departmentRequestQty;
-    }
+    public void setDepartmentRequestQty(Map<String, DepartmentQty> departmentRequestQty) { this.departmentRequestQty = departmentRequestQty; }
 
     public BigDecimal getStock() { return stock; }
     public void setStock(BigDecimal stock) { this.stock = stock; }
@@ -231,12 +238,49 @@ public class SummaryRequisition {
     public List<String> getImageUrls() { return imageUrls; }
     public void setImageUrls(List<String> imageUrls) { this.imageUrls = imageUrls; }
 
-    // === GETTER & SETTER CHO TYPE ===
-    public RequisitionType getType() {
-        return type;
+    public RequisitionType getType() { return type; }
+    public void setType(RequisitionType type) { this.type = type; }
+
+    public String getStatusBestPrice() { return statusBestPrice; }
+    public void setStatusBestPrice(String statusBestPrice) { this.statusBestPrice = statusBestPrice; }
+
+    // ==================== COMPLETION GETTERS/SETTERS ====================
+
+    public LocalDateTime getCompletedDate() {
+        return completedDate;
     }
 
-    public void setType(RequisitionType type) {
-        this.type = type != null ? type : RequisitionType.WEEKLY;
+    public void setCompletedDate(LocalDateTime completedDate) {
+        this.completedDate = completedDate;
+    }
+
+    public Boolean getIsCompleted() {
+        return isCompleted;
+    }
+
+    /**
+     * Khi set isCompleted = true mà chưa có completedDate → tự động gán thời gian hiện tại
+     */
+    public void setIsCompleted(Boolean isCompleted) {
+        this.isCompleted = isCompleted != null ? isCompleted : false;
+        if (Boolean.TRUE.equals(this.isCompleted) && this.completedDate == null) {
+            this.completedDate = LocalDateTime.now();
+        }
+    }
+
+    /**
+     * Helper cho frontend hiển thị Yes/No
+     */
+    @Schema(hidden = true)
+    public String getCompletedStatus() {
+        return Boolean.TRUE.equals(isCompleted) ? "Yes" : "No";
+    }
+
+    public Boolean getCompleted() {
+        return isCompleted;
+    }
+
+    public void setCompleted(Boolean completed) {
+        setIsCompleted(completed);
     }
 }

@@ -13,6 +13,9 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import org.bsl.pricecomparison.costom.SupplierProductRepositoryCustom;
 import org.bsl.pricecomparison.dto.SupplierProductDTO;
 import org.bsl.pricecomparison.exception.DuplicateSupplierProductException;
+import org.bsl.pricecomparison.model.ProductType1;
+import org.bsl.pricecomparison.model.ProductType2;
+import org.bsl.pricecomparison.model.RequisitionMonthly;
 import org.bsl.pricecomparison.model.SupplierProduct;
 import org.bsl.pricecomparison.repository.*;
 import org.bsl.pricecomparison.request.CreateProductRequest;
@@ -359,9 +362,9 @@ public class SupplierProductController {
                     p.setSupplierCode(supplierCode);
                     p.setSupplierName(supplierName);
                     p.setSapCode(sapCode);
-                    p.setItemNo(itemNo);
-                    p.setItemDescription(itemDescription);
-                    p.setFullDescription(itemDescription); // Use itemDescription as fullDescription if not provided
+                    p.setHanaSapCode(itemNo);
+                    p.setItemDescriptionEN(itemDescription);
+                    p.setItemDescriptionVN(itemDescription); // Use itemDescription as fullDescription if not provided
                     p.setMaterialGroupFullDescription(""); // Default value
                     p.setCurrency(currency);
                     p.setGoodType(goodType);
@@ -456,9 +459,9 @@ public class SupplierProductController {
             product.setSupplierCode(request.getSupplierCode());
             product.setSupplierName(request.getSupplierName());
             product.setSapCode(request.getSapCode());
-            product.setItemNo(request.getItemNo());
-            product.setItemDescription(request.getItemDescription());
-            product.setFullDescription(request.getFullDescription());
+            product.setHanaSapCode(request.getHanaSapCode());
+            product.setItemDescriptionEN(request.getItemDescriptionEN());
+            product.setItemDescriptionVN(request.getItemDescriptionVN());
             product.setCurrency(request.getCurrency());
             product.setGoodType(request.getGoodType());
             product.setSize(request.getSize());
@@ -528,9 +531,9 @@ public class SupplierProductController {
             existingProduct.setSupplierCode(tempProduct.getSupplierCode());
             existingProduct.setSupplierName(request.getSupplierName() != null ? request.getSupplierName() : existingProduct.getSupplierName());
             existingProduct.setSapCode(tempProduct.getSapCode());
-            existingProduct.setItemNo(request.getItemNo() != null ? request.getItemNo() : existingProduct.getItemNo());
-            existingProduct.setItemDescription(request.getItemDescription() != null ? request.getItemDescription() : existingProduct.getItemDescription());
-            existingProduct.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : existingProduct.getFullDescription());
+            existingProduct.setHanaSapCode(request.getHanaSapCode() != null ? request.getHanaSapCode() : existingProduct.getHanaSapCode());
+            existingProduct.setItemDescriptionEN(request.getItemDescriptionEN() != null ? request.getItemDescriptionEN() : existingProduct.getItemDescriptionEN());
+            existingProduct.setItemDescriptionVN(request.getItemDescriptionVN() != null ? request.getItemDescriptionVN() : existingProduct.getItemDescriptionVN());
             existingProduct.setCurrency(request.getCurrency() != null ? request.getCurrency() : existingProduct.getCurrency());
             existingProduct.setGoodType(request.getGoodType() != null ? request.getGoodType() : existingProduct.getGoodType());
             existingProduct.setSize(request.getSize() != null ? request.getSize() : existingProduct.getSize());
@@ -631,9 +634,11 @@ public class SupplierProductController {
             @RequestParam(required = false, defaultValue = "") String supplierCode,
             @RequestParam(required = false, defaultValue = "") String supplierName,
             @RequestParam(required = false, defaultValue = "") String sapCode,
-            @RequestParam(required = false, defaultValue = "") String itemNo,
-            @RequestParam(required = false, defaultValue = "") String itemDescription,
-            @RequestParam(required = false, defaultValue = "") String fullDescription,
+
+            @RequestParam(required = false, defaultValue = "") String hanaSapCode,        // ← itemNo
+            @RequestParam(required = false, defaultValue = "") String itemDescriptionEN,  // ← itemDescription
+            @RequestParam(required = false, defaultValue = "") String itemDescriptionVN,  // ← fullDescription
+
             @RequestParam(required = false, defaultValue = "") String currency,
             @RequestParam(required = false, defaultValue = "") String goodType,
             @RequestParam(required = false, defaultValue = "") String productType1Id,
@@ -652,9 +657,9 @@ public class SupplierProductController {
                     supplierCode,
                     supplierName,
                     sapCode,
-                    itemNo,
-                    itemDescription,
-                    fullDescription,
+                    hanaSapCode,
+                    itemDescriptionEN,
+                    itemDescriptionVN,
                     currency,
                     goodType,
                     productType1Id,
@@ -668,9 +673,11 @@ public class SupplierProductController {
                 dto.setSupplierCode(Objects.toString(product.getSupplierCode(), ""));
                 dto.setSupplierName(Objects.toString(product.getSupplierName(), ""));
                 dto.setSapCode(Objects.toString(product.getSapCode(), ""));
-                dto.setItemNo(Objects.toString(product.getItemNo(), ""));
-                dto.setItemDescription(Objects.toString(product.getItemDescription(), ""));
-                dto.setFullDescription(Objects.toString(product.getFullDescription(), ""));
+
+                dto.setHanaSapCode(Objects.toString(product.getHanaSapCode(), ""));
+                dto.setItemDescriptionEN(Objects.toString(product.getItemDescriptionEN(), ""));
+                dto.setItemDescriptionVN(Objects.toString(product.getItemDescriptionVN(), ""));
+
                 dto.setCurrency(Objects.toString(product.getCurrency(), ""));
                 dto.setGoodType(Objects.toString(product.getGoodType(), ""));
                 dto.setSize(Objects.toString(product.getSize(), ""));
@@ -681,6 +688,7 @@ public class SupplierProductController {
                 dto.setPrice(product.getPrice() != null ? product.getPrice() : BigDecimal.ZERO);
                 dto.setCreatedAt(product.getCreatedAt());
                 dto.setUpdatedAt(product.getUpdatedAt());
+
                 if (product.getProductType1Id() != null && !product.getProductType1Id().isEmpty()) {
                     productType1Repository.findById(product.getProductType1Id()).ifPresent(type1 -> {
                         dto.setProductType1Name(Objects.toString(type1.getName(), ""));
@@ -700,9 +708,12 @@ public class SupplierProductController {
                 return dto;
             });
 
-            return ResponseEntity.ok(Map.of("message", "Supplier products filtered successfully", "data", result));
+            return ResponseEntity.ok(Map.of(
+                    "message", "Supplier products filtered successfully",
+                    "data", result
+            ));
         } catch (Exception e) {
-            logger.error("Failed to filter supplier products: {}", e.getMessage());
+            logger.error("Failed to filter supplier products: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Failed to filter supplier products: " + e.getMessage()));
         }
@@ -711,7 +722,8 @@ public class SupplierProductController {
     @GetMapping("/filter-by-sapcode")
     @Operation(
             summary = "Filter supplier products by SAP code, item number, item description, and currency",
-            description = "Retrieve a paginated list of supplier products filtered by SAP code, item number, item description, and currency, sorted by price from low to high."
+            description = "Retrieve a paginated list of supplier products filtered by SAP code, item number, item description, and currency. " +
+                    "Sorted by: (has lastPurchaseDate desc) -> (lastPurchaseDate desc) -> (price asc)."
     )
     public ResponseEntity<Map<String, Object>> filterBySapCodeItemNoAndDescription(
             @RequestParam(required = false, defaultValue = "") String sapCode,
@@ -722,29 +734,25 @@ public class SupplierProductController {
             @RequestParam(defaultValue = "10") int size
     ) {
         try {
-            Pageable pageable = PageRequest.of(
-                    page,
-                    size,
-                    Sort.by(Sort.Order.asc("price"))
-            );
+            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.asc("price")));
 
             Page<SupplierProduct> supplierProducts = supplierProductRepositoryCustom.findBySapCodeWithPagination(
-                    sapCode,
-                    itemNo,
-                    itemDescription,
-                    currency,
-                    pageable
+                    sapCode, itemNo, itemDescription, currency, pageable
             );
 
-            Page<SupplierProductDTO> result = supplierProducts.map(product -> {
+            final Map<String, RequisitionMonthly> lastPurchaseCache = new HashMap<>();
+            final String currencyFilter = currency != null ? currency.trim() : "";
+
+            // map -> list DTO
+            List<SupplierProductDTO> dtoList = supplierProducts.getContent().stream().map(product -> {
                 SupplierProductDTO dto = new SupplierProductDTO();
                 dto.setId(Objects.toString(product.getId(), ""));
                 dto.setSupplierCode(Objects.toString(product.getSupplierCode(), ""));
                 dto.setSupplierName(Objects.toString(product.getSupplierName(), ""));
                 dto.setSapCode(Objects.toString(product.getSapCode(), ""));
-                dto.setItemNo(Objects.toString(product.getItemNo(), ""));
-                dto.setItemDescription(Objects.toString(product.getItemDescription(), ""));
-                dto.setFullDescription(Objects.toString(product.getFullDescription(), ""));
+                dto.setHanaSapCode(Objects.toString(product.getHanaSapCode(), ""));
+                dto.setItemDescriptionEN(Objects.toString(product.getItemDescriptionEN(), ""));
+                dto.setItemDescriptionVN(Objects.toString(product.getItemDescriptionVN(), ""));
                 dto.setMaterialGroupFullDescription(Objects.toString(product.getMaterialGroupFullDescription(), ""));
                 dto.setCurrency(Objects.toString(product.getCurrency(), ""));
                 dto.setGoodType(Objects.toString(product.getGoodType(), ""));
@@ -756,29 +764,299 @@ public class SupplierProductController {
                 dto.setProductType2Id(Objects.toString(product.getProductType2Id(), ""));
 
                 if (product.getProductType1Id() != null && !product.getProductType1Id().isEmpty()) {
-                    productType1Repository.findById(product.getProductType1Id()).ifPresent(type1 -> {
-                        dto.setProductType1Name(Objects.toString(type1.getName(), ""));
-                    });
-                } else {
-                    dto.setProductType1Name("");
-                }
+                    productType1Repository.findById(product.getProductType1Id()).ifPresent(type1 ->
+                            dto.setProductType1Name(Objects.toString(type1.getName(), ""))
+                    );
+                } else dto.setProductType1Name("");
 
                 if (product.getProductType2Id() != null && !product.getProductType2Id().isEmpty()) {
-                    productType2Repository.findById(product.getProductType2Id()).ifPresent(type2 -> {
-                        dto.setProductType2Name(Objects.toString(type2.getName(), ""));
-                    });
-                } else {
-                    dto.setProductType2Name("");
-                }
+                    productType2Repository.findById(product.getProductType2Id()).ifPresent(type2 ->
+                            dto.setProductType2Name(Objects.toString(type2.getName(), ""))
+                    );
+                } else dto.setProductType2Name("");
+
+                // ✅ add last purchase
+                applyLastPurchaseForSupplierProduct(dto, product, currencyFilter, lastPurchaseCache);
 
                 return dto;
-            });
+            }).collect(Collectors.toList());
 
-            return ResponseEntity.ok(Map.of("message", "Supplier products filtered successfully", "data", result));
+            // ✅ SORT: có mua gần nhất lên trước, mua gần nhất trước, giá thấp trước
+            Comparator<SupplierProductDTO> supplierSort = Comparator
+                    // 1) có lastPurchaseDate (true) lên trước
+                    .comparing((SupplierProductDTO d) -> d.getLastPurchaseDate() == null)
+                    // 2) lastPurchaseDate desc
+                    .thenComparing(SupplierProductDTO::getLastPurchaseDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                    // 3) price asc
+                    .thenComparing(SupplierProductDTO::getPrice, Comparator.nullsLast(BigDecimal::compareTo));
+
+            dtoList.sort(supplierSort);
+
+            Page<SupplierProductDTO> sortedPage =
+                    new PageImpl<>(dtoList, pageable, supplierProducts.getTotalElements());
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Supplier products filtered successfully",
+                    "data", sortedPage
+            ));
         } catch (Exception e) {
             logger.error("Failed to filter supplier products: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Failed to filter supplier products: " + e.getMessage()));
+        }
+    }
+
+
+    private void applyLastPurchaseForSupplierProduct(
+            SupplierProductDTO dto,
+            SupplierProduct product,
+            String currencyFilter,
+            Map<String, RequisitionMonthly> cache
+    ) {
+        if (dto == null || product == null) return;
+
+        final String supplierId = (product.getId() != null) ? product.getId().trim() : "";
+        if (supplierId.isBlank()) return;
+
+        String curr = (currencyFilter != null && !currencyFilter.isBlank())
+                ? currencyFilter.trim()
+                : (product.getCurrency() != null ? product.getCurrency().trim() : "");
+
+        if (curr.isBlank()) return;
+
+        String mode;
+        String codeKey;
+        if (product.getSapCode() != null && !product.getSapCode().trim().isBlank()) {
+            mode = "OLD";
+            codeKey = product.getSapCode().trim();
+        } else if (product.getHanaSapCode() != null && !product.getHanaSapCode().trim().isBlank()) {
+            mode = "HANA";
+            codeKey = product.getHanaSapCode().trim();
+        } else {
+            return;
+        }
+
+        String cacheKey = supplierId + "|" + mode + "|" + codeKey + "|" + curr;
+
+        RequisitionMonthly last = cache.get(cacheKey);
+        if (!cache.containsKey(cacheKey)) {
+            Optional<RequisitionMonthly> opt;
+
+            if ("OLD".equals(mode)) {
+                opt = requisitionMonthlyRepository
+                        .findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueOrderByCompletedDateDesc(
+                                supplierId, codeKey, curr
+                        );
+                if (opt.isEmpty()) {
+                    opt = requisitionMonthlyRepository
+                            .findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueOrderByUpdatedDateDesc(
+                                    supplierId, codeKey, curr
+                            );
+                }
+            } else {
+                opt = requisitionMonthlyRepository
+                        .findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueOrderByCompletedDateDesc(
+                                supplierId, codeKey, curr
+                        );
+                if (opt.isEmpty()) {
+                    opt = requisitionMonthlyRepository
+                            .findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueOrderByUpdatedDateDesc(
+                                    supplierId, codeKey, curr
+                            );
+                }
+            }
+
+            last = opt.orElse(null);
+            cache.put(cacheKey, last);
+        }
+
+        if (last == null) return;
+
+        dto.setLastPurchaseSupplierName(last.getSupplierName());
+
+        LocalDateTime lastDate = last.getCompletedDate();
+        if (lastDate == null) lastDate = last.getUpdatedDate();
+        if (lastDate == null) lastDate = last.getCreatedDate();
+        dto.setLastPurchaseDate(lastDate);
+
+        dto.setLastPurchasePrice(last.getPrice());
+        dto.setLastPurchaseOrderQty(last.getOrderQty() != null ? last.getOrderQty() : BigDecimal.ZERO);
+    }
+
+
+    @PostMapping(value = "/import-new-format", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Import price list - Multiple suppliers horizontally (new format)",
+            description = "Validates entire file first. Stops immediately on first duplicate (supplierName + sapCode + price).")
+    public ResponseEntity<Map<String, Object>> importNewFormatExcel(
+            @RequestPart("file") MultipartFile file) {
+
+        List<SupplierProduct> productsToSave = new ArrayList<>();
+
+        Map<String, String> type1Cache = new HashMap<>();
+        Map<String, String> type2Cache = new HashMap<>();
+
+        try (InputStream is = file.getInputStream();
+             Workbook workbook = new XSSFWorkbook(is)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            DataFormatter formatter = new DataFormatter();
+
+            Row supplierHeaderRow = sheet.getRow(2);
+            if (supplierHeaderRow == null) {
+                throw new IllegalArgumentException("Supplier header row (row 3) not found.");
+            }
+
+            Map<Integer, String> priceColToSupplierName = new HashMap<>();
+            for (int col = 9; col < supplierHeaderRow.getLastCellNum() - 1; col++) {
+                String name = formatter.formatCellValue(supplierHeaderRow.getCell(col)).trim();
+                if (!name.isEmpty()) {
+                    priceColToSupplierName.put(col, name);
+                }
+            }
+
+            if (priceColToSupplierName.isEmpty()) {
+                throw new IllegalArgumentException("No supplier columns found in the file.");
+            }
+
+            // PHASE 1: Validate + build list – STOP IMMEDIATELY on first duplicate
+            for (int rowIndex = 3; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                Row row = sheet.getRow(rowIndex);
+                if (row == null) continue;
+
+                String type1Name = formatter.formatCellValue(row.getCell(0)).trim();
+                String type2Name = formatter.formatCellValue(row.getCell(1)).trim();
+                String descriptionEn = formatter.formatCellValue(row.getCell(2));
+                String descriptionVn = formatter.formatCellValue(row.getCell(3));
+                String oldSapCode = formatter.formatCellValue(row.getCell(4));
+                String sapCode = formatter.formatCellValue(row.getCell(5)).trim();
+                String size = formatter.formatCellValue(row.getCell(6));
+                String unit = formatter.formatCellValue(row.getCell(7)).trim();
+                String currencyRaw = formatter.formatCellValue(row.getCell(8));
+                String goodTypeRaw = formatter.formatCellValue(row.getCell(supplierHeaderRow.getLastCellNum() - 1));
+
+                if (sapCode.isEmpty()) continue;
+
+                // Resolve ProductType1
+                String type1Id = type1Cache.computeIfAbsent(type1Name, name -> {
+                    if (name.isEmpty()) return null;
+                    return productType1Repository.findByName(name)
+                            .map(ProductType1::getId)
+                            .orElseGet(() -> productType1Repository.save(new ProductType1(name, LocalDateTime.now())).getId());
+                });
+
+                // Resolve ProductType2
+                String type2Id = null;
+                if (type1Id != null && !type2Name.isEmpty()) {
+                    String key = type1Id + "|" + type2Name;
+                    type2Id = type2Cache.computeIfAbsent(key, k ->
+                            productType2Repository.findByNameAndProductType1Id(type2Name, type1Id)
+                                    .map(ProductType2::getId)
+                                    .orElseGet(() -> {
+                                        ProductType2 newType2 = new ProductType2();
+                                        newType2.setName(type2Name);
+                                        newType2.setProductType1Id(type1Id);
+                                        newType2.setCreatedDate(LocalDateTime.now());
+                                        return productType2Repository.save(newType2).getId();
+                                    })
+                    );
+                }
+
+                String currency = resolveCurrency(currencyRaw);
+                String goodType = resolveGoodType(goodTypeRaw);
+                String fullDescription = descriptionVn.isBlank() ? descriptionEn : descriptionVn;
+
+                // Check each supplier price
+                for (Map.Entry<Integer, String> entry : priceColToSupplierName.entrySet()) {
+                    int priceColIdx = entry.getKey();
+                    String supplierName = entry.getValue();
+
+                    String priceText = formatter.formatCellValue(row.getCell(priceColIdx));
+                    if (priceText == null || priceText.trim().isEmpty()) continue;
+
+                    BigDecimal price = parsePrice(priceText, currency, rowIndex + 1);
+
+                    // CHECK DUPLICATE → STOP IMMEDIATELY IF FOUND
+                    if (repository.existsBySupplierNameAndSapCodeAndPrice(supplierName, sapCode, price)) {
+                        String errorMsg = String.format(
+                                "Import cancelled due to duplicate entry at row %d: Supplier \"%s\", SAP Code \"%s\", Price %s",
+                                rowIndex + 1, supplierName, sapCode, price
+                        );
+                        return ResponseEntity.badRequest().body(Map.of(
+                                "error", "Duplicate entry found",
+                                "message", errorMsg,
+                                "row", rowIndex + 1,
+                                "supplierName", supplierName,
+                                "sapCode", sapCode,
+                                "price", price
+                        ));
+                    }
+
+                    // Only add if no duplicate
+                    SupplierProduct product = new SupplierProduct();
+                    product.setSupplierName(supplierName);
+                    product.setSapCode(sapCode);
+                    product.setHanaSapCode(oldSapCode);
+                    product.setItemDescriptionEN(descriptionEn);
+                    product.setItemDescriptionVN(fullDescription);
+                    product.setMaterialGroupFullDescription("");
+                    product.setSize(size);
+                    product.setUnit(unit.isEmpty() ? "PC" : unit);
+                    product.setCurrency(currency);
+                    product.setGoodType(goodType);
+                    product.setPrice(price);
+                    product.setProductType1Id(type1Id);
+                    product.setProductType2Id(type2Id);
+                    product.setImageUrls(Collections.emptyList());
+                    product.setCreatedAt(LocalDateTime.now());
+                    product.setUpdatedAt(LocalDateTime.now());
+
+                    productsToSave.add(product);
+                }
+            }
+
+            // PHASE 2: All clean → save all at once
+            List<SupplierProduct> saved = repository.saveAll(productsToSave);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Import successful!",
+                    "totalRecordsCreated", saved.size(),
+                    "note", "Validation passed. No duplicates. Data saved in one batch."
+            ));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Validation error", "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Server error", "message", "Import failed: " + e.getMessage()));
+        }
+    }
+    // Helper methods remain the same
+    private String resolveCurrency(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return "VND";
+        String upper = raw.trim().toUpperCase();
+        return Set.of("VND", "USD", "EURO").contains(upper) ? upper : "VND";
+    }
+
+    private String resolveGoodType(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return "Common";
+        String cleaned = raw.trim();
+        return Set.of("Common", "Special", "Electronics").contains(cleaned) ? cleaned : "Common";
+    }
+
+    private BigDecimal parsePrice(String text, String currency, int row) {
+        try {
+            String cleaned = text.trim().replaceAll("[^0-9.,]", "");
+            if ("VND".equals(currency)) {
+                cleaned = cleaned.replaceAll("[,.]", "");
+                return new BigDecimal(cleaned);
+            } else {
+                cleaned = cleaned.replace(",", ".");
+                BigDecimal bd = new BigDecimal(cleaned);
+                return bd.setScale(2, RoundingMode.HALF_UP);
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid price at row " + row + ": " + text);
         }
     }
 }

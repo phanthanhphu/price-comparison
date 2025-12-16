@@ -329,4 +329,52 @@ public class GroupSummaryRequisitionController {
                     .body(Map.of("message", "Failed to filter group summary requisitions: " + e.getMessage()));
         }
     }
+
+    /**
+     * API mới: Lấy tuần trong năm và ngày tạo của group theo groupId
+     * Trả về JSON:
+     * {
+     *   "weekly": "Weekly 49",
+     *   "createdDate": "05/12/2025"
+     * }
+     */
+    @GetMapping("/weekly-info/{groupId}")
+    public ResponseEntity<?> getWeeklyInfo(@PathVariable String groupId) {
+        try {
+            Optional<GroupSummaryRequisition> optionalGroup =
+                    groupSummaryRequisitionService.getGroupSummaryRequisitionById(groupId);
+
+            if (optionalGroup.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Group not found with ID: " + groupId));
+            }
+
+            GroupSummaryRequisition group = optionalGroup.get();
+            LocalDateTime createdDateTime = group.getCreatedDate();
+
+            if (createdDateTime == null) {
+                return ResponseEntity.ok(
+                        Map.of("weekly", "Weekly N/A", "createdDate", "N/A")
+                );
+            }
+
+            LocalDate createdDate = createdDateTime.toLocalDate();
+
+            int weekNumber = createdDate.get(java.time.temporal.WeekFields.ISO.weekOfYear());
+
+            String formattedDate = createdDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+
+            Map<String, String> response = Map.of(
+                    "weekly", "Weekly " + weekNumber,
+                    "createdDate", formattedDate
+            );
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Error calculating weekly info: " + e.getMessage()));
+        }
+    }
+
 }

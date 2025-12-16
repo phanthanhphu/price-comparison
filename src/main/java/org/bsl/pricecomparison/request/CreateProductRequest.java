@@ -37,18 +37,21 @@ public class CreateProductRequest {
     @Size(max = 50, message = "SAP code must not exceed 50 characters")
     private String sapCode;
 
-    @Schema(description = "Item number", example = "ITEM123")
-    @Size(max = 50, message = "Item number must not exceed 50 characters")
-    private String itemNo;
+    // Đổi tên: itemNo → hanaSapCode
+    @Schema(description = "HANA SAP code (Item number from HANA)", example = "ITEM123")
+    @Size(max = 50, message = "HANA SAP code must not exceed 50 characters")
+    private String hanaSapCode;
 
-    @Schema(description = "Item description", example = "XYZ")
-    @NotBlank(message = "Item description is required")
-    @Size(max = 200, message = "Item description must not exceed 200 characters")
-    private String itemDescription;
+    // Đổi tên: itemDescription → itemDescriptionEN
+    @Schema(description = "Item description (English)", example = "Premium Mineral Water 500ml")
+    @NotBlank(message = "Item description (EN) is required")
+    @Size(max = 200, message = "Item description (EN) must not exceed 200 characters")
+    private String itemDescriptionEN;
 
-    @Schema(description = "Full description", example = "Sản phẩm XYZ chi tiết")
-    @Size(max = 1000, message = "Full description must not exceed 1000 characters")
-    private String fullDescription;
+    // Đổi tên: fullDescription → itemDescriptionVN
+    @Schema(description = "Item description (Vietnamese)", example = "Nước khoáng cao cấp 500ml - Không ga")
+    @Size(max = 1000, message = "Item description (VN) must not exceed 1000 characters")
+    private String itemDescriptionVN;
 
     @Schema(description = "Currency", example = "VND")
     @NotBlank(message = "Currency is required")
@@ -113,28 +116,28 @@ public class CreateProductRequest {
         this.sapCode = sapCode;
     }
 
-    public String getItemNo() {
-        return itemNo;
+    public String getHanaSapCode() {
+        return hanaSapCode;
     }
 
-    public void setItemNo(String itemNo) {
-        this.itemNo = itemNo;
+    public void setHanaSapCode(String hanaSapCode) {
+        this.hanaSapCode = hanaSapCode;
     }
 
-    public String getItemDescription() {
-        return itemDescription;
+    public String getItemDescriptionEN() {
+        return itemDescriptionEN;
     }
 
-    public void setItemDescription(String itemDescription) {
-        this.itemDescription = itemDescription;
+    public void setItemDescriptionEN(String itemDescriptionEN) {
+        this.itemDescriptionEN = itemDescriptionEN;
     }
 
-    public String getFullDescription() {
-        return fullDescription;
+    public String getItemDescriptionVN() {
+        return itemDescriptionVN;
     }
 
-    public void setFullDescription(String fullDescription) {
-        this.fullDescription = fullDescription;
+    public void setItemDescriptionVN(String itemDescriptionVN) {
+        this.itemDescriptionVN = itemDescriptionVN;
     }
 
     public String getCurrency() {

@@ -22,9 +22,9 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
             String supplierCode,
             String supplierName,
             String sapCode,
-            String itemNo,
-            String itemDescription,
-            String fullDescription,
+            String hanaSapCode,           // ĐÃ ĐỔI: itemNo → hanaSapCode
+            String itemDescriptionEN,     // ĐÃ ĐỔI: itemDescription → itemDescriptionEN
+            String itemDescriptionVN,     // ĐÃ ĐỔI: fullDescription → itemDescriptionVN
             String currency,
             String goodType,
             String productType1Id,
@@ -32,8 +32,6 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
             Pageable pageable) {
 
         Criteria criteria = new Criteria();
-
-        // Tạo list điều kiện
         List<Criteria> criteriaList = new ArrayList<>();
 
         if (supplierCode != null && !supplierCode.isEmpty()) {
@@ -45,15 +43,18 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
         if (sapCode != null && !sapCode.isEmpty()) {
             criteriaList.add(Criteria.where("sapCode").regex(sapCode, "i"));
         }
-        if (itemNo != null && !itemNo.isEmpty()) {
-            criteriaList.add(Criteria.where("itemNo").regex(itemNo, "i"));
+
+        // ĐÃ ĐỔI TÊN TRƯỜNG TRONG DB
+        if (hanaSapCode != null && !hanaSapCode.isEmpty()) {
+            criteriaList.add(Criteria.where("hanaSapCode").regex(hanaSapCode, "i"));
         }
-        if (itemDescription != null && !itemDescription.isEmpty()) {
-            criteriaList.add(Criteria.where("itemDescription").regex(itemDescription, "i"));
+        if (itemDescriptionEN != null && !itemDescriptionEN.isEmpty()) {
+            criteriaList.add(Criteria.where("itemDescriptionEN").regex(itemDescriptionEN, "i"));
         }
-        if (fullDescription != null && !fullDescription.isEmpty()) {
-            criteriaList.add(Criteria.where("fullDescription").regex(fullDescription, "i"));
+        if (itemDescriptionVN != null && !itemDescriptionVN.isEmpty()) {
+            criteriaList.add(Criteria.where("itemDescriptionVN").regex(itemDescriptionVN, "i"));
         }
+
         if (currency != null && !currency.isEmpty()) {
             criteriaList.add(Criteria.where("currency").is(currency));
         }
