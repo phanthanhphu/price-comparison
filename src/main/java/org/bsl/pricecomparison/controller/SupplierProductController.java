@@ -721,14 +721,16 @@ public class SupplierProductController {
 
     @GetMapping("/filter-by-sapcode")
     @Operation(
-            summary = "Filter supplier products by SAP code, item number, item description, and currency",
-            description = "Retrieve a paginated list of supplier products filtered by SAP code, item number, item description, and currency. " +
+            summary = "Filter supplier products by SAP code, Hana SAP code, item descriptions (VN/EN), supplier name, and currency",
+            description = "Retrieve a paginated list of supplier products filtered by SAP code, Hana SAP code, item description VN, item description EN, supplier name, and currency. " +
                     "Sorted by: (has lastPurchaseDate desc) -> (lastPurchaseDate desc) -> (price asc)."
     )
-    public ResponseEntity<Map<String, Object>> filterBySapCodeItemNoAndDescription(
+    public ResponseEntity<Map<String, Object>> filterBySapCodeHanaAndDescriptions(
             @RequestParam(required = false, defaultValue = "") String sapCode,
-            @RequestParam(required = false, defaultValue = "") String itemNo,
-            @RequestParam(required = false, defaultValue = "") String itemDescription,
+            @RequestParam(required = false, defaultValue = "") String hanaSapCode,
+            @RequestParam(required = false, defaultValue = "") String itemDescriptionVN,
+            @RequestParam(required = false, defaultValue = "") String itemDescriptionEN,
+            @RequestParam(required = false, defaultValue = "") String supplierName,   // ✅ NEW
             @RequestParam(required = false, defaultValue = "") String currency,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
@@ -736,14 +738,13 @@ public class SupplierProductController {
         try {
             Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.asc("price")));
 
-            Page<SupplierProduct> supplierProducts = supplierProductRepositoryCustom.findBySapCodeWithPagination(
-                    sapCode, itemNo, itemDescription, currency, pageable
+            Page<SupplierProduct> supplierProducts = supplierProductRepositoryCustom.findByFiltersWithPagination(
+                    sapCode, hanaSapCode, itemDescriptionVN, itemDescriptionEN, supplierName, currency, pageable // ✅ NEW
             );
 
             final Map<String, RequisitionMonthly> lastPurchaseCache = new HashMap<>();
             final String currencyFilter = currency != null ? currency.trim() : "";
 
-            // map -> list DTO
             List<SupplierProductDTO> dtoList = supplierProducts.getContent().stream().map(product -> {
                 SupplierProductDTO dto = new SupplierProductDTO();
                 dto.setId(Objects.toString(product.getId(), ""));
@@ -764,15 +765,13 @@ public class SupplierProductController {
                 dto.setProductType2Id(Objects.toString(product.getProductType2Id(), ""));
 
                 if (product.getProductType1Id() != null && !product.getProductType1Id().isEmpty()) {
-                    productType1Repository.findById(product.getProductType1Id()).ifPresent(type1 ->
-                            dto.setProductType1Name(Objects.toString(type1.getName(), ""))
-                    );
+                    productType1Repository.findById(product.getProductType1Id())
+                            .ifPresent(type1 -> dto.setProductType1Name(Objects.toString(type1.getName(), "")));
                 } else dto.setProductType1Name("");
 
                 if (product.getProductType2Id() != null && !product.getProductType2Id().isEmpty()) {
-                    productType2Repository.findById(product.getProductType2Id()).ifPresent(type2 ->
-                            dto.setProductType2Name(Objects.toString(type2.getName(), ""))
-                    );
+                    productType2Repository.findById(product.getProductType2Id())
+                            .ifPresent(type2 -> dto.setProductType2Name(Objects.toString(type2.getName(), "")));
                 } else dto.setProductType2Name("");
 
                 // ✅ add last purchase
@@ -781,14 +780,12 @@ public class SupplierProductController {
                 return dto;
             }).collect(Collectors.toList());
 
-            // ✅ SORT: có mua gần nhất lên trước, mua gần nhất trước, giá thấp trước
             Comparator<SupplierProductDTO> supplierSort = Comparator
-                    // 1) có lastPurchaseDate (true) lên trước
                     .comparing((SupplierProductDTO d) -> d.getLastPurchaseDate() == null)
-                    // 2) lastPurchaseDate desc
-                    .thenComparing(SupplierProductDTO::getLastPurchaseDate, Comparator.nullsLast(Comparator.reverseOrder()))
-                    // 3) price asc
-                    .thenComparing(SupplierProductDTO::getPrice, Comparator.nullsLast(BigDecimal::compareTo));
+                    .thenComparing(SupplierProductDTO::getLastPurchaseDate,
+                            Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(SupplierProductDTO::getPrice,
+                            Comparator.nullsLast(BigDecimal::compareTo));
 
             dtoList.sort(supplierSort);
 
@@ -805,7 +802,6 @@ public class SupplierProductController {
                     .body(Map.of("message", "Failed to filter supplier products: " + e.getMessage()));
         }
     }
-
 
     private void applyLastPurchaseForSupplierProduct(
             SupplierProductDTO dto,
@@ -891,7 +887,6 @@ public class SupplierProductController {
             @RequestPart("file") MultipartFile file) {
 
         List<SupplierProduct> productsToSave = new ArrayList<>();
-
         Map<String, String> type1Cache = new HashMap<>();
         Map<String, String> type2Cache = new HashMap<>();
 
@@ -961,7 +956,10 @@ public class SupplierProductController {
                     );
                 }
 
+                // Validate and resolve Currency (check the format)
                 String currency = resolveCurrency(currencyRaw);
+
+                // Resolve GoodType
                 String goodType = resolveGoodType(goodTypeRaw);
                 String fullDescription = descriptionVn.isBlank() ? descriptionEn : descriptionVn;
 
@@ -1032,10 +1030,19 @@ public class SupplierProductController {
         }
     }
     // Helper methods remain the same
-    private String resolveCurrency(String raw) {
-        if (raw == null || raw.trim().isEmpty()) return "VND";
-        String upper = raw.trim().toUpperCase();
-        return Set.of("VND", "USD", "EURO").contains(upper) ? upper : "VND";
+    private String resolveCurrency(String currencyRaw) {
+        if (currencyRaw == null || currencyRaw.isEmpty()) {
+            throw new IllegalArgumentException("Currency is missing or invalid.");
+        }
+
+        String currency = currencyRaw.trim().toUpperCase();
+
+        // Only allow VND, USD, EURO
+        if (!currency.equals("VND") && !currency.equals("USD") && !currency.equals("EURO")) {
+            throw new IllegalArgumentException("Invalid currency: " + currency);
+        }
+
+        return currency;
     }
 
     private String resolveGoodType(String raw) {
@@ -1046,17 +1053,24 @@ public class SupplierProductController {
 
     private BigDecimal parsePrice(String text, String currency, int row) {
         try {
+            // Loại bỏ tất cả ký tự không phải số, dấu chấm hoặc dấu phẩy
             String cleaned = text.trim().replaceAll("[^0-9.,]", "");
+
+            // Kiểm tra tiền tệ VND
             if ("VND".equals(currency)) {
-                cleaned = cleaned.replaceAll("[,.]", "");
-                return new BigDecimal(cleaned);
+                cleaned = cleaned.replaceAll("[,.]", ""); // Loại bỏ dấu phân cách trong VND
+                return new BigDecimal(cleaned); // VND chỉ có số nguyên
             } else {
-                cleaned = cleaned.replace(",", ".");
-                BigDecimal bd = new BigDecimal(cleaned);
-                return bd.setScale(2, RoundingMode.HALF_UP);
+                // Kiểm tra tiền tệ EURO và USD
+                cleaned = cleaned.replace(",", "."); // Đổi dấu phẩy thành dấu chấm nếu có
+
+                // Chuyển đổi giá trị sang BigDecimal mà không làm tròn
+                return new BigDecimal(cleaned); // Không làm tròn mệnh giá tiền nào hết
             }
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid price at row " + row + ": " + text);
         }
     }
+
+
 }

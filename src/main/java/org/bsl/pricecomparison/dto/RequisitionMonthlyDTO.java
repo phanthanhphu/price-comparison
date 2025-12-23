@@ -33,28 +33,36 @@ public class RequisitionMonthlyDTO {
     private List<DepartmentRequisitionMonthly> departmentRequisitions;
 
     // ===== Qty / Amount =====
-    @NotNull @DecimalMin("0.0")
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal dailyMedInventory;
 
-    @NotNull @DecimalMin("0.0")
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal stock;
 
-    @NotNull @DecimalMin("0.0")
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal totalRequestQty;
 
-    @NotNull @DecimalMin("0.0")
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal safeStock;
 
-    @NotNull @DecimalMin("0.0")
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal useStockQty;
 
-    @NotNull @DecimalMin("0.0")
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal orderQty;
 
-    @NotNull @DecimalMin("0.0")
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal amount;
 
-    @NotNull @DecimalMin("0.0")
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal price;
 
     private String currency;
@@ -91,6 +99,14 @@ public class RequisitionMonthlyDTO {
     private List<CompletedSupplierDTO> supplierComparisonList = new ArrayList<>();
     private String statusBestPrice;
 
+    // =========================================================
+    // ✅ NEW: Last Purchase (for filter API)
+    // =========================================================
+    private BigDecimal lastPurchaseOrderQty;   // sum orderQty of matched records in previous month
+    private BigDecimal lastPurchasePrice;      // price of newest record in previous month
+    private LocalDateTime lastPurchaseDate;    // newest date (completed/updated/created)
+    private String lastPurchaseSupplierName;   // ✅ supplierName của lần mua trước (KHÔNG đè supplierName hiện tại)
+
     public RequisitionMonthlyDTO() {}
 
     // Getter dạng computed (FE khỏi tự if)
@@ -98,7 +114,7 @@ public class RequisitionMonthlyDTO {
         return Boolean.TRUE.equals(isCompleted) ? "Yes" : "No";
     }
 
-    // ===== GETTERS / SETTERS (viết đủ hoặc dùng Lombok) =====
+    // ===== GETTERS / SETTERS =====
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -221,4 +237,19 @@ public class RequisitionMonthlyDTO {
 
     public String getStatusBestPrice() { return statusBestPrice; }
     public void setStatusBestPrice(String statusBestPrice) { this.statusBestPrice = statusBestPrice; }
+
+    // =========================================================
+    // ✅ NEW getters/setters: Last Purchase
+    // =========================================================
+    public BigDecimal getLastPurchaseOrderQty() { return lastPurchaseOrderQty; }
+    public void setLastPurchaseOrderQty(BigDecimal lastPurchaseOrderQty) { this.lastPurchaseOrderQty = lastPurchaseOrderQty; }
+
+    public BigDecimal getLastPurchasePrice() { return lastPurchasePrice; }
+    public void setLastPurchasePrice(BigDecimal lastPurchasePrice) { this.lastPurchasePrice = lastPurchasePrice; }
+
+    public LocalDateTime getLastPurchaseDate() { return lastPurchaseDate; }
+    public void setLastPurchaseDate(LocalDateTime lastPurchaseDate) { this.lastPurchaseDate = lastPurchaseDate; }
+
+    public String getLastPurchaseSupplierName() { return lastPurchaseSupplierName; }
+    public void setLastPurchaseSupplierName(String lastPurchaseSupplierName) { this.lastPurchaseSupplierName = lastPurchaseSupplierName; }
 }

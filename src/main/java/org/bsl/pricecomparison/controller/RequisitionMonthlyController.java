@@ -39,8 +39,11 @@ import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @RestController
@@ -69,6 +72,7 @@ public class RequisitionMonthlyController {
 
     @Autowired
     private DepartmentRepository departmentRepository;
+
 
     private static final String UPLOAD_DIR = "./uploads/";
 
@@ -256,17 +260,33 @@ public class RequisitionMonthlyController {
             @RequestParam(required = false) String departmentName,
             @RequestParam(defaultValue = "false") boolean hasFilter,
             @RequestParam(defaultValue = "false") boolean disablePagination,
+            @RequestParam(defaultValue = "false") boolean includeMonthlyLastPurchase,
             Pageable pageable) {
 
+        // Lấy group để tính window thời gian (giữ nguyên)
+        GroupSummaryRequisition group = groupSummaryRequisitionService.getGroupSummaryRequisitionById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found with id: " + groupId));
+
+        LocalDateTime monthStart = null;
+        LocalDateTime monthEndExclusive = null;
+
+        if (includeMonthlyLastPurchase) {
+            LocalDate createdDate = group.getCreatedDate().toLocalDate();
+            LocalDate currentMonthStart = createdDate.withDayOfMonth(1);
+            LocalDate previousMonthStart = currentMonthStart.minusMonths(1);
+
+            monthStart = previousMonthStart.atStartOfDay();
+            monthEndExclusive = currentMonthStart.atStartOfDay();
+        }
+
+        // Phần lấy requisitions (giữ nguyên logic cũ)
         List<RequisitionMonthly> requisitions;
 
         if (hasFilter) {
-            // Apply filters if hasFilter is true
             requisitions = requisitionMonthlyRepository.findByGroupId(groupId).stream()
                     .filter(req -> {
                         boolean matches = true;
 
-                        // Resolve product type names for filtering
                         String resolvedProductType1Name = null;
                         if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
                             ProductType1 productType1 = productType1Service.getById(req.getProductType1Id());
@@ -279,7 +299,6 @@ public class RequisitionMonthlyController {
                             resolvedProductType2Name = productType2 != null ? productType2.getName() : "";
                         }
 
-                        // Apply filters
                         if (productType1Name != null && !productType1Name.isEmpty()) {
                             matches = matches && resolvedProductType1Name != null &&
                                     resolvedProductType1Name.toLowerCase().contains(productType1Name.toLowerCase());
@@ -313,7 +332,7 @@ public class RequisitionMonthlyController {
                                     req.getDepartmentRequisitions().stream()
                                             .filter(dept -> dept != null)
                                             .map(DepartmentRequisitionMonthly::getName)
-                                            .filter(dept -> dept != null)
+                                            .filter(name -> name != null)
                                             .collect(Collectors.toList()) : Collections.emptyList();
                             matches = matches && deptNames.stream()
                                     .anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
@@ -326,23 +345,22 @@ public class RequisitionMonthlyController {
                                 req1.getCreatedDate() != null ? req1.getCreatedDate() : LocalDateTime.MIN;
                         LocalDateTime date2 = req2.getUpdatedDate() != null ? req2.getUpdatedDate() :
                                 req2.getCreatedDate() != null ? req2.getCreatedDate() : LocalDateTime.MIN;
-                        return date2.compareTo(date1); // Descending order (newest first)
+                        return date2.compareTo(date1); // Descending order
                     })
                     .collect(Collectors.toList());
         } else {
-            // No filters, fetch all records for groupId with sorting
             requisitions = requisitionMonthlyRepository.findByGroupId(groupId).stream()
                     .sorted((req1, req2) -> {
                         LocalDateTime date1 = req1.getUpdatedDate() != null ? req1.getUpdatedDate() :
                                 req1.getCreatedDate() != null ? req1.getCreatedDate() : LocalDateTime.MIN;
                         LocalDateTime date2 = req2.getUpdatedDate() != null ? req2.getUpdatedDate() :
                                 req2.getCreatedDate() != null ? req2.getCreatedDate() : LocalDateTime.MIN;
-                        return date2.compareTo(date1); // Descending order (newest first)
+                        return date2.compareTo(date1); // Descending order
                     })
                     .collect(Collectors.toList());
         }
 
-        // Calculate totals across all requisitions
+        // Tính totals (giữ nguyên)
         BigDecimal totalSumDailyMedInventory = requisitions.stream()
                 .map(req -> req.getDailyMedInventory() != null ? req.getDailyMedInventory() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -365,9 +383,14 @@ public class RequisitionMonthlyController {
                 .map(req -> req.getPrice() != null ? req.getPrice() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // Map to DTO & handle last purchase
+        LocalDateTime finalMonthStart = monthStart;
+        LocalDateTime finalMonthEndExclusive = monthEndExclusive;
         List<RequisitionMonthlyDTO> requisitionDTOs = requisitions.stream()
                 .map(req -> {
-                    // Resolve product type names (ưu tiên resolve từ service, fallback sang field lưu sẵn)
+                    RequisitionMonthlyDTO dto = new RequisitionMonthlyDTO();
+
+                    // Resolve product types
                     String resolvedProductType1Name = req.getProductType1Name();
                     if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
                         ProductType1 pt1 = productType1Service.getById(req.getProductType1Id());
@@ -380,24 +403,18 @@ public class RequisitionMonthlyController {
                         if (pt2 != null && pt2.getName() != null) resolvedProductType2Name = pt2.getName();
                     }
 
-                    RequisitionMonthlyDTO dto = new RequisitionMonthlyDTO();
-
                     dto.setId(req.getId());
                     dto.setGroupId(req.getGroupId());
-
                     dto.setProductType1Id(req.getProductType1Id());
                     dto.setProductType2Id(req.getProductType2Id());
                     dto.setProductType1Name(resolvedProductType1Name);
                     dto.setProductType2Name(resolvedProductType2Name);
-
                     dto.setItemDescriptionEN(req.getItemDescriptionEN());
                     dto.setItemDescriptionVN(req.getItemDescriptionVN());
                     dto.setOldSAPCode(req.getOldSAPCode());
                     dto.setHanaSAPCode(req.getHanaSAPCode());
                     dto.setUnit(req.getUnit());
-
                     dto.setDepartmentRequisitions(req.getDepartmentRequisitions());
-
                     dto.setDailyMedInventory(req.getDailyMedInventory());
                     dto.setStock(req.getStock());
                     dto.setTotalRequestQty(req.getTotalRequestQty());
@@ -406,58 +423,88 @@ public class RequisitionMonthlyController {
                     dto.setOrderQty(req.getOrderQty());
                     dto.setAmount(req.getAmount());
                     dto.setPrice(req.getPrice());
-
                     dto.setCurrency(req.getCurrency());
                     dto.setGoodType(req.getGoodType());
-
                     dto.setSupplierId(req.getSupplierId());
                     dto.setSupplierName(req.getSupplierName());
-
                     dto.setCreatedDate(req.getCreatedDate());
                     dto.setUpdatedDate(req.getUpdatedDate());
-
-                    // ===== AUDIT EMAIL =====
                     dto.setCreatedByEmail(req.getCreatedByEmail());
                     dto.setUpdatedByEmail(req.getUpdatedByEmail());
                     dto.setCompletedByEmail(req.getCompletedByEmail());
                     dto.setUncompletedByEmail(req.getUncompletedByEmail());
-
-                    // ===== COMPLETION =====
                     dto.setCompletedDate(req.getCompletedDate());
                     dto.setIsCompleted(req.getIsCompleted());
-
                     dto.setImageUrls(req.getImageUrls());
                     dto.setFullDescription(req.getFullDescription());
                     dto.setReason(req.getReason());
                     dto.setRemark(req.getRemark());
                     dto.setRemarkComparison(req.getRemarkComparison());
-
                     dto.setType(req.getType());
-
                     dto.setSupplierComparisonList(req.getSupplierComparisonList());
                     dto.setStatusBestPrice(req.getStatusBestPrice());
+
+                    // Nếu Item có supplier thì mới thỏa - bởi item đã có nhà cc
+                    if (includeMonthlyLastPurchase && req.getCurrency() != null && finalMonthStart != null && finalMonthEndExclusive != null) {
+                        String currency = req.getCurrency();
+                        List<RequisitionMonthly> matches = null;
+
+                        // Ưu tiên: hanaSapCode > oldSapCode > itemDescriptionVN > itemDescriptionEN
+                         if (isValidKey(req.getOldSAPCode())) {
+                            matches = requisitionMonthlyRepository.findLastPurchaseByOldSapCodeAndCurrency(
+                                    req.getOldSAPCode().trim(), currency, finalMonthStart, finalMonthEndExclusive);
+                        } else if (isValidKey(req.getHanaSAPCode())) {
+                            matches = requisitionMonthlyRepository.findLastPurchaseByHanaSapCodeAndCurrency(
+                                    req.getHanaSAPCode().trim(), currency, finalMonthStart, finalMonthEndExclusive);
+                        } else if (isValidKey(req.getItemDescriptionVN())) {
+                            matches = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionVNAndCurrency(
+                                    req.getItemDescriptionVN().trim(), currency, finalMonthStart, finalMonthEndExclusive);
+                        } else if (isValidKey(req.getItemDescriptionEN())) {
+                            matches = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionENAndCurrency(
+                                    req.getItemDescriptionEN().trim(), currency, finalMonthStart, finalMonthEndExclusive);
+                        }
+
+                        if (matches != null && !matches.isEmpty()) {
+                            // Tìm record mới nhất
+                            RequisitionMonthly latest = matches.stream()
+                                    .max(Comparator.comparing(r -> r.getCompletedDate() != null ? r.getCompletedDate() :
+                                            r.getUpdatedDate() != null ? r.getUpdatedDate() :
+                                                    r.getCreatedDate() != null ? r.getCreatedDate() : LocalDateTime.MIN))
+                                    .orElse(null);
+
+                            if (latest != null) {
+                                BigDecimal totalOrderQty = matches.stream()
+                                        .map(RequisitionMonthly::getOrderQty)
+                                        .filter(Objects::nonNull)
+                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                                dto.setLastPurchaseOrderQty(totalOrderQty);
+                                dto.setLastPurchasePrice(latest.getPrice());
+                                dto.setLastPurchaseDate(latest.getCompletedDate() != null ? latest.getCompletedDate() :
+                                        latest.getUpdatedDate() != null ? latest.getUpdatedDate() : latest.getCreatedDate());
+                                dto.setLastPurchaseSupplierName(latest.getSupplierName());
+                            }
+                        }
+                    }
 
                     return dto;
                 })
                 .collect(Collectors.toList());
 
-        // Apply pagination or return all records based on disablePagination
         List<RequisitionMonthlyDTO> resultRequisitionDTOs;
         Page<RequisitionMonthlyDTO> pagedResult;
 
         if (disablePagination) {
-            // Return all records without pagination
             resultRequisitionDTOs = requisitionDTOs;
             pagedResult = new PageImpl<>(resultRequisitionDTOs, PageRequest.of(0, Integer.MAX_VALUE), requisitionDTOs.size());
         } else {
-            // Apply pagination
             int start = (int) pageable.getOffset();
             int end = Math.min((start + pageable.getPageSize()), requisitionDTOs.size());
             resultRequisitionDTOs = requisitionDTOs.subList(start, end);
             pagedResult = new PageImpl<>(resultRequisitionDTOs, pageable, requisitionDTOs.size());
         }
 
-        // Prepare paged response with totals
+        // Response với totals
         RequisitionMonthlyPagedResponse response = new RequisitionMonthlyPagedResponse(pagedResult,
                 totalSumDailyMedInventory, totalSumSafeStock, totalSumRequestQty, totalSumUseStockQty,
                 totalSumOrderQty, totalSumAmount, totalSumPrice);
@@ -465,44 +512,8 @@ public class RequisitionMonthlyController {
         return ResponseEntity.ok(response);
     }
 
-
-
-    @DeleteMapping("/requisition-monthly/{id}")
-    public ResponseEntity<?> delete(@PathVariable String id) {
-        try {
-            var requisitionOptional = requisitionMonthlyRepository.findById(id);
-            if (requisitionOptional.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("ID not found: " + id);
-            }
-
-            var requisition = requisitionOptional.get();
-
-            List<String> imageUrls = requisition.getImageUrls();
-            if (imageUrls != null && !imageUrls.isEmpty()) {
-                for (String imageUrl : imageUrls) {
-                    if (imageUrl != null && !imageUrl.isBlank()) {
-                        try {
-                            String filePath = imageUrl.startsWith("/uploads/") ? "." + imageUrl : imageUrl;
-                            Path path = Paths.get(filePath);
-                            if (Files.exists(path)) {
-                                Files.delete(path);
-                                System.out.println("Deleted image: " + filePath);
-                            }
-                        } catch (IOException e) {
-                            System.err.println("Error deleting image: " + imageUrl + ", error: " + e.getMessage());
-                        }
-                    }
-                }
-            }
-
-            requisitionMonthlyRepository.deleteById(id);
-            return ResponseEntity.ok("Successfully deleted ID: " + id);
-
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid ID: " + id);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Deletion error: " + e.getMessage());
-        }
+    private boolean isValidKey(String key) {
+        return key != null && !key.trim().isEmpty() && !"NEW".equalsIgnoreCase(key.trim());
     }
 
     @PutMapping(value = "/requisition-monthly/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -512,7 +523,7 @@ public class RequisitionMonthlyController {
             @ModelAttribute UpdateRequisitionMonthlyRequest request
     ) {
         try {
-            // ✅ Validate email (giống create)
+            // ✅ Validate email (same as create)
             if (email == null || email.isBlank()) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body(Map.of("message", "email is required"));
@@ -527,7 +538,7 @@ public class RequisitionMonthlyController {
 
             RequisitionMonthly requisition = requisitionOptional.get();
 
-            // 2) ✅ UNIQUE CHECK giống create: groupId + oldSAPCode (chỉ check khi có thay đổi)
+            // 2) ✅ UNIQUE CHECK same as create: groupId + oldSAPCode (only when changed)
             String nextGroupId = (request.getGroupId() != null && !request.getGroupId().isBlank())
                     ? request.getGroupId()
                     : requisition.getGroupId();
@@ -551,27 +562,46 @@ public class RequisitionMonthlyController {
                 requisition.setOldSAPCode(request.getOldSAPCode());
             }
 
-            // 4) Update supplier info if provided
-            if (request.getSupplierId() != null && !request.getSupplierId().isEmpty()) {
-                Optional<SupplierProduct> supplierOptional = supplierRepository.findById(request.getSupplierId());
-                if (supplierOptional.isEmpty()) {
-                    return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                            .body(Map.of("message", "Supplier not found for supplierId: " + request.getSupplierId()));
+            // 4) ✅ Supplier handling (UPDATED):
+            // - supplierId == null  => client didn't send supplierId => keep current supplier (no change)
+            // - supplierId != null && blank => client intentionally cleared supplier => reset supplier fields
+            // - supplierId != null && not blank => set supplier by supplierId
+            if (request.getSupplierId() != null) {
+
+                // Case A: user selected a supplier
+                if (!request.getSupplierId().isBlank()) {
+                    Optional<SupplierProduct> supplierOptional = supplierRepository.findById(request.getSupplierId());
+                    if (supplierOptional.isEmpty()) {
+                        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                                .body(Map.of("message", "Supplier not found for supplierId: " + request.getSupplierId()));
+                    }
+
+                    SupplierProduct supplier = supplierOptional.get();
+
+                    requisition.setSupplierId(request.getSupplierId());
+                    requisition.setSupplierName(supplier.getSupplierName());
+                    requisition.setUnit(supplier.getUnit());
+
+                    requisition.setPrice(supplier.getPrice() != null ? supplier.getPrice() : BigDecimal.ZERO);
+                    requisition.setGoodType(supplier.getGoodType() != null ? supplier.getGoodType() : "");
+                    requisition.setCurrency(supplier.getCurrency() != null ? supplier.getCurrency() : "VND");
+
+                    // if you want to update type IDs based on supplier
+                    requisition.setProductType1Id(supplier.getProductType1Id());
+                    requisition.setProductType2Id(supplier.getProductType2Id());
+
+                } else {
+                    // Case B: user cleared supplier (Change supplier -> not selecting -> submit)
+                    requisition.setSupplierId(null);
+                    requisition.setSupplierName(null);
+
+                    // ✅ required resets
+                    requisition.setPrice(BigDecimal.ZERO);
+                    requisition.setAmount(BigDecimal.ZERO);
+
+                    // NOTE: keeping other fields untouched to avoid changing existing logic
+                    // (unit/currency/goodType/typeIds remain as-is unless you explicitly want to clear them)
                 }
-
-                SupplierProduct supplier = supplierOptional.get();
-
-                requisition.setSupplierId(request.getSupplierId());
-                requisition.setSupplierName(supplier.getSupplierName());
-                requisition.setUnit(supplier.getUnit());
-
-                requisition.setPrice(supplier.getPrice() != null ? supplier.getPrice() : BigDecimal.ZERO);
-                requisition.setGoodType(supplier.getGoodType() != null ? supplier.getGoodType() : "");
-                requisition.setCurrency(supplier.getCurrency() != null ? supplier.getCurrency() : "VND");
-
-                // nếu bạn muốn update theo supplier
-                requisition.setProductType1Id(supplier.getProductType1Id());
-                requisition.setProductType2Id(supplier.getProductType2Id());
             }
 
             // 5) Update basic fields
@@ -588,9 +618,11 @@ public class RequisitionMonthlyController {
 
             requisition.setType(RequisitionType.MONTHLY);
 
-            // 6) Update department requisitions (fix null-safety)
+            // 6) Update department requisitions (null-safe)
             List<DepartmentRequisitionMonthly> deptRequisitions =
-                    requisition.getDepartmentRequisitions() != null ? requisition.getDepartmentRequisitions() : new ArrayList<>();
+                    requisition.getDepartmentRequisitions() != null
+                            ? requisition.getDepartmentRequisitions()
+                            : new ArrayList<>();
 
             if (request.getDepartmentRequisitions() != null && !request.getDepartmentRequisitions().isEmpty()) {
                 try {
@@ -630,12 +662,14 @@ public class RequisitionMonthlyController {
             requisition.setUseStockQty(BigDecimal.ZERO);
             requisition.setOrderQty(medConfirmedQty);
 
-            BigDecimal amount = (requisition.getPrice() != null ? requisition.getPrice() : BigDecimal.ZERO)
-                    .multiply(medConfirmedQty);
+            BigDecimal price = requisition.getPrice() != null ? requisition.getPrice() : BigDecimal.ZERO;
+            BigDecimal amount = price.multiply(medConfirmedQty);
             requisition.setAmount(amount);
 
             // 8) Handle images deletion
-            List<String> currentImageUrls = requisition.getImageUrls() != null ? requisition.getImageUrls() : new ArrayList<>();
+            List<String> currentImageUrls = requisition.getImageUrls() != null
+                    ? requisition.getImageUrls()
+                    : new ArrayList<>();
 
             if (request.getImagesToDelete() != null && !request.getImagesToDelete().isBlank()) {
                 try {
@@ -679,14 +713,13 @@ public class RequisitionMonthlyController {
             }
             requisition.setImageUrls(currentImageUrls);
 
-            // ✅ 10) LƯU EMAIL UPDATE (đúng như create)
+            // 10) Save updatedByEmail (same as create)
             requisition.setUpdatedByEmail(email);
 
             // 11) Update timestamp & save
             requisition.setUpdatedDate(LocalDateTime.now());
             RequisitionMonthly updatedRequisition = requisitionMonthlyRepository.save(requisition);
 
-            // ✅ trả về giống create cho “ăn chắc”: có full field (kể cả updatedByEmail)
             return ResponseEntity.ok(
                     Map.of(
                             "message", "Requisition updated successfully",
@@ -784,6 +817,7 @@ public class RequisitionMonthlyController {
         }
     }
 
+    // ✅ UPDATED: add includeMonthlyLastPurchase param
     @GetMapping("/search/comparison-monthly")
     public ResponseEntity<MonthlyComparisonRequisitionResponseDTO> searchComparisonMonthly(
             @RequestParam String groupId,
@@ -796,18 +830,31 @@ public class RequisitionMonthlyController {
             @RequestParam(required = false) String unit,
             @RequestParam(required = false) String departmentName,
             @RequestParam(defaultValue = "false") Boolean filter,
-            @RequestParam(defaultValue = "false") Boolean removeDuplicateSuppliers
+            @RequestParam(defaultValue = "false") Boolean removeDuplicateSuppliers,
+            @RequestParam(defaultValue = "false") boolean includeMonthlyLastPurchase
     ) {
-        // ✅ currency lấy từ group (group luôn có currency)
-        final String groupCurrency = groupSummaryRequisitionService
+        // ✅ get group to obtain currency + createdDate (for previous month window)
+        GroupSummaryRequisition group = groupSummaryRequisitionService
                 .getGroupSummaryRequisitionById(groupId)
-                .map(g -> g.getCurrency() != null ? g.getCurrency() : "")
-                .orElse("")
-                .trim();
+                .orElseThrow(() -> new IllegalArgumentException("Group not found with id: " + groupId));
 
-        // ===== cache để giảm query lặp + cache last purchase =====
+        final String groupCurrency = (group.getCurrency() != null ? group.getCurrency() : "").trim();
+
+        // ✅ build previous month window (same logic as filterRequisitions)
+        LocalDateTime monthStart = null;
+        LocalDateTime monthEndExclusive = null;
+
+        if (includeMonthlyLastPurchase) {
+            LocalDate createdDate = group.getCreatedDate().toLocalDate();
+            LocalDate currentMonthStart = createdDate.withDayOfMonth(1);
+            LocalDate previousMonthStart = currentMonthStart.minusMonths(1);
+
+            monthStart = previousMonthStart.atStartOfDay();
+            monthEndExclusive = currentMonthStart.atStartOfDay();
+        }
+
+        // ===== cache to reduce repeated queries =====
         final Map<String, List<SupplierProduct>> supplierListCache = new HashMap<>();
-        final Map<String, RequisitionMonthly> lastPurchaseCache = new HashMap<>();
 
         List<RequisitionMonthly> requisitions = requisitionMonthlyRepository.findByGroupId(groupId);
 
@@ -885,13 +932,19 @@ public class RequisitionMonthlyController {
         BigDecimal totalAmtDifference = BigDecimal.ZERO;
         BigDecimal totalDifferencePercentage = BigDecimal.ZERO;
 
+        // pass to converter
+        final LocalDateTime finalMonthStart = monthStart;
+        final LocalDateTime finalMonthEndExclusive = monthEndExclusive;
+
         for (RequisitionMonthly req : filteredRequisitions) {
             MonthlyComparisonRequisitionDTO dto = convertToComparisonDTO(
                     req,
                     groupCurrency,
                     removeDuplicateSuppliers,
                     supplierListCache,
-                    lastPurchaseCache
+                    includeMonthlyLastPurchase,
+                    finalMonthStart,
+                    finalMonthEndExclusive
             );
             dtoList.add(dto);
 
@@ -913,16 +966,16 @@ public class RequisitionMonthlyController {
             String groupCurrency,
             Boolean removeDuplicateSuppliers,
             Map<String, List<SupplierProduct>> supplierListCache,
-            Map<String, RequisitionMonthly> lastPurchaseCache
+            boolean includeMonthlyLastPurchase,
+            LocalDateTime monthStart,
+            LocalDateTime monthEndExclusive
     ) {
         List<MonthlyComparisonRequisitionDTO.SupplierDTO> supplierDTOs = new ArrayList<>();
 
         // ✅ codeKey: ưu tiên oldSAPCode, thiếu thì hana
         String codeKey = null;
-        boolean useOld = false;
         if (req.getOldSAPCode() != null && !req.getOldSAPCode().isBlank()) {
             codeKey = req.getOldSAPCode().trim();
-            useOld = true;
         } else if (req.getHanaSAPCode() != null && !req.getHanaSAPCode().isBlank()) {
             codeKey = req.getHanaSAPCode().trim();
         }
@@ -935,9 +988,6 @@ public class RequisitionMonthlyController {
         String goodtype = "";
         BigDecimal price = null;
 
-        // giữ lại currency theo group để:
-        // (1) lookup supplier list theo groupCurrency
-        // (2) query last purchase theo groupCurrency
         final String finalGroupCurrency = groupCurrency != null ? groupCurrency.trim() : "";
 
         // === Supplier list: codeKey + currency(group) ===
@@ -952,7 +1002,6 @@ public class RequisitionMonthlyController {
 
             if (suppliers != null && !suppliers.isEmpty()) {
 
-                // build all suppliers
                 List<MonthlyComparisonRequisitionDTO.SupplierDTO> allSuppliers = suppliers.stream()
                         .map(sp -> new MonthlyComparisonRequisitionDTO.SupplierDTO(
                                 sp.getPrice(),
@@ -963,7 +1012,6 @@ public class RequisitionMonthlyController {
                         ))
                         .collect(Collectors.toList());
 
-                // remove dup theo supplierName (ưu tiên selected, nếu không thì lấy giá thấp nhất)
                 if (Boolean.TRUE.equals(removeDuplicateSuppliers)) {
                     Map<String, MonthlyComparisonRequisitionDTO.SupplierDTO> unique = new LinkedHashMap<>();
                     for (MonthlyComparisonRequisitionDTO.SupplierDTO s : allSuppliers) {
@@ -993,7 +1041,6 @@ public class RequisitionMonthlyController {
                                 Comparator.nullsLast(BigDecimal::compareTo)))
                         .collect(Collectors.toList());
 
-                // set selected info
                 SupplierProduct selectedSupplier = suppliers.stream()
                         .filter(sp -> selectedSupplierId.equals(sp.getId()))
                         .findFirst()
@@ -1007,7 +1054,6 @@ public class RequisitionMonthlyController {
             }
         }
 
-        // fallback price
         if (price == null && req.getPrice() != null) {
             price = req.getPrice();
         }
@@ -1069,7 +1115,6 @@ public class RequisitionMonthlyController {
         BigDecimal safeStock = req.getSafeStock();
         BigDecimal useStockQty = req.getUseStockQty();
 
-        // dto currency vẫn trả về groupCurrency (đúng logic của group)
         MonthlyComparisonRequisitionDTO dto = new MonthlyComparisonRequisitionDTO(
                 req.getId(),
                 req.getItemDescriptionEN(),
@@ -1099,313 +1144,51 @@ public class RequisitionMonthlyController {
                 goodtype
         );
 
-        // ✅ LAST PURCHASE: supplierId + (old|hana) + currency(group) + isCompleted=true, exclude current id
-        applyLastPurchaseInfoMonthly(
-                dto,
-                req.getId(),
-                selectedSupplierId,
-                finalGroupCurrency,
-                req.getOldSAPCode(),
-                req.getHanaSAPCode(),
-                useOld,
-                lastPurchaseCache
-        );
+        // ✅ SIMPLE LAST PURCHASE like filterRequisitions (previous month window)
+        if (includeMonthlyLastPurchase && req.getCurrency() != null && monthStart != null && monthEndExclusive != null) {
+            String currency = req.getCurrency();
+            List<RequisitionMonthly> matches = null;
+
+            // ✅ ưu tiên: oldSapCode > hanaSapCode > itemVN > itemEN (same as your snippet)
+            if (isValidKey(req.getOldSAPCode())) {
+                matches = requisitionMonthlyRepository.findLastPurchaseByOldSapCodeAndCurrency(
+                        req.getOldSAPCode().trim(), currency, monthStart, monthEndExclusive);
+            } else if (isValidKey(req.getHanaSAPCode())) {
+                matches = requisitionMonthlyRepository.findLastPurchaseByHanaSapCodeAndCurrency(
+                        req.getHanaSAPCode().trim(), currency, monthStart, monthEndExclusive);
+            } else if (isValidKey(req.getItemDescriptionVN())) {
+                matches = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionVNAndCurrency(
+                        req.getItemDescriptionVN().trim(), currency, monthStart, monthEndExclusive);
+            } else if (isValidKey(req.getItemDescriptionEN())) {
+                matches = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionENAndCurrency(
+                        req.getItemDescriptionEN().trim(), currency, monthStart, monthEndExclusive);
+            }
+
+            if (matches != null && !matches.isEmpty()) {
+                RequisitionMonthly latest = matches.stream()
+                        .max(Comparator.comparing(r -> r.getCompletedDate() != null ? r.getCompletedDate()
+                                : r.getUpdatedDate() != null ? r.getUpdatedDate()
+                                : r.getCreatedDate() != null ? r.getCreatedDate()
+                                : LocalDateTime.MIN))
+                        .orElse(null);
+
+                if (latest != null) {
+                    BigDecimal totalOrderQty = matches.stream()
+                            .map(RequisitionMonthly::getOrderQty)
+                            .filter(Objects::nonNull)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    dto.setLastPurchaseOrderQty(totalOrderQty);
+                    dto.setLastPurchasePrice(latest.getPrice());
+                    dto.setLastPurchaseDate(latest.getCompletedDate() != null ? latest.getCompletedDate()
+                            : latest.getUpdatedDate() != null ? latest.getUpdatedDate()
+                            : latest.getCreatedDate());
+                    dto.setLastPurchaseSupplierName(latest.getSupplierName());
+                }
+            }
+        }
 
         return dto;
-    }
-
-    private void applyLastPurchaseInfoMonthly(
-            MonthlyComparisonRequisitionDTO dto,
-            String currentReqId,
-            String supplierId,
-            String currency,
-            String oldSapCode,
-            String hanaSapCode,
-            boolean useOld,
-            Map<String, RequisitionMonthly> lastPurchaseCache
-    ) {
-        if (dto == null) return;
-        if (supplierId == null || supplierId.isBlank()) return;
-        if (currency == null || currency.isBlank()) return;
-
-        String idNot = (currentReqId == null || currentReqId.isBlank()) ? "__NONE__" : currentReqId.trim();
-
-        String codeKey;
-        String mode;
-        if (useOld && oldSapCode != null && !oldSapCode.isBlank()) {
-            codeKey = oldSapCode.trim();
-            mode = "OLD";
-        } else if (hanaSapCode != null && !hanaSapCode.isBlank()) {
-            codeKey = hanaSapCode.trim();
-            mode = "HANA";
-        } else {
-            return;
-        }
-
-        String cacheKey = supplierId.trim() + "|" + mode + "|" + codeKey + "|" + currency.trim() + "|" + idNot;
-
-        RequisitionMonthly last = lastPurchaseCache.get(cacheKey);
-        if (last == null && !lastPurchaseCache.containsKey(cacheKey)) {
-            Optional<RequisitionMonthly> opt;
-
-            if ("OLD".equals(mode)) {
-                opt = requisitionMonthlyRepository
-                        .findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueAndIdNotOrderByCompletedDateDesc(
-                                supplierId.trim(), codeKey, currency.trim(), idNot
-                        );
-                if (opt.isEmpty()) {
-                    opt = requisitionMonthlyRepository
-                            .findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueAndIdNotOrderByUpdatedDateDesc(
-                                    supplierId.trim(), codeKey, currency.trim(), idNot
-                            );
-                }
-            } else {
-                opt = requisitionMonthlyRepository
-                        .findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueAndIdNotOrderByCompletedDateDesc(
-                                supplierId.trim(), codeKey, currency.trim(), idNot
-                        );
-                if (opt.isEmpty()) {
-                    opt = requisitionMonthlyRepository
-                            .findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueAndIdNotOrderByUpdatedDateDesc(
-                                    supplierId.trim(), codeKey, currency.trim(), idNot
-                            );
-                }
-            }
-
-            last = opt.orElse(null);
-            // cache cả null để khỏi query lại
-            lastPurchaseCache.put(cacheKey, last);
-        }
-
-        if (last == null) return;
-
-        dto.setLastPurchaseSupplierName(last.getSupplierName());
-
-        LocalDateTime lastDate = last.getCompletedDate();
-        if (lastDate == null) lastDate = last.getUpdatedDate();
-        if (lastDate == null) lastDate = last.getCreatedDate();
-        dto.setLastPurchaseDate(lastDate);
-
-        dto.setLastPurchasePrice(last.getPrice());
-        dto.setLastPurchaseOrderQty(last.getOrderQty() != null ? last.getOrderQty() : BigDecimal.ZERO);
-    }
-
-    @PostMapping(value = "/requisition-monthly/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(
-            summary = "Upload Requisition File",
-            description = "Upload Excel .xlsx file. Data starts from **row 9 (N9)**, column B (Item VN). " +
-                    "Columns: B=Item VN, C=Item EN, D=Hana SAP, G=Request, H=Inhand, I=Buy, J=Unit, M=Dept, N=Picture, O=Remarks"
-    )
-    public ResponseEntity<List<RequisitionMonthly>> uploadRequisitionFile(
-            @Parameter(description = "Excel .xlsx file") @RequestPart("file") MultipartFile file,
-            @Parameter(description = "Group ID", required = true) @RequestParam("groupId") String groupId) {
-
-        List<RequisitionMonthly> allMonthly = requisitionMonthlyRepository.findByGroupId(groupId);
-        Set<String> existingSapCodes = allMonthly.stream()
-                .map(RequisitionMonthly::getOldSAPCode)
-                .filter(code -> code != null && !code.trim().isEmpty() && !"NEW".equalsIgnoreCase(code.trim()))
-                .map(code -> code.trim().toUpperCase())
-                .collect(Collectors.toSet());
-
-        List<RequisitionMonthly> requisitions = new ArrayList<>();
-        Map<String, Integer> sapCodeMap = new HashMap<>();     // <sapCode, index>
-        Map<String, Integer> materialMap = new HashMap<>();    // <itemVN, index> for SAP = NEW
-
-        if (file == null || file.isEmpty()) {
-            return badRequest("No file uploaded.");
-        }
-        if (!file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
-            return badRequest("Only .xlsx files are allowed.");
-        }
-
-        try (InputStream is = file.getInputStream()) {
-            XSSFWorkbook workbook = new XSSFWorkbook(is);
-            Sheet sheet = workbook.getSheetAt(0);
-            if (sheet == null) {
-                return badRequest("Sheet not found.");
-            }
-
-            XSSFDrawing drawing = (XSSFDrawing) sheet.createDrawingPatriarch();
-            List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
-
-            // === BẮT ĐẦU TỪ DÒNG 9 (index = 8) ===
-            for (int i = 8; i <= sheet.getLastRowNum(); i++) {
-                Row row = sheet.getRow(i);
-                if (row == null) continue;
-
-                // === CỘT B (Item VN) - BẮT BUỘC ===
-                Cell itemVNCell = getMergedCellValue(sheet, i, 1, mergedRegions); // Cột B (index 1)
-                if (itemVNCell == null) {
-                    itemVNCell = row.getCell(1, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
-                }
-                String itemVN = getCellValue(itemVNCell);
-
-                // Bỏ qua nếu cột B rỗng
-                if (itemVN == null || itemVN.trim().isEmpty()) {
-                    continue;
-                }
-
-                // === CÁC CỘT KHÁC ===
-                Cell itemENCell   = getMergedCellValue(sheet, i, 2, mergedRegions);  // Cột C
-                Cell sapCell      = getMergedCellValue(sheet, i, 3, mergedRegions);  // Cột D
-                Cell hanaCell     = getMergedCellValue(sheet, i, 4, mergedRegions);  // Cột E
-                Cell requestCell  = getMergedCellValue(sheet, i, 8, mergedRegions);  // Cột I
-                Cell unitCell     = getMergedCellValue(sheet, i, 9, mergedRegions);  // Cột J
-                Cell deptCell     = getMergedCellValue(sheet, i, 10, mergedRegions); // Cột K
-                Cell reasonCell   = getMergedCellValue(sheet, i, 14, mergedRegions); // Cột O (Remark)
-
-                String itemEN   = getCellValue(itemENCell);
-
-                // sapCode là String, dù Excel lưu số
-                String sapCode  = getCellValue(sapCell);
-                String hanaCode = getCellValue(hanaCell);
-
-                BigDecimal requestQty = parseBigDecimal(requestCell);
-                if (requestQty == null) requestQty = BigDecimal.ZERO;
-
-                // Inhand và Buy không còn trong file → mặc định 0
-                BigDecimal inhand = BigDecimal.ZERO;
-//                BigDecimal buy = requestQty.subtract(inhand).max(BigDecimal.ZERO); // = requestQty
-                BigDecimal buy = BigDecimal.ZERO;
-                String unit     = getCellValue(unitCell);
-                String deptName = getCellValue(deptCell);
-                String reason   = getCellValue(reasonCell); // Remark → reason
-
-                // === KIỂM TRA TRÙNG SAP CODE TRONG DB ===
-                boolean isSapValid = sapCode != null && !sapCode.trim().isEmpty() && !"NEW".equalsIgnoreCase(sapCode.trim());
-                if (isSapValid) {
-                    String normalizedSapCode = sapCode.trim().toUpperCase();
-                    if (existingSapCodes.contains(normalizedSapCode)) {
-                        return badRequest("SAP Code '" + sapCode + "' already exists in the system for this group.");
-                    }
-                }
-
-                // === XỬ LÝ HÌNH ẢNH (CỘT N - index 13) - SỬA CHÍNH XÁC VỚI MERGED CELL ===
-                // === XỬ LÝ HÌNH ẢNH (CỘT O - index 14) - ĐÃ ĐỒNG NHẤT VỚI MONTHLY ===
-                List<String> imageUrls = new ArrayList<>();
-                for (XSSFShape shape : drawing.getShapes()) {
-                    if (shape instanceof XSSFPicture pic) {
-                        XSSFClientAnchor anchor = pic.getClientAnchor();
-
-                        boolean inRow = anchor.getRow1() <= i && anchor.getRow2() >= i;
-                        boolean inCol = anchor.getCol1() <= 13 && anchor.getCol2() >= 13;
-
-                        if (inRow && inCol) {
-                            try {
-                                byte[] imgBytes = pic.getPictureData().getData();
-                                String mimeType = pic.getPictureData().getMimeType();
-                                String ext = getImageExtension(mimeType);
-                                String fileName = "req_" + groupId + "_" + (i + 1) + "_" + System.currentTimeMillis() + ext;
-
-                                String imgPath = saveImage(imgBytes, fileName, mimeType);
-                                if (imgPath != null) {
-                                    imageUrls.add(imgPath);
-                                }
-                            } catch (Exception e) {
-                                System.err.println("Image save failed at row " + (i + 1) + ": " + e.getMessage());
-                            }
-                        }
-                    }
-                }
-
-                // === XỬ LÝ DEPARTMENT ===
-                String deptId = null;
-                if (deptName != null && !deptName.trim().isEmpty()) {
-                    Department dept = departmentRepository.findByDepartmentName(deptName.trim());
-                    if (dept == null) {
-                        dept = new Department();
-                        dept.setDepartmentName(deptName.trim());
-                        dept = departmentRepository.save(dept);
-                    }
-                    deptId = dept.getId();
-                }
-
-                // === XÁC ĐỊNH KEY ĐỂ GỘP ===
-                boolean isSapNewOrEmpty = !isSapValid;
-                String groupKey = isSapNewOrEmpty
-                        ? itemVN.toLowerCase().trim()
-                        : sapCode.trim().toLowerCase();
-
-                Map<String, Integer> currentMap = isSapNewOrEmpty ? materialMap : sapCodeMap;
-
-                // === GỘP DỮ LIỆU TRONG FILE ===
-                if (currentMap.containsKey(groupKey)) {
-                    int idx = currentMap.get(groupKey);
-                    RequisitionMonthly existing = requisitions.get(idx);
-
-                    // Gộp theo phòng ban
-                    boolean deptExists = false;
-                    for (DepartmentRequisitionMonthly dr : existing.getDepartmentRequisitions()) {
-                        if (dr.getId() != null && dr.getId().equals(deptId)) {
-                            dr.setQty(dr.getQty().add(requestQty));
-                            dr.setBuy(dr.getBuy().add(buy));
-                            deptExists = true;
-                            break;
-                        }
-                    }
-                    if (!deptExists && deptId != null) {
-                        DepartmentRequisitionMonthly ndr = new DepartmentRequisitionMonthly();
-                        ndr.setId(deptId); ndr.setName(deptName);
-                        ndr.setQty(requestQty); ndr.setBuy(buy);
-                        existing.getDepartmentRequisitions().add(ndr);
-                    }
-
-                    existing.setTotalRequestQty(existing.getTotalRequestQty().add(requestQty));
-                    existing.setOrderQty(existing.getOrderQty().add(buy));
-
-                    if (existing.getUnit() == null && unit != null) existing.setUnit(unit);
-                    if (existing.getReason() == null && reason != null) existing.setReason(reason);
-
-                    if (!imageUrls.isEmpty()) {
-                        if (existing.getImageUrls() == null) {
-                            existing.setImageUrls(new ArrayList<>());
-                        }
-                        existing.getImageUrls().addAll(imageUrls);
-                    }
-
-                    continue;
-                }
-
-                // === TẠO MỚI ===
-                RequisitionMonthly req = new RequisitionMonthly();
-                req.setGroupId(groupId);
-                req.setCreatedDate(LocalDateTime.now());
-                req.setUpdatedDate(LocalDateTime.now());
-
-                if (isSapValid) req.setOldSAPCode(sapCode);
-                req.setItemDescriptionVN(itemVN);
-                req.setItemDescriptionEN(itemEN);
-                req.setTotalRequestQty(requestQty);
-                req.setOrderQty(buy);
-                req.setDailyMedInventory(inhand);
-                req.setUnit(unit);
-                req.setReason(reason);
-                req.setImageUrls(imageUrls.isEmpty() ? null : imageUrls);
-                req.setHanaSAPCode(hanaCode);
-
-                List<DepartmentRequisitionMonthly> deptList = new ArrayList<>();
-                if (deptId != null) {
-                    DepartmentRequisitionMonthly dr = new DepartmentRequisitionMonthly();
-                    dr.setId(deptId); dr.setName(deptName);
-                    dr.setQty(requestQty); dr.setBuy(buy);
-                    deptList.add(dr);
-                }
-                req.setDepartmentRequisitions(deptList);
-
-                requisitions.add(req);
-                currentMap.put(groupKey, requisitions.size() - 1);
-            }
-
-            if (requisitions.isEmpty()) {
-                return badRequest("No valid data found starting from row 6 (column B).");
-            }
-
-            List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);
-            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
-
-        } catch (Exception e) {
-            return badRequest("Error processing file: " + e.getMessage());
-        }
     }
 
     private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthly req, String currency, Boolean removeDuplicateSuppliers) {
@@ -1582,30 +1365,602 @@ public class RequisitionMonthlyController {
         );
     }
 
-    // === HELPER: Trả về lỗi nhanh ===
+//    // === HELPER: Trả về lỗi nhanh ===
+//    private ResponseEntity<List<RequisitionMonthly>> badRequest(String message) {
+//        return ResponseEntity.badRequest().body(
+//                Collections.singletonList(new RequisitionMonthly() {{ setRemark(message); }})
+//        );
+//    }
+//
+//    // Helper method to get cell value
+//    private String getCellValue(Cell cell) {
+//        if (cell == null) return null;
+//        switch (cell.getCellType()) {
+//            case STRING:
+//                return cell.getStringCellValue().trim();
+//            case NUMERIC:
+//                // SAP Code có thể là số → chuyển thành String
+//                if (DateUtil.isCellDateFormatted(cell)) {
+//                    return cell.getDateCellValue().toString();
+//                }
+//                return String.valueOf((long) cell.getNumericCellValue()); // Ép về long để tránh .0
+//            case BOOLEAN:
+//                return String.valueOf(cell.getBooleanCellValue());
+//            case FORMULA:
+//                try {
+//                    return cell.getStringCellValue();
+//                } catch (Exception e) {
+//                    try {
+//                        return String.valueOf((long) cell.getNumericCellValue());
+//                    } catch (Exception ex) {
+//                        return null;
+//                    }
+//                }
+//            default:
+//                return null;
+//        }
+//    }
+//
+//    // Helper method to parse Double value
+//    private Double parseDouble(Cell cell) {
+//        if (cell == null) return null;
+//        try {
+//            if (cell.getCellType() == CellType.NUMERIC) {
+//                return cell.getNumericCellValue();
+//            } else if (cell.getCellType() == CellType.STRING) {
+//                return Double.parseDouble(cell.getStringCellValue().trim());
+//            } else if (cell.getCellType() == CellType.FORMULA) {
+//                return cell.getNumericCellValue();
+//            }
+//        } catch (Exception e) {
+//            return null;
+//        }
+//        return null;
+//    }
+//
+//    // Helper method to parse BigDecimal value
+//    private BigDecimal parseBigDecimal(Cell cell) {
+//        if (cell == null) return null;
+//        try {
+//            if (cell.getCellType() == CellType.NUMERIC) {
+//                return BigDecimal.valueOf(cell.getNumericCellValue());
+//            } else if (cell.getCellType() == CellType.STRING) {
+//                return new BigDecimal(cell.getStringCellValue().trim());
+//            } else if (cell.getCellType() == CellType.FORMULA) {
+//                return BigDecimal.valueOf(cell.getNumericCellValue());
+//            }
+//        } catch (Exception e) {
+//            return null;
+//        }
+//        return null;
+//    }
+//
+//    // Helper method to get value from cell, handling merged cells
+//    private Cell getMergedCellValue(Sheet sheet, int rowIndex, int colIndex, List<CellRangeAddress> mergedRegions) {
+//        for (CellRangeAddress range : mergedRegions) {
+//            if (range.isInRange(rowIndex, colIndex)) {
+//                Row firstRow = sheet.getRow(range.getFirstRow());
+//                return firstRow.getCell(range.getFirstColumn(), Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
+//            }
+//        }
+//        Row row = sheet.getRow(rowIndex);
+//        if (row == null) return null;
+//        return row.getCell(colIndex, Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
+//    }
+//
+//    private String saveImage(byte[] imageBytes, String fileName, String mimeType) throws IOException {
+//        if (imageBytes == null || imageBytes.length == 0) return null;
+//
+//        Set<String> allowed = Set.of("image/jpeg", "image/jpg", "image/png", "image/gif", "image/bmp", "image/webp");
+//        if (!allowed.contains(mimeType)) {
+//            System.err.println("Skipped unsupported format: " + mimeType);
+//            return null;
+//        }
+//
+//        Path path = Paths.get(UPLOAD_DIR).resolve(fileName);
+//        Files.createDirectories(path.getParent());
+//        Files.write(path, imageBytes);
+//
+//        return "/uploads/" + fileName;
+//    }
+//
+//    private String getImageExtension(String mimeType) {
+//        return switch (mimeType) {
+//            case "image/jpeg", "image/jpg" -> ".jpg";
+//            case "image/png" -> ".png";
+//            case "image/gif" -> ".gif";
+//            case "image/bmp" -> ".bmp";
+//            case "image/webp" -> ".webp";
+//            default -> ".png";
+//        };
+//    }
+
+    @PostMapping(value = "/requisition-monthly/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Upload Requisition File",
+            description = "Upload Excel .xlsx file. Data starts from row 9, column B (Item VN). " +
+                    "Columns: B=Item VN, C=Item EN, D=SAP Code, E=Hana Code, I=Request, J=Unit, K=Dept, N=Picture, O=Remarks"
+    )
+    public ResponseEntity<List<RequisitionMonthly>> uploadRequisitionFile(
+            @Parameter(description = "Excel .xlsx file") @RequestPart("file") MultipartFile file,
+            @Parameter(description = "Group ID", required = true) @RequestParam("groupId") String groupId
+    ) {
+
+        // =======================
+        // 0) Basic validations
+        // =======================
+        if (groupId == null || groupId.trim().isEmpty()) {
+            return badRequest("groupId is required.");
+        }
+        if (file == null || file.isEmpty()) {
+            return badRequest("No file uploaded.");
+        }
+        String originalName = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
+        if (!originalName.endsWith(".xlsx")) {
+            return badRequest("Only .xlsx files are allowed.");
+        }
+
+        // =======================
+        // 1) Read-only data (DB)
+        // =======================
+        List<RequisitionMonthly> allMonthly = requisitionMonthlyRepository.findByGroupId(groupId);
+        Set<String> existingSapCodes = allMonthly.stream()
+                .map(RequisitionMonthly::getOldSAPCode)
+                .filter(code -> code != null && !code.trim().isEmpty() && !"NEW".equalsIgnoreCase(code.trim()))
+                .map(code -> code.trim().toUpperCase())
+                .collect(Collectors.toSet());
+
+        // =======================
+        // 2) Parse + Validate (NO SAVE ANYTHING)
+        // =======================
+        final int HEADER_ROW_INDEX = 6;       // Excel row 7 (0-based)
+        final int DATA_START_ROW_INDEX = 8;   // Excel row 9 (0-based)
+        final int COL_ITEM_VN = 1;            // B
+        final int COL_ITEM_EN = 2;            // C
+        final int COL_SAP = 3;                // D
+        final int COL_HANA = 4;               // E
+        final int COL_REQUEST = 8;            // I
+        final int COL_UNIT = 9;               // J
+        final int COL_DEPT = 10;              // K
+        final int COL_PICTURE = 13;           // N
+        final int COL_REMARK = 14;            // O
+
+        List<String> errors = new ArrayList<>();
+
+        // Data holders
+        List<RequisitionMonthly> requisitions = new ArrayList<>();
+        Map<String, Integer> sapCodeMap = new HashMap<>();   // <sapCode, index>
+        Map<String, Integer> materialMap = new HashMap<>();  // <itemVN, index> for SAP = NEW
+
+        // For strict "only save when 100% valid"
+        Map<RequisitionMonthly, List<PicturePayload>> picturePayloadMap = new IdentityHashMap<>();
+        Map<String, Department> deptCache = new HashMap<>(); // deptNameNormalized -> Department
+
+        try (InputStream is = file.getInputStream(); XSSFWorkbook workbook = new XSSFWorkbook(is)) {
+
+            Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
+            if (sheet == null) {
+                return badRequest("Sheet not found.");
+            }
+
+            // --- Validate template header (chống import sai format) ---
+            // Expect: B=Items, D=SAP Code, E=Hana Code, I=Request, J=Unit, K=Dept, N=Picture, O=Remarks
+            Row headerRow = sheet.getRow(HEADER_ROW_INDEX);
+            if (!isValidMonthlyTemplateHeader(sheet, headerRow, errors, HEADER_ROW_INDEX,
+                    Map.of(
+                            COL_ITEM_VN, "items",
+                            COL_SAP, "sap",
+                            COL_HANA, "hana",
+                            COL_REQUEST, "request",
+                            COL_UNIT, "unit",
+                            COL_DEPT, "dept",
+                            COL_PICTURE, "picture",
+                            COL_REMARK, "remarks"
+                    ))) {
+                return badRequestErrors(errors);
+            }
+
+            if (sheet.getLastRowNum() < DATA_START_ROW_INDEX) {
+                return badRequest("No data rows found (expected data from row 9).");
+            }
+
+            List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
+
+            // --- Index pictures by row (faster + chính xác hơn) ---
+            Map<Integer, List<PicturePayload>> picturesByRow = new HashMap<>();
+            Drawing<?> patriarch = sheet.getDrawingPatriarch();
+            if (patriarch instanceof XSSFDrawing drawing) {
+                for (XSSFShape shape : drawing.getShapes()) {
+                    if (shape instanceof XSSFPicture pic) {
+                        XSSFClientAnchor anchor = pic.getClientAnchor();
+                        if (anchor == null) continue;
+
+                        boolean inCol = anchor.getCol1() <= COL_PICTURE && anchor.getCol2() >= COL_PICTURE;
+                        if (!inCol) continue;
+
+                        byte[] imgBytes = null;
+                        String mimeType = null;
+                        try {
+                            imgBytes = pic.getPictureData().getData();
+                            mimeType = pic.getPictureData().getMimeType();
+                        } catch (Exception ignore) {}
+
+                        // strict: mimeType phải thuộc allowed
+                        if (mimeType != null && !isAllowedImageMime(mimeType)) {
+                            // add error for all rows picture spans
+                            for (int r = anchor.getRow1(); r <= anchor.getRow2(); r++) {
+                                errors.add("Row " + (r + 1) + ": Unsupported image format '" + mimeType + "' in Picture column.");
+                            }
+                            continue;
+                        }
+
+                        if (imgBytes != null && imgBytes.length > 0) {
+                            PicturePayload payload = new PicturePayload(imgBytes, mimeType);
+                            for (int r = anchor.getRow1(); r <= anchor.getRow2(); r++) {
+                                picturesByRow.computeIfAbsent(r, k -> new ArrayList<>()).add(payload);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- Walk rows (validate toàn bộ trước) ---
+            for (int i = DATA_START_ROW_INDEX; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                // Item VN (required)
+                Cell itemVNCell = getMergedCellValue(sheet, i, COL_ITEM_VN, mergedRegions);
+                String itemVN = safeTrim(getCellValue(itemVNCell));
+                if (itemVN == null || itemVN.isEmpty()) {
+                    continue; // row trống -> bỏ qua
+                }
+
+                // Other cells
+                String itemEN = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_ITEM_EN, mergedRegions)));
+                String sapCodeRaw = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_SAP, mergedRegions)));
+                String hanaCode = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_HANA, mergedRegions)));
+                String unit = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_UNIT, mergedRegions)));
+                String deptName = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_DEPT, mergedRegions)));
+                String reason = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_REMARK, mergedRegions)));
+
+                // Request qty (required + numeric)
+                Cell requestCell = getMergedCellValue(sheet, i, COL_REQUEST, mergedRegions);
+                BigDecimal requestQty = parseBigDecimalStrict(requestCell);
+                if (requestQty == null) {
+                    errors.add("Row " + (i + 1) + ": Request qty (col I) is required and must be numeric.");
+                    continue;
+                }
+                if (requestQty.compareTo(BigDecimal.ZERO) < 0) {
+                    errors.add("Row " + (i + 1) + ": Request qty (col I) cannot be negative.");
+                    continue;
+                }
+
+                // Unit required (mình siết cho rõ ràng)
+                if (unit == null || unit.isEmpty()) {
+                    errors.add("Row " + (i + 1) + ": Unit (col J) is required.");
+                    continue;
+                }
+
+                // Dept required + MUST exist
+                if (deptName == null || deptName.isEmpty()) {
+                    errors.add("Row " + (i + 1) + ": Department (col K) is required.");
+                    continue;
+                }
+                String deptKey = normalizeKey(deptName);
+                Department dept = deptCache.get(deptKey);
+                if (dept == null) {
+                    dept = departmentRepository.findByDepartmentName(deptName.trim());
+                    if (dept == null) {
+                        errors.add("Row " + (i + 1) + ": Department '" + deptName + "' does not exist. Please create it first.");
+                        continue;
+                    }
+                    deptCache.put(deptKey, dept);
+                }
+                String deptId = dept.getId();
+
+                // SAP duplicate check (DB)
+                boolean isSapValid = sapCodeRaw != null && !sapCodeRaw.isEmpty() && !"NEW".equalsIgnoreCase(sapCodeRaw);
+                if (isSapValid) {
+                    String normalizedSap = sapCodeRaw.trim().toUpperCase();
+                    if (existingSapCodes.contains(normalizedSap)) {
+                        errors.add("Row " + (i + 1) + ": SAP Code '" + sapCodeRaw + "' already exists in the system for this group.");
+                        continue;
+                    }
+                }
+
+                // Pictures payload for this row (validate already done via mimeType)
+                List<PicturePayload> rowPics = picturesByRow.getOrDefault(i, Collections.emptyList());
+
+                // Inhand & Buy no longer in file -> default 0 (giữ logic cũ)
+                BigDecimal inhand = BigDecimal.ZERO;
+                BigDecimal buy = BigDecimal.ZERO;
+
+                // Determine group key for merge
+                boolean isSapNewOrEmpty = !isSapValid;
+                String groupKey = isSapNewOrEmpty ? normalizeKey(itemVN) : normalizeKey(sapCodeRaw);
+                Map<String, Integer> currentMap = isSapNewOrEmpty ? materialMap : sapCodeMap;
+
+                // Merge into requisitions
+                if (currentMap.containsKey(groupKey)) {
+                    int idx = currentMap.get(groupKey);
+                    RequisitionMonthly existing = requisitions.get(idx);
+
+                    // merge dept requisitions
+                    if (existing.getDepartmentRequisitions() == null) {
+                        existing.setDepartmentRequisitions(new ArrayList<>());
+                    }
+
+                    boolean deptExists = false;
+                    for (DepartmentRequisitionMonthly dr : existing.getDepartmentRequisitions()) {
+                        if (dr != null && dr.getId() != null && dr.getId().equals(deptId)) {
+                            dr.setQty(nvl(dr.getQty()).add(requestQty));
+                            dr.setBuy(nvl(dr.getBuy()).add(buy));
+                            deptExists = true;
+                            break;
+                        }
+                    }
+                    if (!deptExists) {
+                        DepartmentRequisitionMonthly ndr = new DepartmentRequisitionMonthly();
+                        ndr.setId(deptId);
+                        ndr.setName(deptName);
+                        ndr.setQty(requestQty);
+                        ndr.setBuy(buy);
+                        existing.getDepartmentRequisitions().add(ndr);
+                    }
+
+                    existing.setTotalRequestQty(nvl(existing.getTotalRequestQty()).add(requestQty));
+                    existing.setOrderQty(nvl(existing.getOrderQty()).add(buy));
+
+                    if ((existing.getUnit() == null || existing.getUnit().isEmpty()) && unit != null) existing.setUnit(unit);
+                    if ((existing.getReason() == null || existing.getReason().isEmpty()) && reason != null) existing.setReason(reason);
+
+                    // merge pictures payload
+                    if (!rowPics.isEmpty()) {
+                        picturePayloadMap.computeIfAbsent(existing, k -> new ArrayList<>()).addAll(rowPics);
+                    }
+
+                    continue;
+                }
+
+                // Create new requisition (NO DB SAVE yet)
+                RequisitionMonthly req = new RequisitionMonthly();
+                req.setGroupId(groupId);
+                req.setCreatedDate(LocalDateTime.now());
+                req.setUpdatedDate(LocalDateTime.now());
+
+                if (isSapValid) req.setOldSAPCode(sapCodeRaw);
+                req.setItemDescriptionVN(itemVN);
+                req.setItemDescriptionEN(itemEN);
+                req.setTotalRequestQty(requestQty);
+                req.setOrderQty(buy);
+                req.setDailyMedInventory(inhand);
+                req.setUnit(unit);
+                req.setReason(reason);
+                req.setHanaSAPCode(hanaCode);
+
+                List<DepartmentRequisitionMonthly> deptList = new ArrayList<>();
+                DepartmentRequisitionMonthly dr = new DepartmentRequisitionMonthly();
+                dr.setId(deptId);
+                dr.setName(deptName);
+                dr.setQty(requestQty);
+                dr.setBuy(buy);
+                deptList.add(dr);
+                req.setDepartmentRequisitions(deptList);
+
+                requisitions.add(req);
+                currentMap.put(groupKey, requisitions.size() - 1);
+
+                if (!rowPics.isEmpty()) {
+                    picturePayloadMap.put(req, new ArrayList<>(rowPics));
+                }
+            }
+
+            // If any errors -> do NOT save anything
+            if (!errors.isEmpty()) {
+                return badRequestErrors(errors);
+            }
+
+            if (requisitions.isEmpty()) {
+                return badRequest("No valid data found starting from row 9 (column B).");
+            }
+
+            // =======================
+            // 3) Save images first (strict), then saveAll
+            // =======================
+            List<Path> savedFiles = new ArrayList<>();
+            try {
+                for (RequisitionMonthly req : requisitions) {
+                    List<PicturePayload> pics = picturePayloadMap.getOrDefault(req, Collections.emptyList());
+                    if (pics.isEmpty()) continue;
+
+                    List<String> imageUrls = new ArrayList<>();
+                    for (PicturePayload p : pics) {
+                        String ext = getImageExtension(p.mimeType);
+                        String fileName = "req_" + groupId + "_" + System.currentTimeMillis() + "_" + UUID.randomUUID() + ext;
+
+                        // saveImage returns "/uploads/xxx"
+                        String imgPath = saveImage(p.bytes, fileName, p.mimeType);
+                        if (imgPath == null) {
+                            throw new RuntimeException("Failed to save image for item: " + safe(req.getItemDescriptionVN()));
+                        }
+                        imageUrls.add(imgPath);
+
+                        // Track physical file to cleanup if needed
+                        Path physical = Paths.get(UPLOAD_DIR).resolve(fileName);
+                        savedFiles.add(physical);
+                    }
+
+                    req.setImageUrls(imageUrls);
+                }
+
+                List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);
+                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+
+            } catch (Exception ex) {
+                // cleanup saved images if anything fails
+                for (Path p : savedFiles) {
+                    try { Files.deleteIfExists(p); } catch (Exception ignore) {}
+                }
+                return badRequest("Import aborted (no data saved). Reason: " + ex.getMessage());
+            }
+
+        } catch (Exception e) {
+            return badRequest("Error processing file: " + e.getMessage());
+        }
+    }
+
+/* =========================================================
+   Helpers for strict import
+   ========================================================= */
+
+    private static class PicturePayload {
+        final byte[] bytes;
+        final String mimeType;
+        PicturePayload(byte[] bytes, String mimeType) {
+            this.bytes = bytes;
+            this.mimeType = mimeType;
+        }
+    }
+
+    private boolean isValidMonthlyTemplateHeader(
+            Sheet sheet,
+            Row headerRow,
+            List<String> errors,
+            int headerRowIndex,
+            Map<Integer, String> expectedContains
+    ) {
+        if (headerRow == null) {
+            errors.add("Invalid template: header row (row " + (headerRowIndex + 1) + ") not found.");
+            return false;
+        }
+
+        boolean ok = true;
+        for (Map.Entry<Integer, String> e : expectedContains.entrySet()) {
+            int col = e.getKey();
+            String expected = e.getValue();
+
+            Cell c = headerRow.getCell(col, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+            String v = normalizeHeader(getCellValue(c));
+
+            if (v == null || !v.contains(expected)) {
+                ok = false;
+                errors.add("Invalid template: header at row " + (headerRowIndex + 1) +
+                        ", col " + (col + 1) + " is wrong/missing. Expected contains '" + expected + "'.");
+            }
+        }
+
+        if (!ok) {
+            errors.add("Please use the correct Monthly Requisition import template (latest).");
+        }
+        return ok;
+    }
+
+    private String normalizeHeader(String s) {
+        if (s == null) return null;
+        return s.toLowerCase()
+                .replace("\n", " ")
+                .replace("\r", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private String normalizeKey(String s) {
+        if (s == null) return "";
+        return s.trim().toLowerCase().replaceAll("\\s+", " ");
+    }
+
+    private String safeTrim(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    private String safe(String s) {
+        return s == null ? "" : s;
+    }
+
+    private BigDecimal nvl(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
+    }
+
+    private BigDecimal parseBigDecimalStrict(Cell cell) {
+        if (cell == null) return null;
+
+        try {
+            if (cell.getCellType() == CellType.NUMERIC) {
+                return BigDecimal.valueOf(cell.getNumericCellValue());
+            }
+            if (cell.getCellType() == CellType.FORMULA) {
+                // try numeric result first
+                try {
+                    return BigDecimal.valueOf(cell.getNumericCellValue());
+                } catch (Exception ignore) {}
+                // fallback to string
+                String s = cell.getStringCellValue();
+                return parseBigDecimalFromString(s);
+            }
+            if (cell.getCellType() == CellType.STRING) {
+                return parseBigDecimalFromString(cell.getStringCellValue());
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private BigDecimal parseBigDecimalFromString(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim();
+        if (s.isEmpty()) return null;
+
+        // allow "1,234" or "1 234" style
+        s = s.replace(",", "").replace(" ", "");
+        // if someone puts "-" or text -> fail
+        return new BigDecimal(s);
+    }
+
+    private boolean isAllowedImageMime(String mimeType) {
+        if (mimeType == null) return false;
+        Set<String> allowed = Set.of("image/jpeg", "image/jpg", "image/png", "image/gif", "image/bmp", "image/webp");
+        return allowed.contains(mimeType);
+    }
+
+    // === HELPER: Trả về lỗi nhanh (single) ===
     private ResponseEntity<List<RequisitionMonthly>> badRequest(String message) {
         return ResponseEntity.badRequest().body(
                 Collections.singletonList(new RequisitionMonthly() {{ setRemark(message); }})
         );
     }
 
-    // Helper method to get cell value
+    // === HELPER: Trả về lỗi dạng list (multi) ===
+    private ResponseEntity<List<RequisitionMonthly>> badRequestErrors(List<String> messages) {
+        List<RequisitionMonthly> list = new ArrayList<>();
+        for (String m : messages) {
+            RequisitionMonthly r = new RequisitionMonthly();
+            r.setRemark(m);
+            list.add(r);
+        }
+        return ResponseEntity.badRequest().body(list);
+    }
+
+    // Helper method to get cell value (giữ logic cũ, nhưng trim an toàn)
     private String getCellValue(Cell cell) {
         if (cell == null) return null;
         switch (cell.getCellType()) {
             case STRING:
-                return cell.getStringCellValue().trim();
+                return cell.getStringCellValue() != null ? cell.getStringCellValue().trim() : null;
             case NUMERIC:
-                // SAP Code có thể là số → chuyển thành String
                 if (DateUtil.isCellDateFormatted(cell)) {
                     return cell.getDateCellValue().toString();
                 }
-                return String.valueOf((long) cell.getNumericCellValue()); // Ép về long để tránh .0
+                return String.valueOf((long) cell.getNumericCellValue());
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
                 try {
-                    return cell.getStringCellValue();
+                    String s = cell.getStringCellValue();
+                    return s != null ? s.trim() : null;
                 } catch (Exception e) {
                     try {
                         return String.valueOf((long) cell.getNumericCellValue());
@@ -1618,46 +1973,12 @@ public class RequisitionMonthlyController {
         }
     }
 
-    // Helper method to parse Double value
-    private Double parseDouble(Cell cell) {
-        if (cell == null) return null;
-        try {
-            if (cell.getCellType() == CellType.NUMERIC) {
-                return cell.getNumericCellValue();
-            } else if (cell.getCellType() == CellType.STRING) {
-                return Double.parseDouble(cell.getStringCellValue().trim());
-            } else if (cell.getCellType() == CellType.FORMULA) {
-                return cell.getNumericCellValue();
-            }
-        } catch (Exception e) {
-            return null;
-        }
-        return null;
-    }
-
-    // Helper method to parse BigDecimal value
-    private BigDecimal parseBigDecimal(Cell cell) {
-        if (cell == null) return null;
-        try {
-            if (cell.getCellType() == CellType.NUMERIC) {
-                return BigDecimal.valueOf(cell.getNumericCellValue());
-            } else if (cell.getCellType() == CellType.STRING) {
-                return new BigDecimal(cell.getStringCellValue().trim());
-            } else if (cell.getCellType() == CellType.FORMULA) {
-                return BigDecimal.valueOf(cell.getNumericCellValue());
-            }
-        } catch (Exception e) {
-            return null;
-        }
-        return null;
-    }
-
-    // Helper method to get value from cell, handling merged cells
+    // Helper: merged cell
     private Cell getMergedCellValue(Sheet sheet, int rowIndex, int colIndex, List<CellRangeAddress> mergedRegions) {
         for (CellRangeAddress range : mergedRegions) {
             if (range.isInRange(rowIndex, colIndex)) {
                 Row firstRow = sheet.getRow(range.getFirstRow());
-                return firstRow.getCell(range.getFirstColumn(), Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
+                return firstRow == null ? null : firstRow.getCell(range.getFirstColumn(), Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
             }
         }
         Row row = sheet.getRow(rowIndex);
@@ -1668,8 +1989,7 @@ public class RequisitionMonthlyController {
     private String saveImage(byte[] imageBytes, String fileName, String mimeType) throws IOException {
         if (imageBytes == null || imageBytes.length == 0) return null;
 
-        Set<String> allowed = Set.of("image/jpeg", "image/jpg", "image/png", "image/gif", "image/bmp", "image/webp");
-        if (!allowed.contains(mimeType)) {
+        if (!isAllowedImageMime(mimeType)) {
             System.err.println("Skipped unsupported format: " + mimeType);
             return null;
         }

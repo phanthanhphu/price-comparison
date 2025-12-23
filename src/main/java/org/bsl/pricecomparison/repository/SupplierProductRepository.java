@@ -51,4 +51,8 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
 
     @Query("{'supplierName': ?0, 'sapCode': ?1, 'price': ?2, '_id': { $ne: ?3 }}")
     boolean existsBySupplierNameAndSapCodeAndPriceAndIdNot(String supplierName, String sapCode, BigDecimal price, String id);
+
+    List<SupplierProduct> findBySapCodeIgnoreCase(String sapCode);
+
+    List<SupplierProduct> findBySapCodeIgnoreCaseAndCurrency(String sapCode, String currency);
 }
