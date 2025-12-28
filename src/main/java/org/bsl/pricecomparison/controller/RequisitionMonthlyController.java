@@ -247,6 +247,44 @@ public class RequisitionMonthlyController {
         return "/uploads/" + fileName;
     }
 
+    @DeleteMapping("/requisition-monthly/{id}")
+    public ResponseEntity<?> delete(@PathVariable String id) {
+        try {
+            var requisitionOptional = requisitionMonthlyRepository.findById(id);
+            if (requisitionOptional.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("ID not found: " + id);
+            }
+
+            var requisition = requisitionOptional.get();
+
+            List<String> imageUrls = requisition.getImageUrls();
+            if (imageUrls != null && !imageUrls.isEmpty()) {
+                for (String imageUrl : imageUrls) {
+                    if (imageUrl != null && !imageUrl.isBlank()) {
+                        try {
+                            String filePath = imageUrl.startsWith("/uploads/") ? "." + imageUrl : imageUrl;
+                            Path path = Paths.get(filePath);
+                            if (Files.exists(path)) {
+                                Files.delete(path);
+                                System.out.println("Deleted image: " + filePath);
+                            }
+                        } catch (IOException e) {
+                            System.err.println("Error deleting image: " + imageUrl + ", error: " + e.getMessage());
+                        }
+                    }
+                }
+            }
+
+            requisitionMonthlyRepository.deleteById(id);
+            return ResponseEntity.ok("Successfully deleted ID: " + id);
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid ID: " + id);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Deletion error: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/requisition-monthly/filter")
     public ResponseEntity<RequisitionMonthlyPagedResponse> filterRequisitions(
             @RequestParam String groupId,
@@ -1365,451 +1403,6 @@ public class RequisitionMonthlyController {
         );
     }
 
-//    // === HELPER: Trả về lỗi nhanh ===
-//    private ResponseEntity<List<RequisitionMonthly>> badRequest(String message) {
-//        return ResponseEntity.badRequest().body(
-//                Collections.singletonList(new RequisitionMonthly() {{ setRemark(message); }})
-//        );
-//    }
-//
-//    // Helper method to get cell value
-//    private String getCellValue(Cell cell) {
-//        if (cell == null) return null;
-//        switch (cell.getCellType()) {
-//            case STRING:
-//                return cell.getStringCellValue().trim();
-//            case NUMERIC:
-//                // SAP Code có thể là số → chuyển thành String
-//                if (DateUtil.isCellDateFormatted(cell)) {
-//                    return cell.getDateCellValue().toString();
-//                }
-//                return String.valueOf((long) cell.getNumericCellValue()); // Ép về long để tránh .0
-//            case BOOLEAN:
-//                return String.valueOf(cell.getBooleanCellValue());
-//            case FORMULA:
-//                try {
-//                    return cell.getStringCellValue();
-//                } catch (Exception e) {
-//                    try {
-//                        return String.valueOf((long) cell.getNumericCellValue());
-//                    } catch (Exception ex) {
-//                        return null;
-//                    }
-//                }
-//            default:
-//                return null;
-//        }
-//    }
-//
-//    // Helper method to parse Double value
-//    private Double parseDouble(Cell cell) {
-//        if (cell == null) return null;
-//        try {
-//            if (cell.getCellType() == CellType.NUMERIC) {
-//                return cell.getNumericCellValue();
-//            } else if (cell.getCellType() == CellType.STRING) {
-//                return Double.parseDouble(cell.getStringCellValue().trim());
-//            } else if (cell.getCellType() == CellType.FORMULA) {
-//                return cell.getNumericCellValue();
-//            }
-//        } catch (Exception e) {
-//            return null;
-//        }
-//        return null;
-//    }
-//
-//    // Helper method to parse BigDecimal value
-//    private BigDecimal parseBigDecimal(Cell cell) {
-//        if (cell == null) return null;
-//        try {
-//            if (cell.getCellType() == CellType.NUMERIC) {
-//                return BigDecimal.valueOf(cell.getNumericCellValue());
-//            } else if (cell.getCellType() == CellType.STRING) {
-//                return new BigDecimal(cell.getStringCellValue().trim());
-//            } else if (cell.getCellType() == CellType.FORMULA) {
-//                return BigDecimal.valueOf(cell.getNumericCellValue());
-//            }
-//        } catch (Exception e) {
-//            return null;
-//        }
-//        return null;
-//    }
-//
-//    // Helper method to get value from cell, handling merged cells
-//    private Cell getMergedCellValue(Sheet sheet, int rowIndex, int colIndex, List<CellRangeAddress> mergedRegions) {
-//        for (CellRangeAddress range : mergedRegions) {
-//            if (range.isInRange(rowIndex, colIndex)) {
-//                Row firstRow = sheet.getRow(range.getFirstRow());
-//                return firstRow.getCell(range.getFirstColumn(), Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
-//            }
-//        }
-//        Row row = sheet.getRow(rowIndex);
-//        if (row == null) return null;
-//        return row.getCell(colIndex, Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
-//    }
-//
-//    private String saveImage(byte[] imageBytes, String fileName, String mimeType) throws IOException {
-//        if (imageBytes == null || imageBytes.length == 0) return null;
-//
-//        Set<String> allowed = Set.of("image/jpeg", "image/jpg", "image/png", "image/gif", "image/bmp", "image/webp");
-//        if (!allowed.contains(mimeType)) {
-//            System.err.println("Skipped unsupported format: " + mimeType);
-//            return null;
-//        }
-//
-//        Path path = Paths.get(UPLOAD_DIR).resolve(fileName);
-//        Files.createDirectories(path.getParent());
-//        Files.write(path, imageBytes);
-//
-//        return "/uploads/" + fileName;
-//    }
-//
-//    private String getImageExtension(String mimeType) {
-//        return switch (mimeType) {
-//            case "image/jpeg", "image/jpg" -> ".jpg";
-//            case "image/png" -> ".png";
-//            case "image/gif" -> ".gif";
-//            case "image/bmp" -> ".bmp";
-//            case "image/webp" -> ".webp";
-//            default -> ".png";
-//        };
-//    }
-
-    @PostMapping(value = "/requisition-monthly/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(
-            summary = "Upload Requisition File",
-            description = "Upload Excel .xlsx file. Data starts from row 9, column B (Item VN). " +
-                    "Columns: B=Item VN, C=Item EN, D=SAP Code, E=Hana Code, I=Request, J=Unit, K=Dept, N=Picture, O=Remarks"
-    )
-    public ResponseEntity<List<RequisitionMonthly>> uploadRequisitionFile(
-            @Parameter(description = "Excel .xlsx file") @RequestPart("file") MultipartFile file,
-            @Parameter(description = "Group ID", required = true) @RequestParam("groupId") String groupId
-    ) {
-
-        // =======================
-        // 0) Basic validations
-        // =======================
-        if (groupId == null || groupId.trim().isEmpty()) {
-            return badRequest("groupId is required.");
-        }
-        if (file == null || file.isEmpty()) {
-            return badRequest("No file uploaded.");
-        }
-        String originalName = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase();
-        if (!originalName.endsWith(".xlsx")) {
-            return badRequest("Only .xlsx files are allowed.");
-        }
-
-        // =======================
-        // 1) Read-only data (DB)
-        // =======================
-        List<RequisitionMonthly> allMonthly = requisitionMonthlyRepository.findByGroupId(groupId);
-        Set<String> existingSapCodes = allMonthly.stream()
-                .map(RequisitionMonthly::getOldSAPCode)
-                .filter(code -> code != null && !code.trim().isEmpty() && !"NEW".equalsIgnoreCase(code.trim()))
-                .map(code -> code.trim().toUpperCase())
-                .collect(Collectors.toSet());
-
-        // =======================
-        // 2) Parse + Validate (NO SAVE ANYTHING)
-        // =======================
-        final int HEADER_ROW_INDEX = 6;       // Excel row 7 (0-based)
-        final int DATA_START_ROW_INDEX = 8;   // Excel row 9 (0-based)
-        final int COL_ITEM_VN = 1;            // B
-        final int COL_ITEM_EN = 2;            // C
-        final int COL_SAP = 3;                // D
-        final int COL_HANA = 4;               // E
-        final int COL_REQUEST = 8;            // I
-        final int COL_UNIT = 9;               // J
-        final int COL_DEPT = 10;              // K
-        final int COL_PICTURE = 13;           // N
-        final int COL_REMARK = 14;            // O
-
-        List<String> errors = new ArrayList<>();
-
-        // Data holders
-        List<RequisitionMonthly> requisitions = new ArrayList<>();
-        Map<String, Integer> sapCodeMap = new HashMap<>();   // <sapCode, index>
-        Map<String, Integer> materialMap = new HashMap<>();  // <itemVN, index> for SAP = NEW
-
-        // For strict "only save when 100% valid"
-        Map<RequisitionMonthly, List<PicturePayload>> picturePayloadMap = new IdentityHashMap<>();
-        Map<String, Department> deptCache = new HashMap<>(); // deptNameNormalized -> Department
-
-        try (InputStream is = file.getInputStream(); XSSFWorkbook workbook = new XSSFWorkbook(is)) {
-
-            Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
-            if (sheet == null) {
-                return badRequest("Sheet not found.");
-            }
-
-            // --- Validate template header (chống import sai format) ---
-            // Expect: B=Items, D=SAP Code, E=Hana Code, I=Request, J=Unit, K=Dept, N=Picture, O=Remarks
-            Row headerRow = sheet.getRow(HEADER_ROW_INDEX);
-            if (!isValidMonthlyTemplateHeader(sheet, headerRow, errors, HEADER_ROW_INDEX,
-                    Map.of(
-                            COL_ITEM_VN, "items",
-                            COL_SAP, "sap",
-                            COL_HANA, "hana",
-                            COL_REQUEST, "request",
-                            COL_UNIT, "unit",
-                            COL_DEPT, "dept",
-                            COL_PICTURE, "picture",
-                            COL_REMARK, "remarks"
-                    ))) {
-                return badRequestErrors(errors);
-            }
-
-            if (sheet.getLastRowNum() < DATA_START_ROW_INDEX) {
-                return badRequest("No data rows found (expected data from row 9).");
-            }
-
-            List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
-
-            // --- Index pictures by row (faster + chính xác hơn) ---
-            Map<Integer, List<PicturePayload>> picturesByRow = new HashMap<>();
-            Drawing<?> patriarch = sheet.getDrawingPatriarch();
-            if (patriarch instanceof XSSFDrawing drawing) {
-                for (XSSFShape shape : drawing.getShapes()) {
-                    if (shape instanceof XSSFPicture pic) {
-                        XSSFClientAnchor anchor = pic.getClientAnchor();
-                        if (anchor == null) continue;
-
-                        boolean inCol = anchor.getCol1() <= COL_PICTURE && anchor.getCol2() >= COL_PICTURE;
-                        if (!inCol) continue;
-
-                        byte[] imgBytes = null;
-                        String mimeType = null;
-                        try {
-                            imgBytes = pic.getPictureData().getData();
-                            mimeType = pic.getPictureData().getMimeType();
-                        } catch (Exception ignore) {}
-
-                        // strict: mimeType phải thuộc allowed
-                        if (mimeType != null && !isAllowedImageMime(mimeType)) {
-                            // add error for all rows picture spans
-                            for (int r = anchor.getRow1(); r <= anchor.getRow2(); r++) {
-                                errors.add("Row " + (r + 1) + ": Unsupported image format '" + mimeType + "' in Picture column.");
-                            }
-                            continue;
-                        }
-
-                        if (imgBytes != null && imgBytes.length > 0) {
-                            PicturePayload payload = new PicturePayload(imgBytes, mimeType);
-                            for (int r = anchor.getRow1(); r <= anchor.getRow2(); r++) {
-                                picturesByRow.computeIfAbsent(r, k -> new ArrayList<>()).add(payload);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- Walk rows (validate toàn bộ trước) ---
-            for (int i = DATA_START_ROW_INDEX; i <= sheet.getLastRowNum(); i++) {
-                Row row = sheet.getRow(i);
-                if (row == null) continue;
-
-                // Item VN (required)
-                Cell itemVNCell = getMergedCellValue(sheet, i, COL_ITEM_VN, mergedRegions);
-                String itemVN = safeTrim(getCellValue(itemVNCell));
-                if (itemVN == null || itemVN.isEmpty()) {
-                    continue; // row trống -> bỏ qua
-                }
-
-                // Other cells
-                String itemEN = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_ITEM_EN, mergedRegions)));
-                String sapCodeRaw = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_SAP, mergedRegions)));
-                String hanaCode = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_HANA, mergedRegions)));
-                String unit = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_UNIT, mergedRegions)));
-                String deptName = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_DEPT, mergedRegions)));
-                String reason = safeTrim(getCellValue(getMergedCellValue(sheet, i, COL_REMARK, mergedRegions)));
-
-                // Request qty (required + numeric)
-                Cell requestCell = getMergedCellValue(sheet, i, COL_REQUEST, mergedRegions);
-                BigDecimal requestQty = parseBigDecimalStrict(requestCell);
-                if (requestQty == null) {
-                    errors.add("Row " + (i + 1) + ": Request qty (col I) is required and must be numeric.");
-                    continue;
-                }
-                if (requestQty.compareTo(BigDecimal.ZERO) < 0) {
-                    errors.add("Row " + (i + 1) + ": Request qty (col I) cannot be negative.");
-                    continue;
-                }
-
-                // Unit required (mình siết cho rõ ràng)
-                if (unit == null || unit.isEmpty()) {
-                    errors.add("Row " + (i + 1) + ": Unit (col J) is required.");
-                    continue;
-                }
-
-                // Dept required + MUST exist
-                if (deptName == null || deptName.isEmpty()) {
-                    errors.add("Row " + (i + 1) + ": Department (col K) is required.");
-                    continue;
-                }
-                String deptKey = normalizeKey(deptName);
-                Department dept = deptCache.get(deptKey);
-                if (dept == null) {
-                    dept = departmentRepository.findByDepartmentName(deptName.trim());
-                    if (dept == null) {
-                        errors.add("Row " + (i + 1) + ": Department '" + deptName + "' does not exist. Please create it first.");
-                        continue;
-                    }
-                    deptCache.put(deptKey, dept);
-                }
-                String deptId = dept.getId();
-
-                // SAP duplicate check (DB)
-                boolean isSapValid = sapCodeRaw != null && !sapCodeRaw.isEmpty() && !"NEW".equalsIgnoreCase(sapCodeRaw);
-                if (isSapValid) {
-                    String normalizedSap = sapCodeRaw.trim().toUpperCase();
-                    if (existingSapCodes.contains(normalizedSap)) {
-                        errors.add("Row " + (i + 1) + ": SAP Code '" + sapCodeRaw + "' already exists in the system for this group.");
-                        continue;
-                    }
-                }
-
-                // Pictures payload for this row (validate already done via mimeType)
-                List<PicturePayload> rowPics = picturesByRow.getOrDefault(i, Collections.emptyList());
-
-                // Inhand & Buy no longer in file -> default 0 (giữ logic cũ)
-                BigDecimal inhand = BigDecimal.ZERO;
-                BigDecimal buy = BigDecimal.ZERO;
-
-                // Determine group key for merge
-                boolean isSapNewOrEmpty = !isSapValid;
-                String groupKey = isSapNewOrEmpty ? normalizeKey(itemVN) : normalizeKey(sapCodeRaw);
-                Map<String, Integer> currentMap = isSapNewOrEmpty ? materialMap : sapCodeMap;
-
-                // Merge into requisitions
-                if (currentMap.containsKey(groupKey)) {
-                    int idx = currentMap.get(groupKey);
-                    RequisitionMonthly existing = requisitions.get(idx);
-
-                    // merge dept requisitions
-                    if (existing.getDepartmentRequisitions() == null) {
-                        existing.setDepartmentRequisitions(new ArrayList<>());
-                    }
-
-                    boolean deptExists = false;
-                    for (DepartmentRequisitionMonthly dr : existing.getDepartmentRequisitions()) {
-                        if (dr != null && dr.getId() != null && dr.getId().equals(deptId)) {
-                            dr.setQty(nvl(dr.getQty()).add(requestQty));
-                            dr.setBuy(nvl(dr.getBuy()).add(buy));
-                            deptExists = true;
-                            break;
-                        }
-                    }
-                    if (!deptExists) {
-                        DepartmentRequisitionMonthly ndr = new DepartmentRequisitionMonthly();
-                        ndr.setId(deptId);
-                        ndr.setName(deptName);
-                        ndr.setQty(requestQty);
-                        ndr.setBuy(buy);
-                        existing.getDepartmentRequisitions().add(ndr);
-                    }
-
-                    existing.setTotalRequestQty(nvl(existing.getTotalRequestQty()).add(requestQty));
-                    existing.setOrderQty(nvl(existing.getOrderQty()).add(buy));
-
-                    if ((existing.getUnit() == null || existing.getUnit().isEmpty()) && unit != null) existing.setUnit(unit);
-                    if ((existing.getReason() == null || existing.getReason().isEmpty()) && reason != null) existing.setReason(reason);
-
-                    // merge pictures payload
-                    if (!rowPics.isEmpty()) {
-                        picturePayloadMap.computeIfAbsent(existing, k -> new ArrayList<>()).addAll(rowPics);
-                    }
-
-                    continue;
-                }
-
-                // Create new requisition (NO DB SAVE yet)
-                RequisitionMonthly req = new RequisitionMonthly();
-                req.setGroupId(groupId);
-                req.setCreatedDate(LocalDateTime.now());
-                req.setUpdatedDate(LocalDateTime.now());
-
-                if (isSapValid) req.setOldSAPCode(sapCodeRaw);
-                req.setItemDescriptionVN(itemVN);
-                req.setItemDescriptionEN(itemEN);
-                req.setTotalRequestQty(requestQty);
-                req.setOrderQty(buy);
-                req.setDailyMedInventory(inhand);
-                req.setUnit(unit);
-                req.setReason(reason);
-                req.setHanaSAPCode(hanaCode);
-
-                List<DepartmentRequisitionMonthly> deptList = new ArrayList<>();
-                DepartmentRequisitionMonthly dr = new DepartmentRequisitionMonthly();
-                dr.setId(deptId);
-                dr.setName(deptName);
-                dr.setQty(requestQty);
-                dr.setBuy(buy);
-                deptList.add(dr);
-                req.setDepartmentRequisitions(deptList);
-
-                requisitions.add(req);
-                currentMap.put(groupKey, requisitions.size() - 1);
-
-                if (!rowPics.isEmpty()) {
-                    picturePayloadMap.put(req, new ArrayList<>(rowPics));
-                }
-            }
-
-            // If any errors -> do NOT save anything
-            if (!errors.isEmpty()) {
-                return badRequestErrors(errors);
-            }
-
-            if (requisitions.isEmpty()) {
-                return badRequest("No valid data found starting from row 9 (column B).");
-            }
-
-            // =======================
-            // 3) Save images first (strict), then saveAll
-            // =======================
-            List<Path> savedFiles = new ArrayList<>();
-            try {
-                for (RequisitionMonthly req : requisitions) {
-                    List<PicturePayload> pics = picturePayloadMap.getOrDefault(req, Collections.emptyList());
-                    if (pics.isEmpty()) continue;
-
-                    List<String> imageUrls = new ArrayList<>();
-                    for (PicturePayload p : pics) {
-                        String ext = getImageExtension(p.mimeType);
-                        String fileName = "req_" + groupId + "_" + System.currentTimeMillis() + "_" + UUID.randomUUID() + ext;
-
-                        // saveImage returns "/uploads/xxx"
-                        String imgPath = saveImage(p.bytes, fileName, p.mimeType);
-                        if (imgPath == null) {
-                            throw new RuntimeException("Failed to save image for item: " + safe(req.getItemDescriptionVN()));
-                        }
-                        imageUrls.add(imgPath);
-
-                        // Track physical file to cleanup if needed
-                        Path physical = Paths.get(UPLOAD_DIR).resolve(fileName);
-                        savedFiles.add(physical);
-                    }
-
-                    req.setImageUrls(imageUrls);
-                }
-
-                List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);
-                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
-
-            } catch (Exception ex) {
-                // cleanup saved images if anything fails
-                for (Path p : savedFiles) {
-                    try { Files.deleteIfExists(p); } catch (Exception ignore) {}
-                }
-                return badRequest("Import aborted (no data saved). Reason: " + ex.getMessage());
-            }
-
-        } catch (Exception e) {
-            return badRequest("Error processing file: " + e.getMessage());
-        }
-    }
-
 /* =========================================================
    Helpers for strict import
    ========================================================= */
@@ -1880,9 +1473,6 @@ public class RequisitionMonthlyController {
         return s == null ? "" : s;
     }
 
-    private BigDecimal nvl(BigDecimal v) {
-        return v == null ? BigDecimal.ZERO : v;
-    }
 
     private BigDecimal parseBigDecimalStrict(Cell cell) {
         if (cell == null) return null;
@@ -2263,6 +1853,773 @@ public class RequisitionMonthlyController {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    @PostMapping(value = "/requisition-monthly/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> importMonthlyExcel(
+            @RequestParam("email") String email,
+            @RequestParam("groupId") String groupId,
+            @RequestPart("file") MultipartFile file
+    ) {
+        try {
+            // ===== Validate =====
+            if (email == null || email.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "email is required"));
+            }
+            if (groupId == null || groupId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "groupId is required"));
+            }
+            if (file == null || file.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "file is required"));
+            }
+
+            ImportMonthlyResult result = new ImportMonthlyResult();
+
+            // Load department master
+            DepartmentMaster master = loadDepartmentMaster(result);
+
+            // Read the Excel file
+            ReadExcelResult readResult = readRowsFromExcel(file, result, master);
+            List<ImportRow> rawRows = readResult.rows;
+            Map<String, DeptMeta> deptMetaById = readResult.deptMetaById;
+
+            // Merge duplicates inside the file
+            Map<String, ImportRow> mergedRows = new LinkedHashMap<>();
+            for (ImportRow row : rawRows) {
+                String key = buildMatchKey(row);
+                if (key == null) {
+                    result.warnings.add("Skip row " + row.debugRowNo + " because key fields are empty (old/hana/vn/en).");
+                    continue;
+                }
+                ImportRow existing = mergedRows.get(key);
+                if (existing == null) {
+                    mergedRows.put(key, row);
+                } else {
+                    existing.mergeFrom(row);
+                    result.mergedDuplicatesInFile++;
+                }
+
+                // Calculate total request quantity from departments
+                BigDecimal totalRequestQty = row.sumDeptQty();
+                // Compare daily MED quantity with total request quantity
+                BigDecimal dailyMedInventory = row.dailyMedInventoryQty;
+                if (dailyMedInventory.compareTo(totalRequestQty) > 0) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "The daily MED quantity is greater than the total request quantity."));
+                }
+            }
+
+            // Load DB items
+            List<RequisitionMonthly> dbItems = requisitionMonthlyRepository.findAllByGroupId(groupId);
+            ExistingIndex index = new ExistingIndex(dbItems);
+
+            // Upsert logic
+            Set<String> matchedDbIds = new HashSet<>();
+
+            for (ImportRow row : mergedRows.values()) {
+                RequisitionMonthly target = findExisting(index, row);
+
+                if (target == null) {
+                    // Create new record
+                    RequisitionMonthly created = new RequisitionMonthly();
+                    applyImportToEntity(created, row, deptMetaById, groupId, email, true);
+                    requisitionMonthlyRepository.save(created);
+                    result.created++;
+                } else {
+                    // Update existing record
+                    applyImportToEntity(target, row, deptMetaById, groupId, email, false);
+                    requisitionMonthlyRepository.save(target);
+                    matchedDbIds.add(target.getId());
+                    result.updated++;
+                }
+            }
+
+            // Delete DB items not present in the file
+            for (RequisitionMonthly db : dbItems) {
+                if (!matchedDbIds.contains(db.getId())) {
+                    requisitionMonthlyRepository.delete(db);
+                    result.deleted++;
+                }
+            }
+
+            result.rowsRead = rawRows.size();
+            result.rowsUsedAfterMerge = mergedRows.size();
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Import monthly requisitions successfully",
+                    "summary", result
+            ));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Unexpected error: " + e.getMessage()));
+        }
+    }
+
+    // =========================================================
+// MATCH: oldSap -> hana -> vn -> en
+// =========================================================
+    private RequisitionMonthly findExisting(ExistingIndex index, ImportRow row) {
+        String oldSap = norm(row.oldSapCode);
+        if (isUsableCode(oldSap)) {
+            RequisitionMonthly x = index.byOldSap.get(oldSap);
+            if (x != null) return x;
+        }
+
+        String hana = norm(row.hanaSapCode);
+        if (isUsableCode(hana)) {
+            RequisitionMonthly x = index.byHana.get(hana);
+            if (x != null) return x;
+        }
+
+        String vn = norm(row.descriptionVN);
+        if (vn != null && !vn.isBlank()) {
+            RequisitionMonthly x = index.byDescVN.get(vn);
+            if (x != null) return x;
+        }
+
+        String en = norm(row.descriptionEN);
+        if (en != null && !en.isBlank()) {
+            return index.byDescEN.get(en);
+        }
+
+        return null;
+    }
+
+    private String buildMatchKey(ImportRow row) {
+        String oldSap = norm(row.oldSapCode);
+        if (isUsableCode(oldSap)) return "OLD_SAP::" + oldSap;
+
+        String hana = norm(row.hanaSapCode);
+        if (isUsableCode(hana)) return "HANA::" + hana;
+
+        String vn = norm(row.descriptionVN);
+        if (vn != null && !vn.isBlank()) return "VN::" + vn;
+
+        String en = norm(row.descriptionEN);
+        if (en != null && !en.isBlank()) return "EN::" + en;
+
+        return null;
+    }
+
+    private boolean isUsableCode(String code) {
+        return code != null && !code.isBlank() && !"new".equalsIgnoreCase(code.trim());
+    }
+
+    private String norm(String s) {
+        if (s == null) return null;
+        return s.trim().replaceAll("\\s+", " ").toLowerCase();
+    }
+
+    private String normDept(String s) {
+        if (s == null) return null;
+        return s.replace('\u00A0', ' ')
+                .trim()
+                .replaceAll("\\s+", " ")
+                .toLowerCase();
+    }
+
+    // ✅ remove .0, avoid scientific notation
+    private BigDecimal stripTrailingZerosSafe(BigDecimal x) {
+        if (x == null) return BigDecimal.ZERO;
+        BigDecimal z = x.stripTrailingZeros();
+        // if becomes 5E+2, convert back to plain scale
+        if (z.scale() < 0) z = z.setScale(0);
+        return z;
+    }
+
+    private BigDecimal nvl(BigDecimal x) {
+        return x == null ? BigDecimal.ZERO : x;
+    }
+
+    // =========================================================
+// LOAD MASTER DEPARTMENTS (id + name)
+// - warn duplicates only, deterministic pick when used.
+// =========================================================
+    private DepartmentMaster loadDepartmentMaster(ImportMonthlyResult result) {
+        List<Department> list = departmentRepository.findAllIdAndNames();
+
+        Map<String, List<DeptMeta>> byNorm = new HashMap<>();
+
+        for (Department d : list) {
+            if (d == null) continue;
+            String id = d.getId();
+            String name = d.getDepartmentName();
+            if (id == null || id.isBlank() || name == null || name.isBlank()) continue;
+
+            String key = normDept(name);
+            byNorm.computeIfAbsent(key, k -> new ArrayList<>()).add(new DeptMeta(id, name.trim()));
+        }
+
+        for (Map.Entry<String, List<DeptMeta>> e : byNorm.entrySet()) {
+            List<DeptMeta> metas = e.getValue();
+            if (metas != null && metas.size() > 1) {
+                result.warnings.add("Duplicate department name in master (case/space-insensitive): "
+                        + metas.get(0).name + " (count=" + metas.size() + "). Will auto-pick deterministic ID if used in Excel header.");
+            }
+        }
+
+        DepartmentMaster master = new DepartmentMaster();
+        master.byNormName = byNorm;
+        return master;
+    }
+
+    private DeptMeta pickDeptDeterministically(List<DeptMeta> candidates) {
+        if (candidates == null || candidates.isEmpty()) return null;
+        candidates.sort(Comparator.comparing(a -> a.id == null ? "" : a.id));
+        return candidates.get(0);
+    }
+
+    // =========================================================
+// APPLY IMPORT -> ENTITY
+// IMPORTANT FIX:
+// ✅ price: keep + normalize (no .0)
+// ✅ supplierName: keep if Excel blank
+// ✅ amount = orderQty * price (orderQty = dailyMedInventory)
+// =========================================================
+    private void applyImportToEntity(
+            RequisitionMonthly entity,
+            ImportRow row,
+            Map<String, DeptMeta> deptMetaById,
+            String groupId,
+            String email,
+            boolean isCreate
+    ) {
+        entity.setGroupId(groupId);
+
+        entity.setProductType1Name(row.productType1);
+        entity.setProductType2Name(row.productType2);
+
+        entity.setItemDescriptionEN(row.descriptionEN);
+        entity.setItemDescriptionVN(row.descriptionVN);
+
+        entity.setOldSAPCode(row.oldSapCode);
+        entity.setHanaSAPCode(row.hanaSapCode);
+
+        entity.setUnit(row.unit);
+
+        // ✅ totalRequestQty = sum dept qty
+        BigDecimal totalReqFromDept = stripTrailingZerosSafe(row.sumDeptQty());
+        entity.setTotalRequestQty(totalReqFromDept);
+
+        // ✅ dailyMedInventory = confirmed MED qty (Excel Q'TY)
+        BigDecimal dailyMed = stripTrailingZerosSafe(row.dailyMedInventoryQty);
+        entity.setDailyMedInventory(dailyMed);
+
+        // ✅ orderQty = dailyMedInventory
+        entity.setOrderQty(dailyMed);
+
+        // ✅ allocate buy (also strip .0)
+        entity.setDepartmentRequisitions(
+                row.toDepartmentEntitiesWithBuyAllocationSmallFirst(dailyMed, deptMetaById, this::stripTrailingZerosSafe)
+        );
+
+        // ✅ price: Keep the existing price from database (don't update from file)
+        if (entity.getPrice() == null) {
+            entity.setPrice(BigDecimal.ZERO);  // If no price exists, set it to 0
+        }
+
+        // ✅ supplierName: ONLY overwrite if Excel has value (avoid wiping to "")
+        if (row.supplierName != null && !row.supplierName.isBlank()) {
+            entity.setSupplierName(row.supplierName.trim());
+        } // else keep old supplierName
+
+        entity.setRemark(row.remark);
+
+        entity.setType(RequisitionType.MONTHLY);
+
+        // ✅ amount = orderQty * price (NOT 0.00)
+        BigDecimal amount = stripTrailingZerosSafe(dailyMed.multiply(entity.getPrice())); // Use updated price if changed
+        entity.setAmount(amount);
+
+        if (isCreate) {
+            entity.setCreatedByEmail(email);
+            entity.setCreatedDate(LocalDateTime.now());
+        }
+        entity.setUpdatedByEmail(email);
+        entity.setUpdatedDate(LocalDateTime.now());
+    }
+
+
+
+    // =========================================================
+// READ EXCEL
+// Stop markers: "TOTAL" or "Request by" (case/space-insensitive)
+// Also: numbers read via DataFormatter to avoid 500.0
+// =========================================================
+    private ReadExcelResult readRowsFromExcel(
+            MultipartFile file,
+            ImportMonthlyResult result,
+            DepartmentMaster master
+    ) throws Exception {
+
+        try (InputStream is = file.getInputStream();
+             Workbook wb = WorkbookFactory.create(is)) {
+
+            Sheet sheet = wb.getSheetAt(0);
+
+            Row headerRow2 = sheet.getRow(1); // Excel row 2
+            Row headerRow3 = sheet.getRow(2); // Excel row 3
+
+            int totalReqCol = findCol(headerRow2, "Total Request");
+            int confirmedMedCol = findCol(headerRow2, "Confirmed MED");
+            int priceCol = findCol(headerRow2, "Price");
+            int supplierCol = findCol(headerRow2, "Suppliers");
+            int remarkCol = findCol(headerRow2, "Remark");
+
+            int productType1Col = findCol(headerRow2, "Product Type 1");
+            int productType2Col = findCol(headerRow2, "Product Type 2");
+            int oldSapCol = findCol(headerRow2, "Old SAP Code");
+            int hanaCol = findCol(headerRow2, "Hana SAP Code");
+            int unitCol = findCol(headerRow2, "Unit");
+
+            int descENCol = findCol(headerRow3, "EN");
+            int descVNCol = findCol(headerRow3, "VN");
+
+            int medQtyCol = findCol(headerRow3, "Q'TY");
+            if (medQtyCol < 0) medQtyCol = confirmedMedCol;
+
+            int deptStartCol = findCol(headerRow2, "Departments");
+            if (deptStartCol < 0) deptStartCol = findMergedHeaderStartCol(sheet, "Departments");
+
+            if (deptStartCol < 0 || totalReqCol < 0) {
+                throw new IllegalArgumentException("Excel format invalid: cannot find 'Departments' or 'Total Request'.");
+            }
+
+            List<DeptCol> deptCols = new ArrayList<>();
+            List<String> unknown = new ArrayList<>();
+            Map<String, DeptMeta> deptMetaById = new HashMap<>();
+
+            for (int c = deptStartCol; c < totalReqCol; c++) {
+                String deptName = getString(headerRow3.getCell(c), wb);
+                if (deptName == null || deptName.isBlank()) continue;
+
+                String normalized = normDept(deptName);
+                List<DeptMeta> candidates = master.byNormName.get(normalized);
+
+                if (candidates == null || candidates.isEmpty()) {
+                    unknown.add(deptName.trim());
+                    continue;
+                }
+
+                DeptMeta picked = pickDeptDeterministically(new ArrayList<>(candidates));
+                if (picked == null) {
+                    unknown.add(deptName.trim());
+                    continue;
+                }
+
+                deptCols.add(new DeptCol(c, picked.id, picked.name));
+                deptMetaById.put(picked.id, picked);
+            }
+
+            if (!unknown.isEmpty()) {
+                throw new IllegalArgumentException("Invalid departments in Excel header: " + String.join(", ", unknown));
+            }
+
+            List<ImportRow> rows = new ArrayList<>();
+
+            for (int r = 3; r <= sheet.getLastRowNum(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) continue;
+
+                String en = descENCol >= 0 ? getString(row.getCell(descENCol), wb) : null;
+                String vn = descVNCol >= 0 ? getString(row.getCell(descVNCol), wb) : null;
+
+                if (isEndOfDataRow(en, vn)) break;
+
+                String oldSap = oldSapCol >= 0 ? getString(row.getCell(oldSapCol), wb) : null;
+                String hana = hanaCol >= 0 ? getString(row.getCell(hanaCol), wb) : null;
+
+                if (allBlank(en, vn, oldSap, hana)) continue;
+
+                ImportRow ir = new ImportRow();
+                ir.debugRowNo = r + 1;
+
+                ir.productType1 = productType1Col >= 0 ? getString(row.getCell(productType1Col), wb) : null;
+                ir.productType2 = productType2Col >= 0 ? getString(row.getCell(productType2Col), wb) : null;
+
+                ir.descriptionEN = en;
+                ir.descriptionVN = vn;
+
+                ir.oldSapCode = oldSap;
+                ir.hanaSapCode = hana;
+
+                ir.unit = unitCol >= 0 ? getString(row.getCell(unitCol), wb) : null;
+
+                ir.totalRequestQtyFromExcel = totalReqCol >= 0 ? getDecimal(row.getCell(totalReqCol), wb) : BigDecimal.ZERO;
+
+                // ✅ dailyMedInventory = MED Q'TY (NO .0)
+                ir.dailyMedInventoryQty = medQtyCol >= 0 ? getDecimal(row.getCell(medQtyCol), wb) : BigDecimal.ZERO;
+
+                // ✅ price (NO .0)
+//                ir.price = priceCol >= 0 ? getDecimal(row.getCell(priceCol), wb) : BigDecimal.ZERO;
+
+                // ✅ supplierName read correctly, not wipe
+                ir.supplierName = supplierCol >= 0 ? getString(row.getCell(supplierCol), wb) : null;
+
+                ir.remark = remarkCol >= 0 ? getString(row.getCell(remarkCol), wb) : null;
+
+                int orderIndex = 0;
+                for (DeptCol dc : deptCols) {
+                    BigDecimal qty = getDecimalNullable(row.getCell(dc.colIndex), wb);
+                    if (qty == null) {
+                        orderIndex++;
+                        continue;
+                    }
+                    ir.deptQtyById.put(dc.deptId, qty);
+                    ir.deptOrderById.put(dc.deptId, orderIndex);
+                    orderIndex++;
+                }
+
+                rows.add(ir);
+            }
+
+            ReadExcelResult out = new ReadExcelResult();
+            out.rows = rows;
+            out.deptMetaById = deptMetaById;
+            return out;
+        }
+    }
+
+    private boolean isEndOfDataRow(String en, String vn) {
+        String a = normalizeEndText(en);
+        String b = normalizeEndText(vn);
+
+        if ("total".equalsIgnoreCase(a) || "total".equalsIgnoreCase(b)) return true;
+        if ("request by".equalsIgnoreCase(a) || "request by".equalsIgnoreCase(b)) return true;
+
+        if (a == null || b == null || a.trim().isEmpty() || b.trim().isEmpty()) return true;
+
+        return false;
+    }
+
+
+    private String normalizeEndText(String s) {
+        if (s == null) return null;
+        return s.replace('\u00A0', ' ')
+                .trim()
+                .replaceAll("\\s+", " ")
+                .toLowerCase();
+    }
+
+    private int findMergedHeaderStartCol(Sheet sheet, String headerText) {
+        if (sheet == null || headerText == null) return -1;
+
+        String target = headerText.trim().toLowerCase();
+        for (int i = 0; i < sheet.getNumMergedRegions(); i++) {
+            CellRangeAddress region = sheet.getMergedRegion(i);
+            if (region == null) continue;
+
+            if (region.getFirstRow() != 1) continue;
+
+            Row row = sheet.getRow(region.getFirstRow());
+            if (row == null) continue;
+
+            for (int c = region.getFirstColumn(); c <= region.getLastColumn(); c++) {
+                Cell cc = row.getCell(c);
+                String vv = getString(cc, sheet.getWorkbook());
+                if (vv != null && vv.trim().toLowerCase().equals(target)) {
+                    return region.getFirstColumn();
+                }
+            }
+        }
+        return -1;
+    }
+
+    private boolean allBlank(String... xs) {
+        for (String x : xs) {
+            if (x != null && !x.isBlank()) return false;
+        }
+        return true;
+    }
+
+    private int findCol(Row row, String text) {
+        if (row == null) return -1;
+        for (Cell cell : row) {
+            String v = getString(cell, row.getSheet().getWorkbook());
+            if (v != null && v.trim().equalsIgnoreCase(text.trim())) {
+                return cell.getColumnIndex();
+            }
+        }
+        return -1;
+    }
+
+    // =========================================================
+// ✅ IMPORTANT: DataFormatter để tránh double => 500.0
+// =========================================================
+    private String getString(Cell cell, Workbook wb) {
+        if (cell == null) return null;
+        try {
+            DataFormatter formatter = new DataFormatter();
+            if (cell.getCellType() == CellType.FORMULA) {
+                FormulaEvaluator evaluator = wb.getCreationHelper().createFormulaEvaluator();
+                return formatter.formatCellValue(cell, evaluator).trim();
+            }
+            return formatter.formatCellValue(cell).trim();
+        } catch (Exception e) {
+            try {
+                return cell.toString().trim();
+            } catch (Exception ignore) {
+                return null;
+            }
+        }
+    }
+
+    // blank => 0 (NO .0)
+    private BigDecimal getDecimal(Cell cell, Workbook wb) {
+        String s = getString(cell, wb);
+        if (s == null || s.isBlank()) return BigDecimal.ZERO;
+        try {
+            s = s.replace(",", "").trim();
+            BigDecimal bd = new BigDecimal(s);
+            return stripTrailingZerosSafe(bd);
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    // blank => null (NO .0), "0" => 0
+    private BigDecimal getDecimalNullable(Cell cell, Workbook wb) {
+        String s = getString(cell, wb);
+        if (s == null || s.isBlank()) return null;
+        try {
+            s = s.replace(",", "").trim();
+            BigDecimal bd = new BigDecimal(s);
+            return stripTrailingZerosSafe(bd);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // =========================================================
+// Helper classes
+// =========================================================
+    private static class DeptMeta {
+        String id;
+        String name;
+        DeptMeta(String id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+    }
+
+    private static class DepartmentMaster {
+        Map<String, List<DeptMeta>> byNormName = new HashMap<>();
+    }
+
+    private static class DeptCol {
+        int colIndex;
+        String deptId;
+        String deptName;
+        DeptCol(int colIndex, String deptId, String deptName) {
+            this.colIndex = colIndex;
+            this.deptId = deptId;
+            this.deptName = deptName;
+        }
+    }
+
+    private static class ReadExcelResult {
+        List<ImportRow> rows = new ArrayList<>();
+        Map<String, DeptMeta> deptMetaById = new HashMap<>();
+    }
+
+    // =========================================================
+// Import Row + merge + buy allocation
+// =========================================================
+    private static class ImportRow {
+        int debugRowNo;
+
+        String productType1;
+        String productType2;
+
+        String descriptionEN;
+        String descriptionVN;
+
+        String oldSapCode;
+        String hanaSapCode;
+
+        String unit;
+
+        BigDecimal totalRequestQtyFromExcel = BigDecimal.ZERO;
+        BigDecimal dailyMedInventoryQty = BigDecimal.ZERO;
+
+        BigDecimal price = BigDecimal.ZERO;
+        String supplierName;
+        String remark;
+
+        LinkedHashMap<String, BigDecimal> deptQtyById = new LinkedHashMap<>();
+        LinkedHashMap<String, Integer> deptOrderById = new LinkedHashMap<>();
+
+        void mergeFrom(ImportRow other) {
+            this.totalRequestQtyFromExcel = nvl(this.totalRequestQtyFromExcel).add(nvl(other.totalRequestQtyFromExcel));
+            this.dailyMedInventoryQty = nvl(this.dailyMedInventoryQty).add(nvl(other.dailyMedInventoryQty));
+
+            for (Map.Entry<String, BigDecimal> e : other.deptQtyById.entrySet()) {
+                String deptId = e.getKey();
+                BigDecimal qty = nvl(e.getValue());
+                this.deptQtyById.merge(deptId, qty, BigDecimal::add);
+
+                if (!this.deptOrderById.containsKey(deptId) && other.deptOrderById.containsKey(deptId)) {
+                    this.deptOrderById.put(deptId, other.deptOrderById.get(deptId));
+                }
+            }
+
+            // ✅ price: prefer non-zero
+            if (nvl(this.price).compareTo(BigDecimal.ZERO) == 0 && nvl(other.price).compareTo(BigDecimal.ZERO) != 0) {
+                this.price = other.price;
+            }
+
+            // ✅ supplierName: prefer non-blank
+            if ((this.supplierName == null || this.supplierName.isBlank()) && other.supplierName != null && !other.supplierName.isBlank()) {
+                this.supplierName = other.supplierName;
+            }
+
+            if ((this.remark == null || this.remark.isBlank()) && other.remark != null) {
+                this.remark = other.remark;
+            }
+        }
+
+        BigDecimal sumDeptQty() {
+            BigDecimal sum = BigDecimal.ZERO;
+            for (BigDecimal v : deptQtyById.values()) {
+                if (v != null) sum = sum.add(v);
+            }
+            return sum;
+        }
+
+        List<DepartmentRequisitionMonthly> toDepartmentEntitiesWithBuyAllocationSmallFirst(
+                BigDecimal dailyMedInventory,
+                Map<String, DeptMeta> deptMetaById,
+                java.util.function.Function<BigDecimal, BigDecimal> normalizer
+        ) {
+            BigDecimal totalReq = sumDeptQty();
+            Map<String, BigDecimal> buyMap = allocateBuySmallFirst(
+                    deptQtyById,
+                    deptOrderById,
+                    nvl(dailyMedInventory),
+                    totalReq
+            );
+
+            List<DepartmentRequisitionMonthly> list = new ArrayList<>();
+            for (Map.Entry<String, BigDecimal> e : deptQtyById.entrySet()) {
+                String deptId = e.getKey();
+                BigDecimal qty = normalizer.apply(nvl(e.getValue()));
+                BigDecimal buy = normalizer.apply(buyMap.getOrDefault(deptId, BigDecimal.ZERO));
+
+                DeptMeta meta = deptMetaById != null ? deptMetaById.get(deptId) : null;
+                String deptName = meta != null ? meta.name : null;
+
+                list.add(new DepartmentRequisitionMonthly(deptId, deptName, qty, buy));
+            }
+            return list;
+        }
+
+        private static Map<String, BigDecimal> allocateBuySmallFirst(
+                LinkedHashMap<String, BigDecimal> deptQtyById,
+                LinkedHashMap<String, Integer> deptOrderById,
+                BigDecimal dailyMedInventory,
+                BigDecimal totalDeptRequest
+        ) {
+            Map<String, BigDecimal> allocated = new HashMap<>();
+            for (String deptId : deptQtyById.keySet()) allocated.put(deptId, BigDecimal.ZERO);
+
+            if (dailyMedInventory == null || dailyMedInventory.compareTo(BigDecimal.ZERO) <= 0) return allocated;
+            if (totalDeptRequest == null || totalDeptRequest.compareTo(BigDecimal.ZERO) <= 0) return allocated;
+
+            BigDecimal remaining = dailyMedInventory.min(totalDeptRequest);
+
+            List<DeptAlloc> candidates = new ArrayList<>();
+            int fallback = 0;
+            for (Map.Entry<String, BigDecimal> e : deptQtyById.entrySet()) {
+                String deptId = e.getKey();
+                BigDecimal q = nvl(e.getValue());
+
+                if (q.compareTo(BigDecimal.ZERO) > 0) {
+                    int idx = deptOrderById.getOrDefault(deptId, fallback);
+                    candidates.add(new DeptAlloc(deptId, q, idx));
+                }
+                fallback++;
+            }
+
+            candidates.sort((a, b) -> {
+                int c = a.qty.compareTo(b.qty);
+                if (c != 0) return c;
+                return Integer.compare(a.originalIndex, b.originalIndex);
+            });
+
+            for (DeptAlloc d : candidates) {
+                if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
+                BigDecimal give = d.qty.min(remaining);
+                allocated.put(d.deptId, give);
+                remaining = remaining.subtract(give);
+            }
+
+            return allocated;
+        }
+
+        private static class DeptAlloc {
+            String deptId;
+            BigDecimal qty;
+            int originalIndex;
+
+            DeptAlloc(String deptId, BigDecimal qty, int originalIndex) {
+                this.deptId = deptId;
+                this.qty = qty;
+                this.originalIndex = originalIndex;
+            }
+        }
+
+        private static BigDecimal nvl(BigDecimal x) {
+            return x == null ? BigDecimal.ZERO : x;
+        }
+    }
+
+    // =========================================================
+// DB Index (within groupId)
+// =========================================================
+    private static class ExistingIndex {
+        Map<String, RequisitionMonthly> byOldSap = new HashMap<>();
+        Map<String, RequisitionMonthly> byHana = new HashMap<>();
+        Map<String, RequisitionMonthly> byDescVN = new HashMap<>();
+        Map<String, RequisitionMonthly> byDescEN = new HashMap<>();
+
+        ExistingIndex(List<RequisitionMonthly> items) {
+            for (RequisitionMonthly x : items) {
+                if (x.getOldSAPCode() != null && !x.getOldSAPCode().isBlank()) {
+                    byOldSap.put(norm(x.getOldSAPCode()), x);
+                }
+                if (x.getHanaSAPCode() != null && !x.getHanaSAPCode().isBlank()) {
+                    byHana.put(norm(x.getHanaSAPCode()), x);
+                }
+                if (x.getItemDescriptionVN() != null && !x.getItemDescriptionVN().isBlank()) {
+                    byDescVN.put(norm(x.getItemDescriptionVN()), x);
+                }
+                if (x.getItemDescriptionEN() != null && !x.getItemDescriptionEN().isBlank()) {
+                    byDescEN.put(norm(x.getItemDescriptionEN()), x);
+                }
+            }
+        }
+
+        private static String norm(String s) {
+            if (s == null) return null;
+            return s.trim().replaceAll("\\s+", " ").toLowerCase();
+        }
+    }
+
+    // =========================================================
+// Result DTO
+// =========================================================
+    public static class ImportMonthlyResult {
+        public int rowsRead;
+        public int rowsUsedAfterMerge;
+        public int mergedDuplicatesInFile;
+
+        public int created;
+        public int updated;
+        public int deleted;
+
+        public List<String> warnings = new ArrayList<>();
     }
 
 }

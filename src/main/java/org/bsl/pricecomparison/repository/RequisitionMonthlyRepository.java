@@ -26,27 +26,6 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
 
     boolean existsByGroupId(String groupId);
 
-    Optional<RequisitionMonthly>
-    findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueAndIdNotOrderByCompletedDateDesc(
-            String supplierId, String oldSAPCode, String currency, String idNot
-    );
-
-    Optional<RequisitionMonthly>
-    findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueAndIdNotOrderByUpdatedDateDesc(
-            String supplierId, String oldSAPCode, String currency, String idNot
-    );
-
-    // ===================== ✅ LAST PURCHASE (HANA SAP) ====================
-    Optional<RequisitionMonthly>
-    findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueAndIdNotOrderByCompletedDateDesc(
-            String supplierId, String hanaSAPCode, String currency, String idNot
-    );
-
-    Optional<RequisitionMonthly>
-    findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueAndIdNotOrderByUpdatedDateDesc(
-            String supplierId, String hanaSAPCode, String currency, String idNot
-    );
-
     //Supplier
     Optional<RequisitionMonthly> findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueOrderByCompletedDateDesc(
             String supplierId, String oldSAPCode, String currency
@@ -63,34 +42,6 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
     Optional<RequisitionMonthly> findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueOrderByUpdatedDateDesc(
             String supplierId, String hanaSAPCode, String currency
     );
-
-    // ===== HANA CODE =====
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndHanaSAPCodeIgnoreCaseAndCurrencyAndIsCompletedTrueAndIdNotOrderByCompletedDateDesc(
-            String supplierId, String hanaSAPCode, String currency, String idNot);
-
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndHanaSAPCodeIgnoreCaseAndCurrencyAndIsCompletedTrueAndIdNotOrderByUpdatedDateDesc(
-            String supplierId, String hanaSAPCode, String currency, String idNot);
-
-    // ===== OLD CODE =====
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndOldSAPCodeIgnoreCaseAndCurrencyAndIsCompletedTrueAndIdNotOrderByCompletedDateDesc(
-            String supplierId, String oldSAPCode, String currency, String idNot);
-
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndOldSAPCodeIgnoreCaseAndCurrencyAndIsCompletedTrueAndIdNotOrderByUpdatedDateDesc(
-            String supplierId, String oldSAPCode, String currency, String idNot);
-
-    // ===== DES VN =====
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndItemDescriptionVNIgnoreCaseAndCurrencyAndIsCompletedTrueAndIdNotOrderByCompletedDateDesc(
-            String supplierId, String itemDescriptionVN, String currency, String idNot);
-
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndItemDescriptionVNIgnoreCaseAndCurrencyAndIsCompletedTrueAndIdNotOrderByUpdatedDateDesc(
-            String supplierId, String itemDescriptionVN, String currency, String idNot);
-
-    // ===== DES EN =====
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndItemDescriptionENIgnoreCaseAndCurrencyAndIsCompletedTrueAndIdNotOrderByCompletedDateDesc(
-            String supplierId, String itemDescriptionEN, String currency, String idNot);
-
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndItemDescriptionENIgnoreCaseAndCurrencyAndIsCompletedTrueAndIdNotOrderByUpdatedDateDesc(
-            String supplierId, String itemDescriptionEN, String currency, String idNot);
 
     // 1. Theo hanaSAPCode
     @Query("{ 'isCompleted': true, 'hanaSAPCode': ?0, 'currency': ?1, " +
@@ -149,5 +100,8 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
             "'_id': { $ne: ?2 } }")
     List<RequisitionMonthly> findLatestPurchaseByItemDescriptionENAndCurrency(
             String itemDescriptionEN, String currency, String idNot, Pageable pageable);
+
+    List<RequisitionMonthly> findAllByGroupId(String groupId);
+
 
 }
