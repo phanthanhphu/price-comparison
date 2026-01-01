@@ -46,13 +46,13 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
     @Query("{ 'itemNo': { $regex: ?0, $options: 'i' }, 'currency': { $regex: '^?1$', $options: 'i' } }")
     List<SupplierProduct> findByItemNoContainingIgnoreCaseAndCurrency(String itemNo, String currency);
 
-    @Query(value = "{'supplierName': ?0, 'sapCode': ?1, 'price': ?2}", exists = true)
-    boolean existsBySupplierNameAndSapCodeAndPrice(String supplierName, String sapCode, BigDecimal price);
+    @Query(value = "{'supplierCode': ?0, 'sapCode': ?1, 'currency': ?2, 'price': ?3}", exists = true)
+    boolean existsBySupplierCodeAndSapCodeAndCurrencyAndPrice(String supplierCode, String sapCode, String currency, BigDecimal price);
 
-    @Query("{'supplierName': ?0, 'sapCode': ?1, 'price': ?2, '_id': { $ne: ?3 }}")
-    boolean existsBySupplierNameAndSapCodeAndPriceAndIdNot(String supplierName, String sapCode, BigDecimal price, String id);
+    @Query(value = "{'supplierCode': ?0, 'hanaSapCode': ?1, 'currency': ?2, 'price': ?3}", exists = true)
+    boolean existsBySupplierCodeAndHanaSapCodeAndCurrencyAndPrice(String supplierCode, String hanaSapCode, String currency, BigDecimal price);
 
-    List<SupplierProduct> findBySapCodeIgnoreCase(String sapCode);
+    @Query(value = "{'supplierCode': ?0, 'currency': ?1, 'price': ?2}", exists = true)
+    boolean existsBySupplierCodeAndCurrencyAndPrice(String supplierCode, String currency, BigDecimal price);
 
-    List<SupplierProduct> findBySapCodeIgnoreCaseAndCurrency(String sapCode, String currency);
 }

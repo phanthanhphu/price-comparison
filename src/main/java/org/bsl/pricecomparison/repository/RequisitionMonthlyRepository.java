@@ -103,5 +103,12 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
 
     List<RequisitionMonthly> findAllByGroupId(String groupId);
 
+    Optional<RequisitionMonthly> findFirstByGroupIdAndOldSAPCodeIgnoreCaseAndSupplierId(String groupId, String oldSAPCode, String supplierId);
+
+    Optional<RequisitionMonthly> findFirstByGroupIdAndHanaSAPCodeIgnoreCaseAndSupplierId(String groupId, String hanaSAPCode, String supplierId);
+
+    Optional<RequisitionMonthly> findFirstByGroupIdAndItemDescriptionVNIgnoreCaseAndSupplierId(String groupId, String itemDescriptionVN, String supplierId);
+
+    Optional<RequisitionMonthly> findFirstByGroupIdAndItemDescriptionENIgnoreCaseAndSupplierId(String groupId, String itemDescriptionEN, String supplierId);
 
 }

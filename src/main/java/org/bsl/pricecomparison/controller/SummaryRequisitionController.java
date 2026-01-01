@@ -89,6 +89,9 @@ public class SummaryRequisitionController {
     @Autowired
     private GroupSummaryRequisitionService groupSummaryRequisitionService;
 
+    @Autowired
+    private RequisitionMonthlyController requisitionMonthlyController;
+
     @GetMapping
     public List<SummaryRequisition> getAll() {
         return requisitionRepository.findAll();
@@ -393,24 +396,50 @@ public class SummaryRequisitionController {
             RequisitionMonthly current = opt.get();
 
             // =====================================================
-            // ✅ DUPLICATE CHECK: check theo giá trị "sau update"
+            // ✅ DUPLICATE CHECK (NEW RULE):
+            // only if supplierId exists, and priority oldSap -> hana -> VN -> EN
+            // ignore empty/"NEW" (case-insensitive)
+            // check by "after update" values
             // =====================================================
             String nextGroupId = (request.getGroupId() != null && !request.getGroupId().isBlank())
-                    ? request.getGroupId()
-                    : current.getGroupId();
+                    ? request.getGroupId().trim()
+                    : (current.getGroupId() != null ? current.getGroupId().trim() : null);
 
             String nextOldSap = (request.getOldSapCode() != null && !request.getOldSapCode().isBlank())
-                    ? request.getOldSapCode()
-                    : current.getOldSAPCode();
+                    ? request.getOldSapCode().trim()
+                    : (current.getOldSAPCode() != null ? current.getOldSAPCode().trim() : null);
 
-            if (nextGroupId != null && !nextGroupId.isBlank() && nextOldSap != null && !nextOldSap.isBlank()) {
-                Optional<RequisitionMonthly> dup = requisitionMonthlyRepository
-                        .findByGroupIdAndOldSAPCode(nextGroupId, nextOldSap);
+            String nextHana = (request.getHanaSapCode() != null && !request.getHanaSapCode().isBlank())
+                    ? request.getHanaSapCode().trim()
+                    : (current.getHanaSAPCode() != null ? current.getHanaSAPCode().trim() : null);
 
-                if (dup.isPresent() && !dup.get().getId().equals(id)) {
-                    return ResponseEntity.status(HttpStatus.CONFLICT)
-                            .body(Map.of("message", "Duplicate entry: groupId and oldSapCode must be unique together."));
-                }
+            // ✅ desc mapping đúng field trong entity
+            String nextEN = (request.getEnglishName() != null && !request.getEnglishName().isBlank())
+                    ? request.getEnglishName().trim()
+                    : (current.getItemDescriptionEN() != null ? current.getItemDescriptionEN().trim() : null);
+
+            String nextVN = (request.getVietnameseName() != null && !request.getVietnameseName().isBlank())
+                    ? request.getVietnameseName().trim()
+                    : (current.getItemDescriptionVN() != null ? current.getItemDescriptionVN().trim() : null);
+
+            // ✅ only enforce when supplierId exists; if null/blank => no duplicate check
+            String nextSupplierId = (request.getSupplierId() != null) ? request.getSupplierId().trim() : null;
+
+            Optional<RequisitionMonthly> dup = requisitionMonthlyController.findDuplicateByPriority(
+                    nextGroupId,
+                    nextOldSap,
+                    nextHana,
+                    nextVN,
+                    nextEN,
+                    nextSupplierId,
+                    id
+            );
+            if (dup.isPresent()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of(
+                                "message", "Duplicate in same group with same supplier (priority: oldSap -> hana -> VN -> EN).",
+                                "duplicateId", dup.get().getId()
+                        ));
             }
 
             // =====================================================
@@ -502,10 +531,10 @@ public class SummaryRequisitionController {
             // =====================================================
             SummaryRequisition tempSummary = new SummaryRequisition();
             tempSummary.setGroupId(nextGroupId);
-            tempSummary.setEnglishName(request.getEnglishName() != null ? request.getEnglishName() : current.getItemDescriptionEN());
-            tempSummary.setVietnameseName(request.getVietnameseName() != null ? request.getVietnameseName() : current.getItemDescriptionVN());
+            tempSummary.setEnglishName(nextEN);
+            tempSummary.setVietnameseName(nextVN);
             tempSummary.setOldSapCode(nextOldSap);
-            tempSummary.setHanaSapCode(request.getHanaSapCode() != null ? request.getHanaSapCode() : current.getHanaSAPCode());
+            tempSummary.setHanaSapCode(nextHana);
             tempSummary.setFullDescription(request.getFullDescription() != null ? request.getFullDescription() : current.getFullDescription());
             tempSummary.setReason(request.getReason() != null ? request.getReason() : current.getReason());
             tempSummary.setRemark(request.getRemark() != null ? request.getRemark() : current.getRemark());
@@ -547,18 +576,13 @@ public class SummaryRequisitionController {
             }
 
             // =====================================================
-            // ✅ IMPORTANT: UNIT luôn giữ nguyên (KHÔNG lấy từ supplier)
-            // - Nếu FE có gửi unit và bạn muốn cho phép sửa unit thủ công:
-            //   đổi logic thành: String stableUnit = (request.getUnit()!=null?request.getUnit():current.getUnit());
-            // - Còn hiện tại theo bạn: giữ nguyên unit hiện có
+            // ✅ UNIT luôn giữ nguyên
             // =====================================================
             final String stableUnit = current.getUnit();
             updated.setUnit(stableUnit);
 
             // =====================================================
             // ✅ SUPPLIER RULES
-            // - Không có supplierId: clear supplier fields, price=0, amount=0, unit giữ nguyên
-            // - Có supplierId: set supplier fields (trừ unit), recompute amount
             // =====================================================
             boolean noSupplierIdProvided = (request.getSupplierId() == null || request.getSupplierId().isBlank());
 
@@ -567,10 +591,7 @@ public class SummaryRequisitionController {
                 updated.setSupplierName(null);
                 updated.setGoodType("");
 
-                // currency nếu bạn muốn clear thì để null hoặc "VND" tùy DB
-                updated.setCurrency(current.getCurrency()); // giữ nguyên currency hiện tại (nếu bạn muốn)
-                // hoặc: updated.setCurrency("VND");
-
+                updated.setCurrency(current.getCurrency()); // giữ nguyên
                 updated.setPrice(BigDecimal.ZERO);
 
                 BigDecimal oq = updated.getOrderQty() != null ? updated.getOrderQty() : BigDecimal.ZERO;
@@ -592,8 +613,6 @@ public class SummaryRequisitionController {
 
                 BigDecimal oq = updated.getOrderQty() != null ? updated.getOrderQty() : BigDecimal.ZERO;
                 updated.setAmount(oq.multiply(price));
-
-                // ✅ unit KHÔNG đụng (đã set stableUnit ở trên)
             }
 
             // =====================================================

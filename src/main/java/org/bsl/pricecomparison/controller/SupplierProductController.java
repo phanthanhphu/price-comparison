@@ -880,9 +880,17 @@ public class SupplierProductController {
     }
 
 
+    private boolean isUsableCode(String code) {
+        if (code == null) return false;
+        String c = code.trim();
+        return !c.isEmpty() && !c.equalsIgnoreCase("new");
+    }
+
     @PostMapping(value = "/import-new-format", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Import price list - Multiple suppliers horizontally (new format)",
-            description = "Validates entire file first. Stops immediately on first duplicate (supplierName + sapCode + price).")
+    @Operation(
+            summary = "Import price list - Multiple suppliers horizontally (new format)",
+            description = "Validates entire file first. Stops immediately on first duplicate based on rules (hana -> old -> supplier+price+currency)."
+    )
     public ResponseEntity<Map<String, Object>> importNewFormatExcel(
             @RequestPart("file") MultipartFile file) {
 
@@ -896,24 +904,31 @@ public class SupplierProductController {
             Sheet sheet = workbook.getSheetAt(0);
             DataFormatter formatter = new DataFormatter();
 
+            // Row 3 (index 2): supplier header row
             Row supplierHeaderRow = sheet.getRow(2);
             if (supplierHeaderRow == null) {
                 throw new IllegalArgumentException("Supplier header row (row 3) not found.");
             }
 
+            // NEW FORMAT columns (0-based)
+            int UNIT_COL = 6;
+            int CURRENCY_COL = 7;
+            int SUPPLIER_PRICE_START_COL = 8;
+            int GOODTYPE_COL = supplierHeaderRow.getLastCellNum() - 1;
+
+            // Build supplier map: colIndex -> supplierName
             Map<Integer, String> priceColToSupplierName = new HashMap<>();
-            for (int col = 9; col < supplierHeaderRow.getLastCellNum() - 1; col++) {
-                String name = formatter.formatCellValue(supplierHeaderRow.getCell(col)).trim();
-                if (!name.isEmpty()) {
-                    priceColToSupplierName.put(col, name);
+            for (int col = SUPPLIER_PRICE_START_COL; col < GOODTYPE_COL; col++) {
+                String supplierName = formatter.formatCellValue(supplierHeaderRow.getCell(col)).trim();
+                if (!supplierName.isEmpty()) {
+                    priceColToSupplierName.put(col, supplierName);
                 }
             }
-
             if (priceColToSupplierName.isEmpty()) {
                 throw new IllegalArgumentException("No supplier columns found in the file.");
             }
 
-            // PHASE 1: Validate + build list – STOP IMMEDIATELY on first duplicate
+            // Iterate data rows (start row 4 => index 3)
             for (int rowIndex = 3; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
                 Row row = sheet.getRow(rowIndex);
                 if (row == null) continue;
@@ -922,33 +937,56 @@ public class SupplierProductController {
                 String type2Name = formatter.formatCellValue(row.getCell(1)).trim();
                 String descriptionEn = formatter.formatCellValue(row.getCell(2));
                 String descriptionVn = formatter.formatCellValue(row.getCell(3));
-                String oldSapCode = formatter.formatCellValue(row.getCell(4));
-                String sapCode = formatter.formatCellValue(row.getCell(5)).trim();
-                String size = formatter.formatCellValue(row.getCell(6));
-                String unit = formatter.formatCellValue(row.getCell(7)).trim();
-                String currencyRaw = formatter.formatCellValue(row.getCell(8));
-                String goodTypeRaw = formatter.formatCellValue(row.getCell(supplierHeaderRow.getLastCellNum() - 1));
 
-                if (sapCode.isEmpty()) continue;
+                // ✅ mapping đúng yêu cầu
+                String oldSapCode = formatter.formatCellValue(row.getCell(4)).trim(); // old
+                String hanaCode = formatter.formatCellValue(row.getCell(5)).trim();   // new (hana)
+
+                String unit = formatter.formatCellValue(row.getCell(UNIT_COL)).trim();
+                String currencyRaw = formatter.formatCellValue(row.getCell(CURRENCY_COL)).trim();
+                String goodTypeRaw = formatter.formatCellValue(row.getCell(GOODTYPE_COL)).trim();
+
+                boolean isEndOfData =
+                        type1Name.isEmpty()
+                                && type2Name.isEmpty()
+                                && descriptionEn.isEmpty()
+                                && descriptionVn.isEmpty()
+                                && oldSapCode.isEmpty()
+                                && hanaCode.isEmpty()
+                                && unit.isEmpty();
+
+                if (isEndOfData) {
+                    break; // stop reading further rows
+                }
+
+                String currency = resolveCurrency(currencyRaw);
+
+                String goodType = resolveGoodType(goodTypeRaw);
+                String fullDescription = (descriptionVn == null || descriptionVn.isBlank()) ? descriptionEn : descriptionVn;
+
+                boolean useHana = isUsableCode(hanaCode);
+                boolean useOld = !useHana && isUsableCode(oldSapCode);
 
                 // Resolve ProductType1
                 String type1Id = type1Cache.computeIfAbsent(type1Name, name -> {
-                    if (name.isEmpty()) return null;
-                    return productType1Repository.findByName(name)
+                    if (name == null || name.trim().isEmpty()) return null;
+                    return productType1Repository.findByName(name.trim())
                             .map(ProductType1::getId)
-                            .orElseGet(() -> productType1Repository.save(new ProductType1(name, LocalDateTime.now())).getId());
+                            .orElseGet(() ->
+                                    productType1Repository.save(new ProductType1(name.trim(), LocalDateTime.now())).getId()
+                            );
                 });
 
                 // Resolve ProductType2
                 String type2Id = null;
-                if (type1Id != null && !type2Name.isEmpty()) {
-                    String key = type1Id + "|" + type2Name;
+                if (type1Id != null && type2Name != null && !type2Name.trim().isEmpty()) {
+                    String key = type1Id + "|" + type2Name.trim();
                     type2Id = type2Cache.computeIfAbsent(key, k ->
-                            productType2Repository.findByNameAndProductType1Id(type2Name, type1Id)
+                            productType2Repository.findByNameAndProductType1Id(type2Name.trim(), type1Id)
                                     .map(ProductType2::getId)
                                     .orElseGet(() -> {
                                         ProductType2 newType2 = new ProductType2();
-                                        newType2.setName(type2Name);
+                                        newType2.setName(type2Name.trim());
                                         newType2.setProductType1Id(type1Id);
                                         newType2.setCreatedDate(LocalDateTime.now());
                                         return productType2Repository.save(newType2).getId();
@@ -956,54 +994,83 @@ public class SupplierProductController {
                     );
                 }
 
-                // Validate and resolve Currency (check the format)
-                String currency = resolveCurrency(currencyRaw);
+                // ✅ Nếu cả hana & old đều không usable thì không thể lưu vì sapCode @NotBlank
+                // (Nếu bạn muốn vẫn lưu, phải bỏ @NotBlank sapCode)
+                if (!useHana && !useOld) {
+                    continue;
+                }
 
-                // Resolve GoodType
-                String goodType = resolveGoodType(goodTypeRaw);
-                String fullDescription = descriptionVn.isBlank() ? descriptionEn : descriptionVn;
-
-                // Check each supplier price
+                // Loop supplier prices
                 for (Map.Entry<Integer, String> entry : priceColToSupplierName.entrySet()) {
                     int priceColIdx = entry.getKey();
                     String supplierName = entry.getValue();
+
+                    // ✅ model bắt buộc supplierCode; file chỉ có supplierName => tạm dùng supplierName
+                    String supplierCode = supplierName;
 
                     String priceText = formatter.formatCellValue(row.getCell(priceColIdx));
                     if (priceText == null || priceText.trim().isEmpty()) continue;
 
                     BigDecimal price = parsePrice(priceText, currency, rowIndex + 1);
 
-                    // CHECK DUPLICATE → STOP IMMEDIATELY IF FOUND
-                    if (repository.existsBySupplierNameAndSapCodeAndPrice(supplierName, sapCode, price)) {
+                    boolean duplicated;
+                    String duplicateBy;
+
+                    if (useHana) {
+                        duplicated = repository.existsBySupplierCodeAndSapCodeAndCurrencyAndPrice(
+                                supplierCode, hanaCode, currency, price
+                        );
+                        duplicateBy = "hanaCode(sapCode)=" + hanaCode;
+                    } else {
+                        // useOld = true
+                        duplicated = repository.existsBySupplierCodeAndHanaSapCodeAndCurrencyAndPrice(
+                                supplierCode, oldSapCode, currency, price
+                        );
+                        duplicateBy = "oldSapCode(hanaSapCode)=" + oldSapCode;
+                    }
+
+                    // ✅ trường hợp cả 2 code đều không usable đã continue phía trên, nên không còn nhánh thứ 3
+                    // Nếu bạn muốn giữ nhánh 3 (supplier+price+currency) thì phải cho phép save khi sapCode rỗng.
+
+                    if (duplicated) {
                         String errorMsg = String.format(
-                                "Import cancelled due to duplicate entry at row %d: Supplier \"%s\", SAP Code \"%s\", Price %s",
-                                rowIndex + 1, supplierName, sapCode, price
+                                "Import cancelled due to duplicate entry at row %d: Supplier \"%s\", %s, Currency \"%s\", Price %s",
+                                rowIndex + 1, supplierName, duplicateBy, currency, price
                         );
                         return ResponseEntity.badRequest().body(Map.of(
                                 "error", "Duplicate entry found",
                                 "message", errorMsg,
                                 "row", rowIndex + 1,
                                 "supplierName", supplierName,
-                                "sapCode", sapCode,
+                                "supplierCode", supplierCode,
+                                "duplicateKey", duplicateBy,
+                                "currency", currency,
                                 "price", price
                         ));
                     }
 
-                    // Only add if no duplicate
                     SupplierProduct product = new SupplierProduct();
+                    product.setSupplierCode(supplierCode);
                     product.setSupplierName(supplierName);
-                    product.setSapCode(sapCode);
-                    product.setHanaSapCode(oldSapCode);
+
+                    // ✅ lưu sapCode đúng rule + không fail @NotBlank
+                    product.setSapCode(oldSapCode);
+
+                    // ✅ lưu mã cũ vào hanaSapCode (để vẫn search theo old được)
+                    product.setHanaSapCode(hanaCode);
+
                     product.setItemDescriptionEN(descriptionEn);
                     product.setItemDescriptionVN(fullDescription);
                     product.setMaterialGroupFullDescription("");
-                    product.setSize(size);
+                    product.setSize("");
                     product.setUnit(unit.isEmpty() ? "PC" : unit);
                     product.setCurrency(currency);
                     product.setGoodType(goodType);
                     product.setPrice(price);
+
                     product.setProductType1Id(type1Id);
                     product.setProductType2Id(type2Id);
+
                     product.setImageUrls(Collections.emptyList());
                     product.setCreatedAt(LocalDateTime.now());
                     product.setUpdatedAt(LocalDateTime.now());
@@ -1012,7 +1079,6 @@ public class SupplierProductController {
                 }
             }
 
-            // PHASE 2: All clean → save all at once
             List<SupplierProduct> saved = repository.saveAll(productsToSave);
 
             return ResponseEntity.ok(Map.of(
