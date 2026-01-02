@@ -284,6 +284,11 @@ public class RequisitionMonthlyController {
         }
     }
 
+    // ✅ FULL API: filterRequisitions (keep old logic) + UPDATED lastPurchase:
+// - lastPurchaseOrderQty: sum in previous-month window (same as old)
+// - lastPurchasePrice/Date/SupplierName: latest completed record ALL TIME (not previous month)
+
+    // ✅ UPDATED: filterRequisitions - chỉ đổi đoạn last purchase: gọi helper -> set 4 field
     @GetMapping("/requisition-monthly/filter")
     public ResponseEntity<RequisitionMonthlyPagedResponse> filterRequisitions(
             @RequestParam String groupId,
@@ -300,7 +305,6 @@ public class RequisitionMonthlyController {
             @RequestParam(defaultValue = "false") boolean includeMonthlyLastPurchase,
             Pageable pageable) {
 
-        // Lấy group để tính window thời gian (giữ nguyên)
         GroupSummaryRequisition group = groupSummaryRequisitionService.getGroupSummaryRequisitionById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found with id: " + groupId));
 
@@ -316,7 +320,6 @@ public class RequisitionMonthlyController {
             monthEndExclusive = currentMonthStart.atStartOfDay();
         }
 
-        // Phần lấy requisitions (giữ nguyên logic cũ)
         List<RequisitionMonthly> requisitions;
 
         if (hasFilter) {
@@ -367,10 +370,11 @@ public class RequisitionMonthlyController {
                         if (departmentName != null && !departmentName.isEmpty()) {
                             List<String> deptNames = req.getDepartmentRequisitions() != null ?
                                     req.getDepartmentRequisitions().stream()
-                                            .filter(dept -> dept != null)
+                                            .filter(Objects::nonNull)
                                             .map(DepartmentRequisitionMonthly::getName)
-                                            .filter(name -> name != null)
+                                            .filter(Objects::nonNull)
                                             .collect(Collectors.toList()) : Collections.emptyList();
+
                             matches = matches && deptNames.stream()
                                     .anyMatch(dept -> dept.toLowerCase().contains(departmentName.toLowerCase()));
                         }
@@ -382,7 +386,7 @@ public class RequisitionMonthlyController {
                                 req1.getCreatedDate() != null ? req1.getCreatedDate() : LocalDateTime.MIN;
                         LocalDateTime date2 = req2.getUpdatedDate() != null ? req2.getUpdatedDate() :
                                 req2.getCreatedDate() != null ? req2.getCreatedDate() : LocalDateTime.MIN;
-                        return date2.compareTo(date1); // Descending order
+                        return date2.compareTo(date1);
                     })
                     .collect(Collectors.toList());
         } else {
@@ -392,12 +396,11 @@ public class RequisitionMonthlyController {
                                 req1.getCreatedDate() != null ? req1.getCreatedDate() : LocalDateTime.MIN;
                         LocalDateTime date2 = req2.getUpdatedDate() != null ? req2.getUpdatedDate() :
                                 req2.getCreatedDate() != null ? req2.getCreatedDate() : LocalDateTime.MIN;
-                        return date2.compareTo(date1); // Descending order
+                        return date2.compareTo(date1);
                     })
                     .collect(Collectors.toList());
         }
 
-        // Tính totals (giữ nguyên)
         BigDecimal totalSumDailyMedInventory = requisitions.stream()
                 .map(req -> req.getDailyMedInventory() != null ? req.getDailyMedInventory() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -420,14 +423,13 @@ public class RequisitionMonthlyController {
                 .map(req -> req.getPrice() != null ? req.getPrice() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // Map to DTO & handle last purchase
-        LocalDateTime finalMonthStart = monthStart;
-        LocalDateTime finalMonthEndExclusive = monthEndExclusive;
+        final LocalDateTime finalMonthStart = monthStart;
+        final LocalDateTime finalMonthEndExclusive = monthEndExclusive;
+
         List<RequisitionMonthlyDTO> requisitionDTOs = requisitions.stream()
                 .map(req -> {
                     RequisitionMonthlyDTO dto = new RequisitionMonthlyDTO();
 
-                    // Resolve product types
                     String resolvedProductType1Name = req.getProductType1Name();
                     if (req.getProductType1Id() != null && !req.getProductType1Id().isEmpty()) {
                         ProductType1 pt1 = productType1Service.getById(req.getProductType1Id());
@@ -481,46 +483,14 @@ public class RequisitionMonthlyController {
                     dto.setSupplierComparisonList(req.getSupplierComparisonList());
                     dto.setStatusBestPrice(req.getStatusBestPrice());
 
-                    // Nếu Item có supplier thì mới thỏa - bởi item đã có nhà cc
-                    if (includeMonthlyLastPurchase && req.getCurrency() != null && finalMonthStart != null && finalMonthEndExclusive != null) {
-                        String currency = req.getCurrency();
-                        List<RequisitionMonthly> matches = null;
-
-                        // Ưu tiên: hanaSapCode > oldSapCode > itemDescriptionVN > itemDescriptionEN
-                         if (isValidKey(req.getOldSAPCode())) {
-                            matches = requisitionMonthlyRepository.findLastPurchaseByOldSapCodeAndCurrency(
-                                    req.getOldSAPCode().trim(), currency, finalMonthStart, finalMonthEndExclusive);
-                        } else if (isValidKey(req.getHanaSAPCode())) {
-                            matches = requisitionMonthlyRepository.findLastPurchaseByHanaSapCodeAndCurrency(
-                                    req.getHanaSAPCode().trim(), currency, finalMonthStart, finalMonthEndExclusive);
-                        } else if (isValidKey(req.getItemDescriptionVN())) {
-                            matches = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionVNAndCurrency(
-                                    req.getItemDescriptionVN().trim(), currency, finalMonthStart, finalMonthEndExclusive);
-                        } else if (isValidKey(req.getItemDescriptionEN())) {
-                            matches = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionENAndCurrency(
-                                    req.getItemDescriptionEN().trim(), currency, finalMonthStart, finalMonthEndExclusive);
-                        }
-
-                        if (matches != null && !matches.isEmpty()) {
-                            // Tìm record mới nhất
-                            RequisitionMonthly latest = matches.stream()
-                                    .max(Comparator.comparing(r -> r.getCompletedDate() != null ? r.getCompletedDate() :
-                                            r.getUpdatedDate() != null ? r.getUpdatedDate() :
-                                                    r.getCreatedDate() != null ? r.getCreatedDate() : LocalDateTime.MIN))
-                                    .orElse(null);
-
-                            if (latest != null) {
-                                BigDecimal totalOrderQty = matches.stream()
-                                        .map(RequisitionMonthly::getOrderQty)
-                                        .filter(Objects::nonNull)
-                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-                                dto.setLastPurchaseOrderQty(totalOrderQty);
-                                dto.setLastPurchasePrice(latest.getPrice());
-                                dto.setLastPurchaseDate(latest.getCompletedDate() != null ? latest.getCompletedDate() :
-                                        latest.getUpdatedDate() != null ? latest.getUpdatedDate() : latest.getCreatedDate());
-                                dto.setLastPurchaseSupplierName(latest.getSupplierName());
-                            }
+                    // ✅ ONLY CHANGE: lấy info rồi set 4 field
+                    if (includeMonthlyLastPurchase && finalMonthStart != null && finalMonthEndExclusive != null) {
+                        LastPurchaseInfo info = getMonthlyLastPurchaseInfo(req, finalMonthStart, finalMonthEndExclusive);
+                        if (info != null) {
+                            dto.setLastPurchaseOrderQty(info.getOrderQty());
+                            dto.setLastPurchasePrice(info.getPrice());
+                            dto.setLastPurchaseDate(info.getDate());
+                            dto.setLastPurchaseSupplierName(info.getSupplierName());
                         }
                     }
 
@@ -533,7 +503,9 @@ public class RequisitionMonthlyController {
 
         if (disablePagination) {
             resultRequisitionDTOs = requisitionDTOs;
-            pagedResult = new PageImpl<>(resultRequisitionDTOs, PageRequest.of(0, Integer.MAX_VALUE), requisitionDTOs.size());
+            pagedResult = new PageImpl<>(resultRequisitionDTOs,
+                    PageRequest.of(0, Integer.MAX_VALUE),
+                    requisitionDTOs.size());
         } else {
             int start = (int) pageable.getOffset();
             int end = Math.min((start + pageable.getPageSize()), requisitionDTOs.size());
@@ -541,17 +513,106 @@ public class RequisitionMonthlyController {
             pagedResult = new PageImpl<>(resultRequisitionDTOs, pageable, requisitionDTOs.size());
         }
 
-        // Response với totals
-        RequisitionMonthlyPagedResponse response = new RequisitionMonthlyPagedResponse(pagedResult,
-                totalSumDailyMedInventory, totalSumSafeStock, totalSumRequestQty, totalSumUseStockQty,
-                totalSumOrderQty, totalSumAmount, totalSumPrice);
+        RequisitionMonthlyPagedResponse response = new RequisitionMonthlyPagedResponse(
+                pagedResult,
+                totalSumDailyMedInventory,
+                totalSumSafeStock,
+                totalSumRequestQty,
+                totalSumUseStockQty,
+                totalSumOrderQty,
+                totalSumAmount,
+                totalSumPrice
+        );
 
         return ResponseEntity.ok(response);
+    }
+
+    // ✅ UPDATED: return về 4 giá trị thay vì set vào DTO
+    private LastPurchaseInfo getMonthlyLastPurchaseInfo(
+            RequisitionMonthly req,
+            LocalDateTime monthStart,
+            LocalDateTime monthEndExclusive
+    ) {
+        String currency = req.getCurrency();
+        if (currency == null || currency.trim().isEmpty()) return null;
+
+        BigDecimal lastMonthTotalQty = null;
+
+        // ===== (A) SUM QTY theo tháng trước =====
+        List<RequisitionMonthly> matchesMonth = null;
+
+        if (isValidKey(req.getOldSAPCode())) {
+            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByOldSapCodeAndCurrency(
+                    req.getOldSAPCode().trim(), currency, monthStart, monthEndExclusive);
+        } else if (isValidKey(req.getHanaSAPCode())) {
+            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByHanaSapCodeAndCurrency(
+                    req.getHanaSAPCode().trim(), currency, monthStart, monthEndExclusive);
+        } else if (isValidKey(req.getItemDescriptionVN())) {
+            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionVNAndCurrency(
+                    req.getItemDescriptionVN().trim(), currency, monthStart, monthEndExclusive);
+        } else if (isValidKey(req.getItemDescriptionEN())) {
+            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionENAndCurrency(
+                    req.getItemDescriptionEN().trim(), currency, monthStart, monthEndExclusive);
+        }
+
+        if (matchesMonth != null && !matchesMonth.isEmpty()) {
+            lastMonthTotalQty = matchesMonth.stream()
+                    .map(RequisitionMonthly::getOrderQty)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        // ===== (B) latest completed ALL TIME =====
+        Pageable top1 = PageRequest.of(0, 1);
+        RequisitionMonthly latestAllTime = null;
+
+        if (isValidKey(req.getOldSAPCode())) {
+            List<RequisitionMonthly> list =
+                    requisitionMonthlyRepository.findLatestPurchaseAllTimeByOldSapCodeAndCurrency(
+                            req.getOldSAPCode().trim(), currency, top1);
+            latestAllTime = (list != null && !list.isEmpty()) ? list.get(0) : null;
+
+        } else if (isValidKey(req.getHanaSAPCode())) {
+            List<RequisitionMonthly> list =
+                    requisitionMonthlyRepository.findLatestPurchaseAllTimeByHanaSapCodeAndCurrency(
+                            req.getHanaSAPCode().trim(), currency, top1);
+            latestAllTime = (list != null && !list.isEmpty()) ? list.get(0) : null;
+
+        } else if (isValidKey(req.getItemDescriptionVN())) {
+            List<RequisitionMonthly> list =
+                    requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionVNAndCurrency(
+                            req.getItemDescriptionVN().trim(), currency, top1);
+            latestAllTime = (list != null && !list.isEmpty()) ? list.get(0) : null;
+
+        } else if (isValidKey(req.getItemDescriptionEN())) {
+            List<RequisitionMonthly> list =
+                    requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionENAndCurrency(
+                            req.getItemDescriptionEN().trim(), currency, top1);
+            latestAllTime = (list != null && !list.isEmpty()) ? list.get(0) : null;
+        }
+
+        BigDecimal price = null;
+        LocalDateTime date = null;
+        String supplierName = null;
+
+        if (latestAllTime != null) {
+            price = latestAllTime.getPrice();
+            date = latestAllTime.getCompletedDate() != null ? latestAllTime.getCompletedDate()
+                    : (latestAllTime.getUpdatedDate() != null ? latestAllTime.getUpdatedDate()
+                    : latestAllTime.getCreatedDate());
+            supplierName = latestAllTime.getSupplierName();
+        }
+
+        // nếu cả 2 phần đều null thì return null cho gọn
+        if (lastMonthTotalQty == null && price == null && date == null && supplierName == null) return null;
+
+        return new LastPurchaseInfo(lastMonthTotalQty, price, date, supplierName);
     }
 
     private boolean isValidKey(String key) {
         return key != null && !key.trim().isEmpty() && !"NEW".equalsIgnoreCase(key.trim());
     }
+
 
     @PutMapping(value = "/requisition-monthly/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> updateRequisitionMonthly(
@@ -1091,6 +1152,7 @@ public class RequisitionMonthlyController {
         ));
     }
 
+    // ✅ UPDATED: chỉ đổi phần "last purchase" ở cuối fun (dùng chung getMonthlyLastPurchaseInfo)
     private MonthlyComparisonRequisitionDTO convertToComparisonDTO(
             RequisitionMonthly req,
             String groupCurrency,
@@ -1102,7 +1164,6 @@ public class RequisitionMonthlyController {
     ) {
         List<MonthlyComparisonRequisitionDTO.SupplierDTO> supplierDTOs = new ArrayList<>();
 
-        // ✅ codeKey: ưu tiên oldSAPCode, thiếu thì hana
         String codeKey = null;
         if (req.getOldSAPCode() != null && !req.getOldSAPCode().isBlank()) {
             codeKey = req.getOldSAPCode().trim();
@@ -1120,9 +1181,7 @@ public class RequisitionMonthlyController {
 
         final String finalGroupCurrency = groupCurrency != null ? groupCurrency.trim() : "";
 
-        // === Supplier list: codeKey + currency(group) ===
         if (selectedSupplierId != null && codeKey != null && !codeKey.isBlank() && !finalGroupCurrency.isBlank()) {
-
             final String supplierListKey = codeKey + "|" + finalGroupCurrency;
 
             String finalCodeKey = codeKey;
@@ -1212,7 +1271,7 @@ public class RequisitionMonthlyController {
                 .min(BigDecimal::compareTo)
                 .orElse(null);
 
-        Boolean isBestPrice = false;
+        Boolean isBestPrice;
         String statusBestPrice = req.getStatusBestPrice();
         if (statusBestPrice == null || statusBestPrice.trim().isEmpty() || "EMPTY".equalsIgnoreCase(statusBestPrice.trim())) {
             isBestPrice = price != null && minPrice != null && price.compareTo(minPrice) == 0;
@@ -1274,47 +1333,14 @@ public class RequisitionMonthlyController {
                 goodtype
         );
 
-        // ✅ SIMPLE LAST PURCHASE like filterRequisitions (previous month window)
-        if (includeMonthlyLastPurchase && req.getCurrency() != null && monthStart != null && monthEndExclusive != null) {
-            String currency = req.getCurrency();
-            List<RequisitionMonthly> matches = null;
-
-            // ✅ ưu tiên: oldSapCode > hanaSapCode > itemVN > itemEN (same as your snippet)
-            if (isValidKey(req.getOldSAPCode())) {
-                matches = requisitionMonthlyRepository.findLastPurchaseByOldSapCodeAndCurrency(
-                        req.getOldSAPCode().trim(), currency, monthStart, monthEndExclusive);
-            } else if (isValidKey(req.getHanaSAPCode())) {
-                matches = requisitionMonthlyRepository.findLastPurchaseByHanaSapCodeAndCurrency(
-                        req.getHanaSAPCode().trim(), currency, monthStart, monthEndExclusive);
-            } else if (isValidKey(req.getItemDescriptionVN())) {
-                matches = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionVNAndCurrency(
-                        req.getItemDescriptionVN().trim(), currency, monthStart, monthEndExclusive);
-            } else if (isValidKey(req.getItemDescriptionEN())) {
-                matches = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionENAndCurrency(
-                        req.getItemDescriptionEN().trim(), currency, monthStart, monthEndExclusive);
-            }
-
-            if (matches != null && !matches.isEmpty()) {
-                RequisitionMonthly latest = matches.stream()
-                        .max(Comparator.comparing(r -> r.getCompletedDate() != null ? r.getCompletedDate()
-                                : r.getUpdatedDate() != null ? r.getUpdatedDate()
-                                : r.getCreatedDate() != null ? r.getCreatedDate()
-                                : LocalDateTime.MIN))
-                        .orElse(null);
-
-                if (latest != null) {
-                    BigDecimal totalOrderQty = matches.stream()
-                            .map(RequisitionMonthly::getOrderQty)
-                            .filter(Objects::nonNull)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-                    dto.setLastPurchaseOrderQty(totalOrderQty);
-                    dto.setLastPurchasePrice(latest.getPrice());
-                    dto.setLastPurchaseDate(latest.getCompletedDate() != null ? latest.getCompletedDate()
-                            : latest.getUpdatedDate() != null ? latest.getUpdatedDate()
-                            : latest.getCreatedDate());
-                    dto.setLastPurchaseSupplierName(latest.getSupplierName());
-                }
+        // ✅ ONLY CHANGE: dùng chung helper -> set 4 field
+        if (includeMonthlyLastPurchase && monthStart != null && monthEndExclusive != null) {
+            LastPurchaseInfo info = getMonthlyLastPurchaseInfo(req, monthStart, monthEndExclusive);
+            if (info != null) {
+                dto.setLastPurchaseOrderQty(info.getOrderQty());
+                dto.setLastPurchasePrice(info.getPrice());
+                dto.setLastPurchaseDate(info.getDate());
+                dto.setLastPurchaseSupplierName(info.getSupplierName());
             }
         }
 

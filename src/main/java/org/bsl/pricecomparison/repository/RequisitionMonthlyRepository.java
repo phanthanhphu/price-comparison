@@ -71,6 +71,54 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
     List<RequisitionMonthly> findLastPurchaseByItemDescriptionENAndCurrency(
             String itemDescriptionEN, String currency, LocalDateTime start, LocalDateTime endExclusive);
 
+    // Start get Purchasing được mua mới nhất
+    // ===== LATEST PURCHASE (ALL TIME) - NOT depend on previous month window =====
+
+    // 1) Latest theo hanaSAPCode
+    @Query(
+            value = "{ 'isCompleted': true, 'hanaSAPCode': ?0, 'currency': ?1, " +
+                    "  'supplierId': { $nin: [null, ''] }, " +
+                    "  'completedDate': { $ne: null } }",
+            sort  = "{ 'completedDate': -1 }"
+    )
+    List<RequisitionMonthly> findLatestPurchaseAllTimeByHanaSapCodeAndCurrency(
+            String hanaSapCode, String currency, Pageable pageable
+    );
+
+    // 2) Latest theo oldSAPCode
+    @Query(
+            value = "{ 'isCompleted': true, 'oldSAPCode': ?0, 'currency': ?1, " +
+                    "  'supplierId': { $nin: [null, ''] }, " +
+                    "  'completedDate': { $ne: null } }",
+            sort  = "{ 'completedDate': -1 }"
+    )
+    List<RequisitionMonthly> findLatestPurchaseAllTimeByOldSapCodeAndCurrency(
+            String oldSapCode, String currency, Pageable pageable
+    );
+
+    // 3) Latest theo itemDescriptionVN
+    @Query(
+            value = "{ 'isCompleted': true, 'itemDescriptionVN': ?0, 'currency': ?1, " +
+                    "  'supplierId': { $nin: [null, ''] }, " +
+                    "  'completedDate': { $ne: null } }",
+            sort  = "{ 'completedDate': -1 }"
+    )
+    List<RequisitionMonthly> findLatestPurchaseAllTimeByItemDescriptionVNAndCurrency(
+            String itemDescriptionVN, String currency, Pageable pageable
+    );
+
+    // 4) Latest theo itemDescriptionEN
+    @Query(
+            value = "{ 'isCompleted': true, 'itemDescriptionEN': ?0, 'currency': ?1, " +
+                    "  'supplierId': { $nin: [null, ''] }, " +
+                    "  'completedDate': { $ne: null } }",
+            sort  = "{ 'completedDate': -1 }"
+    )
+    List<RequisitionMonthly> findLatestPurchaseAllTimeByItemDescriptionENAndCurrency(
+            String itemDescriptionEN, String currency, Pageable pageable
+    );
+
+    // End
 
     // SUMMARY
     @Query(value = "{ 'isCompleted': true, 'oldSAPCode': ?0, 'currency': ?1, " +
