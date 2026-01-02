@@ -1017,13 +1017,13 @@ public class SupplierProductController {
                     String duplicateBy;
 
                     if (useHana) {
-                        duplicated = repository.existsBySupplierCodeAndSapCodeAndCurrencyAndPrice(
+                        duplicated = repository.existsBySupplierCodeAndHanaSapCodeAndCurrencyAndPrice(
                                 supplierCode, hanaCode, currency, price
                         );
                         duplicateBy = "hanaCode(sapCode)=" + hanaCode;
                     } else {
                         // useOld = true
-                        duplicated = repository.existsBySupplierCodeAndHanaSapCodeAndCurrencyAndPrice(
+                        duplicated = repository.existsBySupplierCodeAndSapCodeAndCurrencyAndPrice(
                                 supplierCode, oldSapCode, currency, price
                         );
                         duplicateBy = "oldSapCode(hanaSapCode)=" + oldSapCode;
