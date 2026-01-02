@@ -528,6 +528,7 @@ public class RequisitionMonthlyController {
     }
 
     // ✅ UPDATED: return về 4 giá trị thay vì set vào DTO
+// ✅ UPDATED: mặc định totalQty = 0 (không return null vì thiếu qty)
     private LastPurchaseInfo getMonthlyLastPurchaseInfo(
             RequisitionMonthly req,
             LocalDateTime monthStart,
@@ -536,7 +537,8 @@ public class RequisitionMonthlyController {
         String currency = req.getCurrency();
         if (currency == null || currency.trim().isEmpty()) return null;
 
-        BigDecimal lastMonthTotalQty = null;
+        // ✅ default = 0
+        BigDecimal lastMonthTotalQty = BigDecimal.ZERO;
 
         // ===== (A) SUM QTY theo tháng trước =====
         List<RequisitionMonthly> matchesMonth = null;
@@ -603,9 +605,8 @@ public class RequisitionMonthlyController {
             supplierName = latestAllTime.getSupplierName();
         }
 
-        // nếu cả 2 phần đều null thì return null cho gọn
-        if (lastMonthTotalQty == null && price == null && date == null && supplierName == null) return null;
-
+        // ✅ nếu không có ALL TIME info thì vẫn trả về object (qty=0), KHÔNG return null
+        // (giữ nguyên behavior: currency invalid mới return null)
         return new LastPurchaseInfo(lastMonthTotalQty, price, date, supplierName);
     }
 
