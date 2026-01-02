@@ -964,8 +964,13 @@ public class SupplierProductController {
                 String goodType = resolveGoodType(goodTypeRaw);
                 String fullDescription = (descriptionVn == null || descriptionVn.isBlank()) ? descriptionEn : descriptionVn;
 
+                // ✅ keep your existing flags (logic giữ nguyên)
                 boolean useHana = isUsableCode(hanaCode);
                 boolean useOld = !useHana && isUsableCode(oldSapCode);
+
+                // ✅ ADD: flags để dùng trong duplicate-check 3 nhánh (hana -> old -> supplierName+currency+price)
+                boolean hasHana = isUsableCode(hanaCode);
+                boolean hasOld = isUsableCode(oldSapCode);
 
                 // Resolve ProductType1
                 String type1Id = type1Cache.computeIfAbsent(type1Name, name -> {
@@ -994,12 +999,6 @@ public class SupplierProductController {
                     );
                 }
 
-                // ✅ Nếu cả hana & old đều không usable thì không thể lưu vì sapCode @NotBlank
-                // (Nếu bạn muốn vẫn lưu, phải bỏ @NotBlank sapCode)
-                if (!useHana && !useOld) {
-                    continue;
-                }
-
                 // Loop supplier prices
                 for (Map.Entry<Integer, String> entry : priceColToSupplierName.entrySet()) {
                     int priceColIdx = entry.getKey();
@@ -1015,22 +1014,32 @@ public class SupplierProductController {
 
                     boolean duplicated;
                     String duplicateBy;
-
-                    if (useHana) {
+                    boolean codesAreEmptyOrNew = isBlankOrNew(oldSapCode) && isBlankOrNew(hanaCode);
+                    // ✅ APPLY requested structure:
+                    // if has hana -> check by hana
+                    // else if has old -> check by old
+                    // else -> check by supplierName + currency + price
+                    if (hasHana) {
                         duplicated = repository.existsBySupplierCodeAndHanaSapCodeAndCurrencyAndPrice(
                                 supplierCode, hanaCode, currency, price
                         );
-                        duplicateBy = "hanaCode(sapCode)=" + hanaCode;
-                    } else {
-                        // useOld = true
+                        duplicateBy = "hanaCode=" + hanaCode;
+                    } else if (hasOld) {
                         duplicated = repository.existsBySupplierCodeAndSapCodeAndCurrencyAndPrice(
                                 supplierCode, oldSapCode, currency, price
                         );
-                        duplicateBy = "oldSapCode(hanaSapCode)=" + oldSapCode;
+                        duplicateBy = "oldSapCode=" + oldSapCode;
+                    } else if (codesAreEmptyOrNew) {
+                        // ✅ Only here fallback is valid
+                        duplicated = repository.existsFallbackBySupplierNameAndCurrencyAndPriceWhenCodesEmptyOrNew(
+                                supplierName, currency, price
+                        );
+                        duplicateBy = "supplierName+currency+price (codes empty/NEW)";
+                    } else {
+                        // ✅ both codes are not usable but not NEW/empty (rare) -> treat as not duplicated by fallback
+                        duplicated = false;
+                        duplicateBy = "no-check (codes not usable but not NEW/empty)";
                     }
-
-                    // ✅ trường hợp cả 2 code đều không usable đã continue phía trên, nên không còn nhánh thứ 3
-                    // Nếu bạn muốn giữ nhánh 3 (supplier+price+currency) thì phải cho phép save khi sapCode rỗng.
 
                     if (duplicated) {
                         String errorMsg = String.format(
@@ -1053,10 +1062,8 @@ public class SupplierProductController {
                     product.setSupplierCode(supplierCode);
                     product.setSupplierName(supplierName);
 
-                    // ✅ lưu sapCode đúng rule + không fail @NotBlank
+                    // ✅ giữ nguyên như code bạn đưa (không đổi logic khác)
                     product.setSapCode(oldSapCode);
-
-                    // ✅ lưu mã cũ vào hanaSapCode (để vẫn search theo old được)
                     product.setHanaSapCode(hanaCode);
 
                     product.setItemDescriptionEN(descriptionEn);
@@ -1095,6 +1102,11 @@ public class SupplierProductController {
                     .body(Map.of("error", "Server error", "message", "Import failed: " + e.getMessage()));
         }
     }
+
+    private boolean isBlankOrNew(String s) {
+        return s == null || s.trim().isEmpty() || "NEW".equalsIgnoreCase(s.trim());
+    }
+
     // Helper methods remain the same
     private String resolveCurrency(String currencyRaw) {
         if (currencyRaw == null || currencyRaw.isEmpty()) {

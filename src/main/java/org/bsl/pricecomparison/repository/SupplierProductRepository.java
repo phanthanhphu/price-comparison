@@ -32,12 +32,6 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
     Page<SupplierProduct> findBySapCodeContainingIgnoreCaseOrSupplierCodeContainingIgnoreCaseOrItemNoContainingIgnoreCaseOrSupplierNameContainingIgnoreCase(
             String sapCode, String supplierCode, String itemNo, String supplierName, Pageable pageable);
 
-    List<SupplierProduct> findBySapCode(String sapCode);
-
-    @Query("{ 'sapCode': { $regex: ?0, $options: 'i' }, 'currency': { $regex: ?1, $options: 'i' } }")
-    List<SupplierProduct> findBySapCodeAndCurrency(String sapCode, String currency);
-
-
     @Query("{ 'sapCode': { $regex: '^?0$', $options: 'i' }, 'currency': { $regex: '^?1$', $options: 'i' } }")
     List<SupplierProduct> findBySapCodeAndCurrencyIgnoreCase(String sapCode, String currency);
 
@@ -52,7 +46,22 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
     @Query(value = "{'supplierCode': ?0, 'hanaSapCode': ?1, 'currency': ?2, 'price': ?3}", exists = true)
     boolean existsBySupplierCodeAndHanaSapCodeAndCurrencyAndPrice(String supplierCode, String hanaSapCode, String currency, BigDecimal price);
 
-    @Query(value = "{'supplierCode': ?0, 'currency': ?1, 'price': ?2}", exists = true)
-    boolean existsBySupplierCodeAndCurrencyAndPrice(String supplierCode, String currency, BigDecimal price);
-
+    @Query(value = "{" +
+            "  'supplierName': ?0," +
+            "  'currency': ?1," +
+            "  'price': ?2," +
+            "  $and: [" +
+            "    { $or: [" +
+            "        { 'sapCode': { $in: [null, ''] } }," +
+            "        { 'sapCode': { $regex: '^NEW$', $options: 'i' } }" +
+            "    ] }," +
+            "    { $or: [" +
+            "        { 'hanaSapCode': { $in: [null, ''] } }," +
+            "        { 'hanaSapCode': { $regex: '^NEW$', $options: 'i' } }" +
+            "    ] }" +
+            "  ]" +
+            "}", exists = true)
+    boolean existsFallbackBySupplierNameAndCurrencyAndPriceWhenCodesEmptyOrNew(
+            String supplierName, String currency, BigDecimal price
+    );
 }
