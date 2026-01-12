@@ -10,6 +10,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import org.bsl.pricecomparison.common.CommonRequisitionUtils;
 import org.bsl.pricecomparison.costom.SupplierProductRepositoryCustom;
 import org.bsl.pricecomparison.dto.SupplierProductDTO;
 import org.bsl.pricecomparison.exception.DuplicateSupplierProductException;
@@ -723,27 +724,30 @@ public class SupplierProductController {
     @Operation(
             summary = "Filter supplier products by SAP code, Hana SAP code, item descriptions (VN/EN), supplier name, and currency",
             description = "Retrieve a paginated list of supplier products filtered by SAP code, Hana SAP code, item description VN, item description EN, supplier name, and currency. " +
-                    "Sorted by: (has lastPurchaseDate desc) -> (lastPurchaseDate desc) -> (price asc)."
+                    "Sorted by: (has full lastPurchase: date+price+qty) -> (price asc) -> (lastPurchaseDate desc)."
     )
     public ResponseEntity<Map<String, Object>> filterBySapCodeHanaAndDescriptions(
             @RequestParam(required = false, defaultValue = "") String sapCode,
             @RequestParam(required = false, defaultValue = "") String hanaSapCode,
             @RequestParam(required = false, defaultValue = "") String itemDescriptionVN,
             @RequestParam(required = false, defaultValue = "") String itemDescriptionEN,
-            @RequestParam(required = false, defaultValue = "") String supplierName,   // ✅ NEW
+            @RequestParam(required = false, defaultValue = "") String supplierName,
             @RequestParam(required = false, defaultValue = "") String currency,
+            @RequestParam(required = false, defaultValue = "") String unit,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         try {
             Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.asc("price")));
-
+            if (currency.equals("EUR")){
+                currency = "EURO";
+            }
             Page<SupplierProduct> supplierProducts = supplierProductRepositoryCustom.findByFiltersWithPagination(
-                    sapCode, hanaSapCode, itemDescriptionVN, itemDescriptionEN, supplierName, currency, pageable // ✅ NEW
+                    sapCode, hanaSapCode, itemDescriptionVN, itemDescriptionEN, supplierName, currency, unit, pageable
             );
 
-            final Map<String, RequisitionMonthly> lastPurchaseCache = new HashMap<>();
             final String currencyFilter = currency != null ? currency.trim() : "";
+            final String unitFilter = unit != null ? unit.trim() : "";
 
             List<SupplierProductDTO> dtoList = supplierProducts.getContent().stream().map(product -> {
                 SupplierProductDTO dto = new SupplierProductDTO();
@@ -774,17 +778,24 @@ public class SupplierProductController {
                             .ifPresent(type2 -> dto.setProductType2Name(Objects.toString(type2.getName(), "")));
                 } else dto.setProductType2Name("");
 
-                // ✅ add last purchase
-                applyLastPurchaseForSupplierProduct(dto, product, currencyFilter, lastPurchaseCache);
+                // ✅ add last purchase (NO CACHE + 4-case search on requisitionMonthlyRepository)
+                applyLastPurchaseForSupplierProduct_NoCache(dto, product, currencyFilter, unitFilter);
 
                 return dto;
             }).collect(Collectors.toList());
 
+            // ✅ UPDATED SORT:
             Comparator<SupplierProductDTO> supplierSort = Comparator
-                    .comparing((SupplierProductDTO d) -> d.getLastPurchaseDate() == null)
+                    .comparing((SupplierProductDTO d) -> {
+                        boolean hasDate = d.getLastPurchaseDate() != null;
+                        boolean hasLastPrice = d.getLastPurchasePrice() != null;
+                        boolean hasLastQty = d.getLastPurchaseOrderQty() != null;
+                        return !(hasDate && hasLastPrice && hasLastQty);
+                    })
+                    .thenComparing(SupplierProductDTO::getPrice, Comparator.nullsLast(BigDecimal::compareTo))
                     .thenComparing(SupplierProductDTO::getLastPurchaseDate,
                             Comparator.nullsLast(Comparator.reverseOrder()))
-                    .thenComparing(SupplierProductDTO::getPrice,
+                    .thenComparing(SupplierProductDTO::getLastPurchasePrice,
                             Comparator.nullsLast(BigDecimal::compareTo));
 
             dtoList.sort(supplierSort);
@@ -803,69 +814,88 @@ public class SupplierProductController {
         }
     }
 
-    private void applyLastPurchaseForSupplierProduct(
+
+    /**
+     * ✅ APPLY LAST PURCHASE - NO CACHE
+     * ✅ CASCADE keyword: SAP -> HANA -> VN -> EN
+     * ✅ Search on requisitionMonthlyRepository with supplierId + keyword + unit + currency
+     */
+    private void applyLastPurchaseForSupplierProduct_NoCache(
             SupplierProductDTO dto,
             SupplierProduct product,
             String currencyFilter,
-            Map<String, RequisitionMonthly> cache
+            String unitFilter
     ) {
         if (dto == null || product == null) return;
 
-        final String supplierId = (product.getId() != null) ? product.getId().trim() : "";
-        if (supplierId.isBlank()) return;
+        String supplierId = CommonRequisitionUtils.safeTrim(product.getId());
+        if (supplierId == null) return;
 
-        String curr = (currencyFilter != null && !currencyFilter.isBlank())
-                ? currencyFilter.trim()
-                : (product.getCurrency() != null ? product.getCurrency().trim() : "");
+        // ✅ currency ưu tiên filter -> fallback product currency
+        String cur = CommonRequisitionUtils.safeTrim(currencyFilter);
+        if (cur == null) cur = CommonRequisitionUtils.safeTrim(product.getCurrency());
+        if (cur == null) return;
 
-        if (curr.isBlank()) return;
+        // ✅ unit ưu tiên filter -> fallback product unit
+        String reqUnit = CommonRequisitionUtils.safeTrim(unitFilter);
+        if (reqUnit == null) reqUnit = CommonRequisitionUtils.safeTrim(product.getUnit());
+        if (reqUnit == null) return;
 
-        String mode;
-        String codeKey;
-        if (product.getSapCode() != null && !product.getSapCode().trim().isBlank()) {
-            mode = "OLD";
-            codeKey = product.getSapCode().trim();
-        } else if (product.getHanaSapCode() != null && !product.getHanaSapCode().trim().isBlank()) {
-            mode = "HANA";
-            codeKey = product.getHanaSapCode().trim();
+        // ✅ 4 fields (bỏ NEW / empty)
+        String sapCode  = CommonRequisitionUtils.normCode(product.getSapCode());
+        String hanaCode = CommonRequisitionUtils.normCode(product.getHanaSapCode());
+        String desVn    = CommonRequisitionUtils.normText(product.getItemDescriptionVN());
+        String desEn    = CommonRequisitionUtils.normText(product.getItemDescriptionEN());
+
+        String keyword = null;
+        int searchMode = 0; // 1=sap, 2=hana, 3=vn, 4=en
+
+        if (sapCode != null) {
+            keyword = sapCode;
+            searchMode = 1;
+        } else if (hanaCode != null) {
+            keyword = hanaCode;
+            searchMode = 2;
+        } else if (desVn != null) {
+            keyword = desVn;
+            searchMode = 3;
+        } else if (desEn != null) {
+            keyword = desEn;
+            searchMode = 4;
+        }
+
+        if (keyword == null) return;
+
+        Pageable top1 = PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "completedDate"));
+
+        List<RequisitionMonthly> list = Collections.emptyList();
+
+        // ✅ SEARCH 4 CASES on requisitionMonthlyRepository
+        if (searchMode == 1) {
+            list = requisitionMonthlyRepository
+                    .findBySupplierIdAndOldSAPCodeAndUnitAndCurrencyAndIsCompletedTrue(
+                            supplierId, keyword, reqUnit, cur, top1
+                    );
+        } else if (searchMode == 2) {
+            list = requisitionMonthlyRepository
+                    .findBySupplierIdAndHanaSAPCodeAndUnitAndCurrencyAndIsCompletedTrue(
+                            supplierId, keyword, reqUnit, cur, top1
+                    );
+        } else if (searchMode == 3) {
+            list = requisitionMonthlyRepository
+                    .findBySupplierIdAndItemDescriptionVNContainingIgnoreCaseAndUnitAndCurrencyAndIsCompletedTrue(
+                            supplierId, keyword, reqUnit, cur, top1
+                    );
         } else {
-            return;
+            list = requisitionMonthlyRepository
+                    .findBySupplierIdAndItemDescriptionENContainingIgnoreCaseAndUnitAndCurrencyAndIsCompletedTrue(
+                            supplierId, keyword, reqUnit, cur, top1
+                    );
         }
 
-        String cacheKey = supplierId + "|" + mode + "|" + codeKey + "|" + curr;
+        if (list == null || list.isEmpty()) return;
 
-        RequisitionMonthly last = cache.get(cacheKey);
-        if (!cache.containsKey(cacheKey)) {
-            Optional<RequisitionMonthly> opt;
-
-            if ("OLD".equals(mode)) {
-                opt = requisitionMonthlyRepository
-                        .findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueOrderByCompletedDateDesc(
-                                supplierId, codeKey, curr
-                        );
-                if (opt.isEmpty()) {
-                    opt = requisitionMonthlyRepository
-                            .findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueOrderByUpdatedDateDesc(
-                                    supplierId, codeKey, curr
-                            );
-                }
-            } else {
-                opt = requisitionMonthlyRepository
-                        .findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueOrderByCompletedDateDesc(
-                                supplierId, codeKey, curr
-                        );
-                if (opt.isEmpty()) {
-                    opt = requisitionMonthlyRepository
-                            .findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueOrderByUpdatedDateDesc(
-                                    supplierId, codeKey, curr
-                            );
-                }
-            }
-
-            last = opt.orElse(null);
-            cache.put(cacheKey, last);
-        }
-
+        RequisitionMonthly last = list.get(0);
         if (last == null) return;
 
         dto.setLastPurchaseSupplierName(last.getSupplierName());
@@ -873,8 +903,8 @@ public class SupplierProductController {
         LocalDateTime lastDate = last.getCompletedDate();
         if (lastDate == null) lastDate = last.getUpdatedDate();
         if (lastDate == null) lastDate = last.getCreatedDate();
-        dto.setLastPurchaseDate(lastDate);
 
+        dto.setLastPurchaseDate(lastDate);
         dto.setLastPurchasePrice(last.getPrice());
         dto.setLastPurchaseOrderQty(last.getOrderQty() != null ? last.getOrderQty() : BigDecimal.ZERO);
     }

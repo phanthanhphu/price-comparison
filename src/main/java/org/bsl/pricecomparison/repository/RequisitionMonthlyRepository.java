@@ -27,20 +27,40 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
     boolean existsByGroupId(String groupId);
 
     //Supplier
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueOrderByCompletedDateDesc(
-            String supplierId, String oldSAPCode, String currency
+    // 1) oldSAPCode
+    List<RequisitionMonthly> findBySupplierIdAndOldSAPCodeAndUnitAndCurrencyAndIsCompletedTrue(
+            String supplierId,
+            String oldSAPCode,
+            String unit,
+            String currency,
+            Pageable pageable
     );
 
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndOldSAPCodeAndCurrencyAndIsCompletedTrueOrderByUpdatedDateDesc(
-            String supplierId, String oldSAPCode, String currency
+    // 2) hanaSAPCode
+    List<RequisitionMonthly> findBySupplierIdAndHanaSAPCodeAndUnitAndCurrencyAndIsCompletedTrue(
+            String supplierId,
+            String hanaSAPCode,
+            String unit,
+            String currency,
+            Pageable pageable
     );
 
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueOrderByCompletedDateDesc(
-            String supplierId, String hanaSAPCode, String currency
+    // 3) itemDescriptionVN contains
+    List<RequisitionMonthly> findBySupplierIdAndItemDescriptionVNContainingIgnoreCaseAndUnitAndCurrencyAndIsCompletedTrue(
+            String supplierId,
+            String keyword,
+            String unit,
+            String currency,
+            Pageable pageable
     );
 
-    Optional<RequisitionMonthly> findFirstBySupplierIdAndHanaSAPCodeAndCurrencyAndIsCompletedTrueOrderByUpdatedDateDesc(
-            String supplierId, String hanaSAPCode, String currency
+    // 4) itemDescriptionEN contains
+    List<RequisitionMonthly> findBySupplierIdAndItemDescriptionENContainingIgnoreCaseAndUnitAndCurrencyAndIsCompletedTrue(
+            String supplierId,
+            String keyword,
+            String unit,
+            String currency,
+            Pageable pageable
     );
 
     // 1. Theo hanaSAPCode
@@ -159,4 +179,24 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
 
     Optional<RequisitionMonthly> findFirstByGroupIdAndItemDescriptionENIgnoreCaseAndSupplierId(String groupId, String itemDescriptionEN, String supplierId);
 
+
+    Optional<RequisitionMonthly>
+    findFirstByGroupIdAndUnitIgnoreCaseAndOldSAPCodeIgnoreCase(
+            String groupId, String unit, String oldSAPCode
+    );
+
+    Optional<RequisitionMonthly>
+    findFirstByGroupIdAndUnitIgnoreCaseAndHanaSAPCodeIgnoreCase(
+            String groupId, String unit, String hanaSAPCode
+    );
+
+    Optional<RequisitionMonthly>
+    findFirstByGroupIdAndUnitIgnoreCaseAndItemDescriptionVNIgnoreCase(
+            String groupId, String unit, String itemDescriptionVN
+    );
+
+    Optional<RequisitionMonthly>
+    findFirstByGroupIdAndUnitIgnoreCaseAndItemDescriptionENIgnoreCase(
+            String groupId, String unit, String itemDescriptionEN
+    );
 }

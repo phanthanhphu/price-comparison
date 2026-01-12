@@ -64,4 +64,25 @@ public interface SupplierProductRepository extends MongoRepository<SupplierProdu
     boolean existsFallbackBySupplierNameAndCurrencyAndPriceWhenCodesEmptyOrNew(
             String supplierName, String currency, BigDecimal price
     );
+
+    // 1) sapCode + unit + currency
+    List<SupplierProduct> findBySapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(
+            String sapCode, String unit, String currency
+    );
+
+    // 2) hanaSapCode + unit + currency
+    List<SupplierProduct> findByHanaSapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(
+            String hanaSapCode, String unit, String currency
+    );
+
+    // 3) itemDescriptionVN contains + unit + currency
+    List<SupplierProduct> findByItemDescriptionVNContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(
+            String keyword, String unit, String currency
+    );
+
+    // 4) itemDescriptionEN contains + unit + currency
+    List<SupplierProduct> findByItemDescriptionENContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(
+            String keyword, String unit, String currency
+    );
+
 }

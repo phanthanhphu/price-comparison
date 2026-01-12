@@ -123,6 +123,7 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
             String itemDescriptionEN,
             String supplierName,   // ✅ NEW
             String currency,
+            String unit,          // ✅ NEW: unit filter
             Pageable pageable
     ) {
         Criteria criteria = new Criteria();
@@ -131,39 +132,56 @@ public class SupplierProductRepositoryImpl implements SupplierProductRepositoryC
         java.util.function.Function<String, Pattern> containsIgnoreCase = (val) ->
                 Pattern.compile(".*" + Pattern.quote(val.trim()) + ".*", Pattern.CASE_INSENSITIVE);
 
+        // Filter based on sapCode
         if (sapCode != null && !sapCode.trim().isEmpty()) {
             criteriaList.add(Criteria.where("sapCode").regex(containsIgnoreCase.apply(sapCode)));
         }
+
+        // Filter based on hanaSapCode
         if (hanaSapCode != null && !hanaSapCode.trim().isEmpty()) {
             criteriaList.add(Criteria.where("hanaSapCode").regex(containsIgnoreCase.apply(hanaSapCode)));
         }
+
+        // Filter based on itemDescriptionVN
         if (itemDescriptionVN != null && !itemDescriptionVN.trim().isEmpty()) {
             criteriaList.add(Criteria.where("itemDescriptionVN").regex(containsIgnoreCase.apply(itemDescriptionVN)));
         }
+
+        // Filter based on itemDescriptionEN
         if (itemDescriptionEN != null && !itemDescriptionEN.trim().isEmpty()) {
             criteriaList.add(Criteria.where("itemDescriptionEN").regex(containsIgnoreCase.apply(itemDescriptionEN)));
         }
 
-        // ✅ NEW: supplierName
+        // ✅ NEW: Filter based on supplierName
         if (supplierName != null && !supplierName.trim().isEmpty()) {
             criteriaList.add(Criteria.where("supplierName").regex(containsIgnoreCase.apply(supplierName)));
         }
 
+        // Filter based on currency
         if (currency != null && !currency.trim().isEmpty()) {
             criteriaList.add(Criteria.where("currency").regex(containsIgnoreCase.apply(currency)));
         }
 
+        // ✅ NEW: Filter based on unit
+        if (unit != null && !unit.trim().isEmpty()) {
+            criteriaList.add(Criteria.where("unit").regex(containsIgnoreCase.apply(unit)));
+        }
+
+        // Apply all criteria to the query
         if (!criteriaList.isEmpty()) {
             criteria.andOperator(criteriaList.toArray(new Criteria[0]));
         }
 
         Query query = new Query(criteria);
 
+        // Get total count of results
         long count = mongoTemplate.count(query, SupplierProduct.class);
 
+        // Apply pagination and execute query
         query.with(pageable);
         List<SupplierProduct> list = mongoTemplate.find(query, SupplierProduct.class);
 
+        // Return paginated result
         return new PageImpl<>(list, pageable, count);
     }
 

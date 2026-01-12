@@ -29,6 +29,10 @@ public class UpdateSummaryRequisitionRequest {
     @Schema(description = "Hana SAP code", example = "NEW456")
     private String hanaSapCode;
 
+    // ✅ NEW: Unit (editable)
+    @Schema(description = "Unit of the requisition (editable)", example = "Box", nullable = true)
+    private String unit;
+
     // ĐÃ SỬA: Tên field + example mới
     @Schema(description = "Department requisitions as JSON string",
             example = "[{\"id\": \"dept1\", \"name\": \"Finance Department\", \"qty\": 10, \"buy\": 8}, " +
@@ -69,7 +73,9 @@ public class UpdateSummaryRequisitionRequest {
     @Schema(description = "Full description", example = "Detailed description of requisition")
     private String fullDescription;
 
+    // ==========================
     // Getters and Setters
+    // ==========================
     public List<MultipartFile> getFiles() {
         return files;
     }
@@ -116,6 +122,15 @@ public class UpdateSummaryRequisitionRequest {
 
     public void setHanaSapCode(String hanaSapCode) {
         this.hanaSapCode = hanaSapCode;
+    }
+
+    // ✅ NEW: unit getter/setter
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
     }
 
     // ĐÃ SỬA: Getter & Setter cho field mới

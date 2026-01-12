@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.*;
+import org.bsl.pricecomparison.common.CommonRequisitionUtils;
 import org.bsl.pricecomparison.dto.*;
 import org.bsl.pricecomparison.enums.RequisitionType;
 import org.bsl.pricecomparison.model.*;
@@ -72,6 +73,9 @@ public class RequisitionMonthlyController {
     @Autowired
     private DepartmentRepository departmentRepository;
 
+    @Autowired
+    private CommonRequisitionUtils commonRequisitionUtils;
+
 
     private static final String UPLOAD_DIR = "./uploads/";
 
@@ -89,20 +93,10 @@ public class RequisitionMonthlyController {
                         .body(Map.of("message", "email is required"));
             }
 
-            // Validate oldSAPCode
-            if (request.getOldSAPCode() == null || request.getOldSAPCode().isEmpty()) {
+            // ✅ Validate groupId (required theo rule mới)
+            if (request.getGroupId() == null || request.getGroupId().isBlank()) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of("message", "oldSAPCode is required"));
-            }
-
-            if (request.getGroupId() != null && request.getOldSAPCode() != null) {
-                Optional<RequisitionMonthly> existing = requisitionMonthlyRepository
-                        .findByGroupIdAndOldSAPCode(request.getGroupId(), request.getOldSAPCode());
-
-                if (existing.isPresent()) {
-                    return ResponseEntity.status(HttpStatus.CONFLICT)
-                            .body(Map.of("message", "Duplicate entry: groupId and oldSapCode must be unique together."));
-                }
+                        .body(Map.of("message", "groupId is required"));
             }
 
             // Validate and fetch supplier
@@ -114,6 +108,41 @@ public class RequisitionMonthlyController {
                             .body(Map.of("message", "Supplier not found for supplierId: " + request.getSupplierId()));
                 }
                 supplier = supplierOptional.get();
+            }
+
+            // ✅ Unit: ưu tiên lấy từ request nếu FE gửi, không thì lấy từ supplier (nếu có)
+            // (Nếu bạn muốn unit bắt buộc từ FE, thì validate request.getUnit() luôn)
+            String unitToCheck = (request.getUnit() != null && !request.getUnit().isBlank())
+                    ? request.getUnit().trim()
+                    : (supplier != null && supplier.getUnit() != null ? supplier.getUnit().trim() : null);
+
+            // ✅ Validate unit (required theo rule mới)
+            if (unitToCheck == null || unitToCheck.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "unit is required"));
+            }
+
+            // =========================================================
+            // ✅ CHECK DUPLICATE theo rule mới: groupId + unit + (SAP/HANA/VN/EN by priority)
+            // - "NEW" hoặc empty => bỏ qua key đó
+            // - SAP/HANA ignore case (repo đang dùng IgnoreCase)
+            // =========================================================
+            Optional<RequisitionMonthly> dup = commonRequisitionUtils.checkExistsInGroupWithUnitByPriority(
+                    request.getGroupId(),
+                    unitToCheck,
+                    request.getOldSAPCode(),
+                    request.getHanaSAPCode(),
+                    request.getItemDescriptionVN(),
+                    request.getItemDescriptionEN(),
+                    null // add => không có currentId
+            );
+
+            if (dup.isPresent()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of(
+                                "message", "Duplicate in same group with same unit (priority: SAP -> HANA -> VN -> EN).",
+                                "duplicateId", dup.get().getId()
+                        ));
             }
 
             // Get dailyMedInventory + safeStock
@@ -158,7 +187,9 @@ public class RequisitionMonthlyController {
             requisition.setOldSAPCode(request.getOldSAPCode());
             requisition.setHanaSAPCode(request.getHanaSAPCode());
 
-            requisition.setUnit(supplier != null ? supplier.getUnit() : null);
+            // ✅ Unit: set theo unitToCheck (đã resolve từ request hoặc supplier)
+            requisition.setUnit(unitToCheck);
+
             requisition.setDailyMedInventory(dailyMedInventory);
             requisition.setSafeStock(safeStock);
 
@@ -564,33 +595,36 @@ public class RequisitionMonthlyController {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
-        // ===== (B) latest completed ALL TIME =====
-        Pageable top1 = PageRequest.of(0, 1);
+        // ===== (B) latest completed ALL TIME (✅ skip current request id) =====
+        Pageable top2 = PageRequest.of(0, 2); // ✅ lấy 2 record mới nhất
         RequisitionMonthly latestAllTime = null;
 
+        List<RequisitionMonthly> list = null;
+
         if (isValidKey(req.getOldSAPCode())) {
-            List<RequisitionMonthly> list =
-                    requisitionMonthlyRepository.findLatestPurchaseAllTimeByOldSapCodeAndCurrency(
-                            req.getOldSAPCode().trim(), currency, top1);
-            latestAllTime = (list != null && !list.isEmpty()) ? list.get(0) : null;
+            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByOldSapCodeAndCurrency(
+                    req.getOldSAPCode().trim(), currency, top2);
 
         } else if (isValidKey(req.getHanaSAPCode())) {
-            List<RequisitionMonthly> list =
-                    requisitionMonthlyRepository.findLatestPurchaseAllTimeByHanaSapCodeAndCurrency(
-                            req.getHanaSAPCode().trim(), currency, top1);
-            latestAllTime = (list != null && !list.isEmpty()) ? list.get(0) : null;
+            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByHanaSapCodeAndCurrency(
+                    req.getHanaSAPCode().trim(), currency, top2);
 
         } else if (isValidKey(req.getItemDescriptionVN())) {
-            List<RequisitionMonthly> list =
-                    requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionVNAndCurrency(
-                            req.getItemDescriptionVN().trim(), currency, top1);
-            latestAllTime = (list != null && !list.isEmpty()) ? list.get(0) : null;
+            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionVNAndCurrency(
+                    req.getItemDescriptionVN().trim(), currency, top2);
 
         } else if (isValidKey(req.getItemDescriptionEN())) {
-            List<RequisitionMonthly> list =
-                    requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionENAndCurrency(
-                            req.getItemDescriptionEN().trim(), currency, top1);
-            latestAllTime = (list != null && !list.isEmpty()) ? list.get(0) : null;
+            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionENAndCurrency(
+                    req.getItemDescriptionEN().trim(), currency, top2);
+        }
+
+        if (list != null && !list.isEmpty()) {
+            // ✅ nếu record mới nhất trùng req hiện tại -> lấy record kế
+            if (req.getId() != null && list.get(0).getId() != null && list.get(0).getId().equals(req.getId())) {
+                latestAllTime = (list.size() > 1) ? list.get(1) : null;
+            } else {
+                latestAllTime = list.get(0);
+            }
         }
 
         BigDecimal price = null;
@@ -606,13 +640,13 @@ public class RequisitionMonthlyController {
         }
 
         // ✅ nếu không có ALL TIME info thì vẫn trả về object (qty=0), KHÔNG return null
-        // (giữ nguyên behavior: currency invalid mới return null)
         return new LastPurchaseInfo(lastMonthTotalQty, price, date, supplierName);
     }
 
     private boolean isValidKey(String key) {
         return key != null && !key.trim().isEmpty() && !"NEW".equalsIgnoreCase(key.trim());
     }
+
 
 
     @PutMapping(value = "/requisition-monthly/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -638,41 +672,55 @@ public class RequisitionMonthlyController {
             RequisitionMonthly requisition = requisitionOptional.get();
 
             // =========================================================
-            // ✅ NEW UNIQUE RULE (only if supplierId exists):
-            // groupId + (oldSap|hana|vn|en by priority) + supplierId
-            // ignore key when NEW/empty (case-insensitive)
+            // ✅ UNIQUE RULE (NEW):
+            // groupId (required) + unit (required) + (sap|hana|vn|en by priority)
+            // - sap/hana ignore-case
+            // - key unusable when NEW/empty (case-insensitive)
+            // - if sap unusable -> check hana
+            // - if hana unusable -> check descVN
+            // - if descVN unusable -> check descEN
             // =========================================================
 
             String nextGroupId = (request.getGroupId() != null && !request.getGroupId().isBlank())
                     ? request.getGroupId().trim()
                     : (requisition.getGroupId() != null ? requisition.getGroupId().trim() : null);
 
+            // ✅ Unit: nếu FE gửi => dùng; không gửi => giữ current
+            String nextUnit = (request.getUnit() != null)
+                    ? request.getUnit().trim()
+                    : (requisition.getUnit() != null ? requisition.getUnit().trim() : null);
+
             String nextOldSap = pick(request.getOldSAPCode(), requisition.getOldSAPCode());
             String nextHana   = pick(request.getHanaSAPCode(), requisition.getHanaSAPCode());
             String nextVN     = pick(request.getItemDescriptionVN(), requisition.getItemDescriptionVN());
             String nextEN     = pick(request.getItemDescriptionEN(), requisition.getItemDescriptionEN());
 
-            // supplierId logic:
-            // - if client sends supplierId => use it (even blank means clearing)
-            // - else keep existing supplierId
-            String nextSupplierId = (request.getSupplierId() != null)
-                    ? request.getSupplierId()
-                    : requisition.getSupplierId();
+            // ✅ groupId bắt buộc
+            if (nextGroupId == null || nextGroupId.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "groupId is required"));
+            }
 
-            Optional<RequisitionMonthly> dup = findDuplicateByPriority(
+            // ✅ unit bắt buộc
+            if (nextUnit == null || nextUnit.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "unit is required"));
+            }
+
+            Optional<RequisitionMonthly> dup = commonRequisitionUtils.checkExistsInGroupWithUnitByPriority(
                     nextGroupId,
+                    nextUnit,
                     nextOldSap,
                     nextHana,
                     nextVN,
                     nextEN,
-                    nextSupplierId,
                     id
             );
 
             if (dup.isPresent()) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                         .body(Map.of(
-                                "message", "Duplicate in same group with same supplier (priority: oldSap -> hana -> VN -> EN).",
+                                "message", "Duplicate in same group with same unit (priority: SAP -> HANA -> VN -> EN).",
                                 "duplicateId", dup.get().getId()
                         ));
             }
@@ -682,7 +730,9 @@ public class RequisitionMonthlyController {
                 requisition.setOldSAPCode(request.getOldSAPCode());
             }
 
-            // 4) Supplier handling (unchanged from yours)
+            // =========================================================
+            // 4) Supplier handling (UPDATED: DO NOT override unit from supplier anymore)
+            // =========================================================
             if (request.getSupplierId() != null) {
 
                 if (!request.getSupplierId().isBlank()) {
@@ -696,7 +746,9 @@ public class RequisitionMonthlyController {
 
                     requisition.setSupplierId(request.getSupplierId());
                     requisition.setSupplierName(supplier.getSupplierName());
-                    requisition.setUnit(supplier.getUnit());
+
+                    // ❌ IMPORTANT: DO NOT set unit from supplier anymore
+                    // requisition.setUnit(supplier.getUnit());
 
                     requisition.setPrice(supplier.getPrice() != null ? supplier.getPrice() : BigDecimal.ZERO);
                     requisition.setGoodType(supplier.getGoodType() != null ? supplier.getGoodType() : "");
@@ -715,7 +767,9 @@ public class RequisitionMonthlyController {
                 }
             }
 
+            // =========================================================
             // 5) Update basic fields
+            // =========================================================
             if (request.getGroupId() != null) requisition.setGroupId(request.getGroupId());
             if (request.getItemDescriptionEN() != null) requisition.setItemDescriptionEN(request.getItemDescriptionEN());
             if (request.getItemDescriptionVN() != null) requisition.setItemDescriptionVN(request.getItemDescriptionVN());
@@ -727,9 +781,16 @@ public class RequisitionMonthlyController {
             if (request.getRemark() != null) requisition.setRemark(request.getRemark());
             if (request.getRemarkComparison() != null) requisition.setRemarkComparison(request.getRemarkComparison());
 
+            // ✅ Update UNIT from request (Editable in FE)
+            if (request.getUnit() != null) {
+                requisition.setUnit(request.getUnit());
+            }
+
             requisition.setType(RequisitionType.MONTHLY);
 
+            // =========================================================
             // 6) Update department requisitions (null-safe)
+            // =========================================================
             List<DepartmentRequisitionMonthly> deptRequisitions =
                     requisition.getDepartmentRequisitions() != null
                             ? requisition.getDepartmentRequisitions()
@@ -759,7 +820,9 @@ public class RequisitionMonthlyController {
                 }
             }
 
+            // =========================================================
             // 7) Re-calc totals
+            // =========================================================
             BigDecimal medConfirmedQty = requisition.getDailyMedInventory() != null
                     ? requisition.getDailyMedInventory()
                     : BigDecimal.ZERO;
@@ -777,7 +840,9 @@ public class RequisitionMonthlyController {
             BigDecimal amount = price.multiply(medConfirmedQty);
             requisition.setAmount(amount);
 
+            // =========================================================
             // 8) Handle images deletion
+            // =========================================================
             List<String> currentImageUrls = requisition.getImageUrls() != null
                     ? requisition.getImageUrls()
                     : new ArrayList<>();
@@ -807,7 +872,9 @@ public class RequisitionMonthlyController {
                 }
             }
 
+            // =========================================================
             // 9) Handle new image uploads
+            // =========================================================
             List<MultipartFile> files = request.getFiles();
             if (files != null && !files.isEmpty()) {
                 for (MultipartFile f : files) {
@@ -824,10 +891,14 @@ public class RequisitionMonthlyController {
             }
             requisition.setImageUrls(currentImageUrls);
 
+            // =========================================================
             // 10) Save updatedByEmail
+            // =========================================================
             requisition.setUpdatedByEmail(email);
 
+            // =========================================================
             // 11) Update timestamp & save
+            // =========================================================
             requisition.setUpdatedDate(LocalDateTime.now());
             RequisitionMonthly updatedRequisition = requisitionMonthlyRepository.save(requisition);
 
@@ -845,64 +916,62 @@ public class RequisitionMonthlyController {
         }
     }
 
-     Optional<RequisitionMonthly> findDuplicateByPriority(
-            String groupId,
-            String oldSap,
-            String hana,
-            String descVN,
-            String descEN,
-            String supplierId,
-            String currentId // exclude chính nó khi update
-    ) {
-        if (groupId == null || groupId.isBlank()) return Optional.empty();
-
-        // ✅ ONLY enforce when supplierId is provided
-        if (supplierId == null || supplierId.isBlank()) return Optional.empty();
-
-        String g = groupId.trim();
-        String sId = supplierId.trim();
-
-        // 1) groupId + oldSAP + supplierId
-        if (isUsableKey(oldSap)) {
-            Optional<RequisitionMonthly> x =
-                    requisitionMonthlyRepository.findFirstByGroupIdAndOldSAPCodeIgnoreCaseAndSupplierId(
-                            g, oldSap.trim(), sId
-                    );
-            if (x.isPresent() && !x.get().getId().equals(currentId)) return x;
-            return Optional.empty();
-        }
-
-        // 2) groupId + hana + supplierId
-        if (isUsableKey(hana)) {
-            Optional<RequisitionMonthly> x =
-                    requisitionMonthlyRepository.findFirstByGroupIdAndHanaSAPCodeIgnoreCaseAndSupplierId(
-                            g, hana.trim(), sId
-                    );
-            if (x.isPresent() && !x.get().getId().equals(currentId)) return x;
-            return Optional.empty();
-        }
-
-        // 3) groupId + descVN + supplierId
-        if (isUsableKey(descVN)) {
-            Optional<RequisitionMonthly> x =
-                    requisitionMonthlyRepository.findFirstByGroupIdAndItemDescriptionVNIgnoreCaseAndSupplierId(
-                            g, descVN.trim(), sId
-                    );
-            if (x.isPresent() && !x.get().getId().equals(currentId)) return x;
-            return Optional.empty();
-        }
-
-        // 4) groupId + descEN + supplierId
-        if (isUsableKey(descEN)) {
-            Optional<RequisitionMonthly> x =
-                    requisitionMonthlyRepository.findFirstByGroupIdAndItemDescriptionENIgnoreCaseAndSupplierId(
-                            g, descEN.trim(), sId
-                    );
-            if (x.isPresent() && !x.get().getId().equals(currentId)) return x;
-        }
-
-        return Optional.empty();
-    }
+//    Optional<RequisitionMonthly> findDuplicateInGroupByUnitAndPriority(
+//            String groupId,
+//            String unit,
+//            String sapCode,
+//            String hanaCode,
+//            String descVN,
+//            String descEN,
+//            String currentId // exclude chính nó khi update
+//    ) {
+//        if (groupId == null || groupId.isBlank()) return Optional.empty();
+//        if (unit == null || unit.isBlank()) return Optional.empty();
+//
+//        String g = groupId.trim();
+//        String u = unit.trim();
+//
+//        // 1) groupId + unit + sap (ignore case) - nếu sap usable thì chỉ check sap
+//        if (isUsableKey(sapCode)) {
+//            Optional<RequisitionMonthly> x =
+//                    requisitionMonthlyRepository.findFirstByGroupIdAndUnitIgnoreCaseAndOldSAPCodeIgnoreCase(
+//                            g, u, sapCode.trim()
+//                    );
+//            if (x.isPresent() && !x.get().getId().equals(currentId)) return x;
+//            return Optional.empty();
+//        }
+//
+//        // 2) groupId + unit + hana (ignore case)
+//        if (isUsableKey(hanaCode)) {
+//            Optional<RequisitionMonthly> x =
+//                    requisitionMonthlyRepository.findFirstByGroupIdAndUnitIgnoreCaseAndHanaSAPCodeIgnoreCase(
+//                            g, u, hanaCode.trim()
+//                    );
+//            if (x.isPresent() && !x.get().getId().equals(currentId)) return x;
+//            return Optional.empty();
+//        }
+//
+//        // 3) groupId + unit + descVN
+//        if (isUsableKey(descVN)) {
+//            Optional<RequisitionMonthly> x =
+//                    requisitionMonthlyRepository.findFirstByGroupIdAndUnitIgnoreCaseAndItemDescriptionVNIgnoreCase(
+//                            g, u, descVN.trim()
+//                    );
+//            if (x.isPresent() && !x.get().getId().equals(currentId)) return x;
+//            return Optional.empty();
+//        }
+//
+//        // 4) groupId + unit + descEN
+//        if (isUsableKey(descEN)) {
+//            Optional<RequisitionMonthly> x =
+//                    requisitionMonthlyRepository.findFirstByGroupIdAndUnitIgnoreCaseAndItemDescriptionENIgnoreCase(
+//                            g, u, descEN.trim()
+//                    );
+//            if (x.isPresent() && !x.get().getId().equals(currentId)) return x;
+//        }
+//
+//        return Optional.empty();
+//    }
 
 
     /**
@@ -1158,92 +1227,128 @@ public class RequisitionMonthlyController {
             RequisitionMonthly req,
             String groupCurrency,
             Boolean removeDuplicateSuppliers,
-            Map<String, List<SupplierProduct>> supplierListCache,
+            Map<String, List<SupplierProduct>> supplierListCache, // ✅ keep param để khỏi phá signature, nhưng KHÔNG DÙNG
             boolean includeMonthlyLastPurchase,
             LocalDateTime monthStart,
             LocalDateTime monthEndExclusive
     ) {
         List<MonthlyComparisonRequisitionDTO.SupplierDTO> supplierDTOs = new ArrayList<>();
 
-        String codeKey = null;
-        if (req.getOldSAPCode() != null && !req.getOldSAPCode().isBlank()) {
-            codeKey = req.getOldSAPCode().trim();
-        } else if (req.getHanaSAPCode() != null && !req.getHanaSAPCode().isBlank()) {
-            codeKey = req.getHanaSAPCode().trim();
-        }
-
-        String selectedSupplierId = (req.getSupplierId() != null && !req.getSupplierId().isBlank())
-                ? req.getSupplierId().trim()
-                : null;
+        String selectedSupplierId = normText(req.getSupplierId());
 
         String unit = req.getUnit() != null ? req.getUnit() : "";
         String goodtype = "";
         BigDecimal price = null;
 
-        final String finalGroupCurrency = groupCurrency != null ? groupCurrency.trim() : "";
+        final String cur = normText(groupCurrency) != null ? normText(groupCurrency) : "VND";
 
-        if (selectedSupplierId != null && codeKey != null && !codeKey.isBlank() && !finalGroupCurrency.isBlank()) {
-            final String supplierListKey = codeKey + "|" + finalGroupCurrency;
+        // ✅ ===== APPLY CASCADE SEARCH (SAP -> HANA -> VN -> EN) (NO CACHE) =====
+        if (!cur.isBlank()) {
 
-            String finalCodeKey = codeKey;
-            List<SupplierProduct> suppliers = supplierListCache.computeIfAbsent(supplierListKey, k ->
-                    supplierProductRepository.findBySapCodeAndCurrencyIgnoreCase(finalCodeKey, finalGroupCurrency)
-            );
+            String reqUnit = normText(unit);
+            if (reqUnit != null) {
 
-            if (suppliers != null && !suppliers.isEmpty()) {
+                String sapCode  = normCode(req.getOldSAPCode());       // null if empty/new
+                String hanaCode = normCode(req.getHanaSAPCode());      // null if empty/new
+                String desVn    = normText(req.getItemDescriptionVN());
+                String desEn    = normText(req.getItemDescriptionEN());
 
-                List<MonthlyComparisonRequisitionDTO.SupplierDTO> allSuppliers = suppliers.stream()
-                        .map(sp -> new MonthlyComparisonRequisitionDTO.SupplierDTO(
-                                sp.getPrice(),
-                                sp.getSupplierName(),
-                                selectedSupplierId.equals(sp.getId()) ? 1 : 0,
-                                sp.getUnit(),
-                                false
-                        ))
-                        .collect(Collectors.toList());
+                String keyword = null;
+                int searchMode = 0; // 1=sap, 2=hana, 3=vn, 4=en
 
-                if (Boolean.TRUE.equals(removeDuplicateSuppliers)) {
-                    Map<String, MonthlyComparisonRequisitionDTO.SupplierDTO> unique = new LinkedHashMap<>();
-                    for (MonthlyComparisonRequisitionDTO.SupplierDTO s : allSuppliers) {
-                        String key = s.getSupplierName();
-                        MonthlyComparisonRequisitionDTO.SupplierDTO exist = unique.get(key);
+                if (sapCode != null) {
+                    keyword = sapCode;
+                    searchMode = 1;
+                } else if (hanaCode != null) {
+                    keyword = hanaCode;
+                    searchMode = 2;
+                } else if (desVn != null) {
+                    keyword = desVn;
+                    searchMode = 3;
+                } else if (desEn != null) {
+                    keyword = desEn;
+                    searchMode = 4;
+                }
 
-                        if (exist == null) {
-                            unique.put(key, s);
+                if (keyword != null) {
+
+                    List<SupplierProduct> suppliers;
+
+                    if (searchMode == 1) {
+                        suppliers = supplierProductRepository
+                                .findBySapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
+                    } else if (searchMode == 2) {
+                        suppliers = supplierProductRepository
+                                .findByHanaSapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
+                    } else if (searchMode == 3) {
+                        suppliers = supplierProductRepository
+                                .findByItemDescriptionVNContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
+                    } else {
+                        suppliers = supplierProductRepository
+                                .findByItemDescriptionENContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
+                    }
+
+                    if (suppliers != null && !suppliers.isEmpty()) {
+
+                        List<MonthlyComparisonRequisitionDTO.SupplierDTO> allSuppliers = suppliers.stream()
+                                .map(sp -> new MonthlyComparisonRequisitionDTO.SupplierDTO(
+                                        sp.getPrice(),
+                                        sp.getSupplierName(),
+                                        (selectedSupplierId != null && selectedSupplierId.equals(sp.getId())) ? 1 : 0, // ✅ mark selected
+                                        sp.getUnit(),
+                                        false
+                                ))
+                                .collect(Collectors.toList());
+
+                        // ✅ remove duplicate suppliers giữ nguyên
+                        if (Boolean.TRUE.equals(removeDuplicateSuppliers)) {
+                            Map<String, MonthlyComparisonRequisitionDTO.SupplierDTO> unique = new LinkedHashMap<>();
+                            for (MonthlyComparisonRequisitionDTO.SupplierDTO s : allSuppliers) {
+                                String key = s.getSupplierName();
+                                MonthlyComparisonRequisitionDTO.SupplierDTO exist = unique.get(key);
+
+                                if (exist == null) {
+                                    unique.put(key, s);
+                                } else {
+                                    if (s.getIsSelected() != null && s.getIsSelected() == 1) {
+                                        unique.put(key, s);
+                                    } else if ((exist.getIsSelected() == null || exist.getIsSelected() == 0)
+                                            && s.getPrice() != null
+                                            && (exist.getPrice() == null || s.getPrice().compareTo(exist.getPrice()) < 0)) {
+                                        unique.put(key, s);
+                                    }
+                                }
+                            }
+                            supplierDTOs = new ArrayList<>(unique.values());
                         } else {
-                            if (s.getIsSelected() != null && s.getIsSelected() == 1) {
-                                unique.put(key, s);
-                            } else if ((exist.getIsSelected() == null || exist.getIsSelected() == 0)
-                                    && s.getPrice() != null
-                                    && (exist.getPrice() == null || s.getPrice().compareTo(exist.getPrice()) < 0)) {
-                                unique.put(key, s);
+                            supplierDTOs = allSuppliers;
+                        }
+
+                        supplierDTOs = supplierDTOs.stream()
+                                .sorted(Comparator.comparing(
+                                        MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice,
+                                        Comparator.nullsLast(BigDecimal::compareTo)))
+                                .collect(Collectors.toList());
+
+                        // ✅ update unit/goodtype/price from selected supplier if found
+                        if (selectedSupplierId != null) {
+                            SupplierProduct selectedSupplier = suppliers.stream()
+                                    .filter(sp -> selectedSupplierId.equals(sp.getId()))
+                                    .findFirst()
+                                    .orElse(null);
+
+                            if (selectedSupplier != null) {
+                                unit = selectedSupplier.getUnit() != null ? selectedSupplier.getUnit() : unit;
+                                goodtype = selectedSupplier.getGoodType() != null ? selectedSupplier.getGoodType() : goodtype;
+                                price = selectedSupplier.getPrice();
                             }
                         }
                     }
-                    supplierDTOs = new ArrayList<>(unique.values());
-                } else {
-                    supplierDTOs = allSuppliers;
-                }
-
-                supplierDTOs = supplierDTOs.stream()
-                        .sorted(Comparator.comparing(
-                                MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice,
-                                Comparator.nullsLast(BigDecimal::compareTo)))
-                        .collect(Collectors.toList());
-
-                SupplierProduct selectedSupplier = suppliers.stream()
-                        .filter(sp -> selectedSupplierId.equals(sp.getId()))
-                        .findFirst()
-                        .orElse(null);
-
-                if (selectedSupplier != null) {
-                    unit = selectedSupplier.getUnit() != null ? selectedSupplier.getUnit() : unit;
-                    goodtype = selectedSupplier.getGoodType() != null ? selectedSupplier.getGoodType() : goodtype;
-                    price = selectedSupplier.getPrice();
                 }
             }
         }
 
+        // ✅ fallback price from requisition
         if (price == null && req.getPrice() != null) {
             price = req.getPrice();
         }
@@ -1330,11 +1435,11 @@ public class RequisitionMonthlyController {
                 useStockQty,
                 orderQty,
                 price,
-                finalGroupCurrency,
+                cur,
                 goodtype
         );
 
-        // ✅ ONLY CHANGE: dùng chung helper -> set 4 field
+        // ✅ last purchase giữ nguyên
         if (includeMonthlyLastPurchase && monthStart != null && monthEndExclusive != null) {
             LastPurchaseInfo info = getMonthlyLastPurchaseInfo(req, monthStart, monthEndExclusive);
             if (info != null) {
@@ -1346,6 +1451,19 @@ public class RequisitionMonthlyController {
         }
 
         return dto;
+    }
+
+    private static String normText(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    // ✅ NEW / empty -> null
+    private static String normCode(String s) {
+        String t = normText(s);
+        if (t == null) return null;
+        return "new".equalsIgnoreCase(t) ? null : t;
     }
 
     private MonthlyComparisonRequisitionDTO convertToComparisonDTO(RequisitionMonthly req, String currency, Boolean removeDuplicateSuppliers) {
@@ -1526,48 +1644,6 @@ public class RequisitionMonthlyController {
    Helpers for strict import
    ========================================================= */
 
-    private static class PicturePayload {
-        final byte[] bytes;
-        final String mimeType;
-        PicturePayload(byte[] bytes, String mimeType) {
-            this.bytes = bytes;
-            this.mimeType = mimeType;
-        }
-    }
-
-    private boolean isValidMonthlyTemplateHeader(
-            Sheet sheet,
-            Row headerRow,
-            List<String> errors,
-            int headerRowIndex,
-            Map<Integer, String> expectedContains
-    ) {
-        if (headerRow == null) {
-            errors.add("Invalid template: header row (row " + (headerRowIndex + 1) + ") not found.");
-            return false;
-        }
-
-        boolean ok = true;
-        for (Map.Entry<Integer, String> e : expectedContains.entrySet()) {
-            int col = e.getKey();
-            String expected = e.getValue();
-
-            Cell c = headerRow.getCell(col, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
-            String v = normalizeHeader(getCellValue(c));
-
-            if (v == null || !v.contains(expected)) {
-                ok = false;
-                errors.add("Invalid template: header at row " + (headerRowIndex + 1) +
-                        ", col " + (col + 1) + " is wrong/missing. Expected contains '" + expected + "'.");
-            }
-        }
-
-        if (!ok) {
-            errors.add("Please use the correct Monthly Requisition import template (latest).");
-        }
-        return ok;
-    }
-
     private String normalizeHeader(String s) {
         if (s == null) return null;
         return s.toLowerCase()
@@ -1577,56 +1653,10 @@ public class RequisitionMonthlyController {
                 .trim();
     }
 
-    private String normalizeKey(String s) {
-        if (s == null) return "";
-        return s.trim().toLowerCase().replaceAll("\\s+", " ");
-    }
-
     private String safeTrim(String s) {
         if (s == null) return null;
         String t = s.trim();
         return t.isEmpty() ? null : t;
-    }
-
-    private String safe(String s) {
-        return s == null ? "" : s;
-    }
-
-
-    private BigDecimal parseBigDecimalStrict(Cell cell) {
-        if (cell == null) return null;
-
-        try {
-            if (cell.getCellType() == CellType.NUMERIC) {
-                return BigDecimal.valueOf(cell.getNumericCellValue());
-            }
-            if (cell.getCellType() == CellType.FORMULA) {
-                // try numeric result first
-                try {
-                    return BigDecimal.valueOf(cell.getNumericCellValue());
-                } catch (Exception ignore) {}
-                // fallback to string
-                String s = cell.getStringCellValue();
-                return parseBigDecimalFromString(s);
-            }
-            if (cell.getCellType() == CellType.STRING) {
-                return parseBigDecimalFromString(cell.getStringCellValue());
-            }
-            return null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private BigDecimal parseBigDecimalFromString(String raw) {
-        if (raw == null) return null;
-        String s = raw.trim();
-        if (s.isEmpty()) return null;
-
-        // allow "1,234" or "1 234" style
-        s = s.replace(",", "").replace(" ", "");
-        // if someone puts "-" or text -> fail
-        return new BigDecimal(s);
     }
 
     private boolean isAllowedImageMime(String mimeType) {
@@ -1640,17 +1670,6 @@ public class RequisitionMonthlyController {
         return ResponseEntity.badRequest().body(
                 Collections.singletonList(new RequisitionMonthly() {{ setRemark(message); }})
         );
-    }
-
-    // === HELPER: Trả về lỗi dạng list (multi) ===
-    private ResponseEntity<List<RequisitionMonthly>> badRequestErrors(List<String> messages) {
-        List<RequisitionMonthly> list = new ArrayList<>();
-        for (String m : messages) {
-            RequisitionMonthly r = new RequisitionMonthly();
-            r.setRemark(m);
-            list.add(r);
-        }
-        return ResponseEntity.badRequest().body(list);
     }
 
     // Helper method to get cell value (giữ logic cũ, nhưng trim an toàn)
@@ -1695,7 +1714,7 @@ public class RequisitionMonthlyController {
         return row.getCell(colIndex, Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
     }
 
-    private String saveImage(byte[] imageBytes, String fileName, String mimeType) throws IOException {
+    public String saveImage(byte[] imageBytes, String fileName, String mimeType) throws IOException {
         if (imageBytes == null || imageBytes.length == 0) return null;
 
         if (!isAllowedImageMime(mimeType)) {
@@ -1710,7 +1729,7 @@ public class RequisitionMonthlyController {
         return "/uploads/" + fileName;
     }
 
-    private String getImageExtension(String mimeType) {
+    public String getImageExtension(String mimeType) {
         return switch (mimeType) {
             case "image/jpeg", "image/jpg" -> ".jpg";
             case "image/png" -> ".png";
@@ -2831,103 +2850,108 @@ public class RequisitionMonthlyController {
     @PostMapping(value = "/requisition-monthly/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
             summary = "Upload Requisition File",
-            description = "Upload Excel .xlsx file. Data starts from **row 9 (N9)**, column B (Item VN). " +
-                    "Columns: B=Item VN, C=Item EN, D=Hana SAP, G=Request, H=Inhand, I=Buy, J=Unit, M=Dept, N=Picture, O=Remarks"
+            description = "Upload Excel .xlsx file. Data starts from row 9 (index=8), column B (Item VN). " +
+                    "Columns: B=Item VN, C=Item EN, D=Old SAP, E=Hana SAP, I=Request, J=Unit, K=Dept, N=Picture, O=Remarks"
     )
     public ResponseEntity<List<RequisitionMonthly>> uploadRequisitionFile(
             @Parameter(description = "Excel .xlsx file") @RequestPart("file") MultipartFile file,
-            @Parameter(description = "Group ID", required = true) @RequestParam("groupId") String groupId) {
-
-        List<RequisitionMonthly> allMonthly = requisitionMonthlyRepository.findByGroupId(groupId);
-        Set<String> existingSapCodes = allMonthly.stream()
-                .map(RequisitionMonthly::getOldSAPCode)
-                .filter(code -> code != null && !code.trim().isEmpty() && !"NEW".equalsIgnoreCase(code.trim()))
-                .map(code -> code.trim().toUpperCase())
-                .collect(Collectors.toSet());
-
-        List<RequisitionMonthly> requisitions = new ArrayList<>();
-        Map<String, Integer> sapCodeMap = new HashMap<>();     // <sapCode, index>
-        Map<String, Integer> materialMap = new HashMap<>();    // <itemVN, index> for SAP = NEW
-
-        // ✅ gom lỗi validate — chỉ khi không có lỗi mới saveAll
-        List<String> validationErrors = new ArrayList<>();
-
-        if (file == null || file.isEmpty()) {
-            return badRequest("No file uploaded.");
-        }
+            @Parameter(description = "Group ID", required = true) @RequestParam("groupId") String groupId
+    ) {
+        // ✅ validate input
+        if (groupId == null || groupId.isBlank()) return badRequest("groupId is required.");
+        if (file == null || file.isEmpty()) return badRequest("No file uploaded.");
         if (file.getOriginalFilename() == null || !file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
             return badRequest("Only .xlsx files are allowed.");
         }
 
+        // ✅ 1) Load data existing (CHỈ trong cùng groupId) để check trùng theo rule cascade + UNIT
+        List<RequisitionMonthly> allMonthly = requisitionMonthlyRepository.findByGroupId(groupId);
+
+        Set<String> existingKeys = allMonthly.stream()
+                .map(CommonRequisitionUtils::buildExistingKeyFromDb)
+                .filter(k -> k != null && !k.isBlank())
+                .collect(Collectors.toSet());
+
+        List<RequisitionMonthly> requisitions = new ArrayList<>();
+        Map<String, Integer> fileKeyMap = new HashMap<>(); // <rowKey, index in requisitions>
+
         try (InputStream is = file.getInputStream()) {
             XSSFWorkbook workbook = new XSSFWorkbook(is);
             Sheet sheet = workbook.getSheetAt(0);
-            if (sheet == null) {
-                return badRequest("Sheet not found.");
-            }
+            if (sheet == null) return badRequest("Sheet not found.");
 
             XSSFDrawing drawing = (XSSFDrawing) sheet.createDrawingPatriarch();
             List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
 
-            // === BẮT ĐẦU TỪ DÒNG 9 (index = 8) ===
+            // === START from row 9 (index 8) ===
             for (int i = 8; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
 
-                // === CỘT B (Item VN) - BẮT BUỘC ===
-                Cell itemVNCell = getMergedCellValue(sheet, i, 1, mergedRegions); // Cột B (index 1)
-                if (itemVNCell == null) {
-                    itemVNCell = row.getCell(1, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
-                }
-                String itemVN = getCellValue(itemVNCell);
+                // --- Item VN (B) ---
+                Cell itemVNCell = getMergedCellValue(sheet, i, 1, mergedRegions); // B
+                if (itemVNCell == null) itemVNCell = row.getCell(1, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+                String itemVN = safeTrim(getCellValue(itemVNCell));
 
-                // Bỏ qua nếu cột B rỗng
-                if (itemVN == null || itemVN.trim().isEmpty()) {
-                    continue;
-                }
+                // --- Other cells ---
+                Cell itemENCell  = getMergedCellValue(sheet, i, 2, mergedRegions);   // C
+                Cell sapCell     = getMergedCellValue(sheet, i, 3, mergedRegions);   // D (Old SAP)
+                Cell hanaCell    = getMergedCellValue(sheet, i, 4, mergedRegions);   // E (Hana SAP)
+                Cell requestCell = getMergedCellValue(sheet, i, 8, mergedRegions);   // I
+                Cell unitCell    = getMergedCellValue(sheet, i, 9, mergedRegions);   // J
+                Cell deptCell    = getMergedCellValue(sheet, i, 10, mergedRegions);  // K
+                Cell reasonCell  = getMergedCellValue(sheet, i, 14, mergedRegions);  // O
 
-                // === CÁC CỘT KHÁC ===
-                Cell itemENCell   = getMergedCellValue(sheet, i, 2, mergedRegions);   // Cột C
-                Cell sapCell      = getMergedCellValue(sheet, i, 3, mergedRegions);   // Cột D
-                Cell hanaCell     = getMergedCellValue(sheet, i, 4, mergedRegions);   // Cột E
-                Cell requestCell  = getMergedCellValue(sheet, i, 8, mergedRegions);   // Cột I
-                Cell unitCell     = getMergedCellValue(sheet, i, 9, mergedRegions);   // Cột J
-                Cell deptCell     = getMergedCellValue(sheet, i, 10, mergedRegions);  // Cột K
-                Cell reasonCell   = getMergedCellValue(sheet, i, 14, mergedRegions);  // Cột O (Remark)
+                String itemEN = safeTrim(getCellValue(itemENCell));
 
-                String itemEN   = getCellValue(itemENCell);
-                String sapCode  = getCellValue(sapCell);      // sapCode là String, dù Excel lưu số
-                String hanaCode = getCellValue(hanaCell);
+                // ✅ normalize NEW/new/New -> "NEW"
+                String sapCodeNorm  = normalizeNew(getCellValue(sapCell));
+                String hanaCodeNorm = normalizeNew(getCellValue(hanaCell));
 
                 BigDecimal requestQty = parseBigDecimal(requestCell);
                 if (requestQty == null) requestQty = BigDecimal.ZERO;
 
-                // Inhand và Buy không còn trong file → mặc định 0
+                // Inhand/Buy không còn -> 0
                 BigDecimal inhand = BigDecimal.ZERO;
                 BigDecimal buy = BigDecimal.ZERO;
 
-                String unit = getCellValue(unitCell);
-                String deptName = getCellValue(deptCell);
-                String reason = getCellValue(reasonCell);
+                String unit = safeTrim(getCellValue(unitCell));
+                String deptName = safeTrim(getCellValue(deptCell));
+                String reason = safeTrim(getCellValue(reasonCell));
 
-                // === KIỂM TRA TRÙNG SAP CODE TRONG DB (GOM LỖI, KHÔNG RETURN NGAY) ===
-                boolean isSapValid = sapCode != null && !sapCode.trim().isEmpty() && !"NEW".equalsIgnoreCase(sapCode.trim());
-                if (isSapValid) {
-                    String normalizedSapCode = sapCode.trim().toUpperCase();
-                    if (existingSapCodes.contains(normalizedSapCode)) {
-                        validationErrors.add("Row " + (i + 1) + ": SAP Code '" + sapCode + "' already exists in the system for this group.");
-                        // không continue bắt buộc, nhưng nên continue để tránh tạo request “rác”
-                        continue;
-                    }
+                // ✅ FAIL-FAST: unit required
+                if (unit == null || unit.isBlank()) {
+                    return badRequest("Row " + (i + 1) + ": Unit is required (column J).");
                 }
 
-                // === XỬ LÝ HÌNH ẢNH (CỘT N - index 13) ===
-                // Lưu ý: hiện tại ảnh vẫn được lưu ngay khi đọc (nếu fail validate các dòng sau, ảnh vẫn nằm trên disk)
+                // ✅ 2) Build key theo rule cascade + UNIT (CHỈ trong groupId này)
+                String rowKey = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                        unit,
+                        sapCodeNorm,   // bạn đang normalize "NEW" -> "NEW", ok
+                        hanaCodeNorm,
+                        itemVN,
+                        itemEN
+                );
+
+                if (rowKey == null) {
+                    return badRequest("Row " + (i + 1) + ": Cannot determine merge key (UNIT + SAP/HANA/VN/EN all empty).");
+                }
+
+                // ✅ FAIL-FAST: trùng với DB trong groupId
+                if (existingKeys.contains(rowKey)) {
+                    return badRequest("Row " + (i + 1) + ": Duplicate record exists in this group with key = " + rowKey);
+                }
+
+                // ✅ FAIL-FAST: trùng trong chính file (không merge nữa)
+                if (fileKeyMap.containsKey(rowKey)) {
+                    return badRequest("Row " + (i + 1) + ": Duplicate key in uploaded file with key = " + rowKey);
+                }
+
+                // === Image handling (col N index 13) ===
                 List<String> imageUrls = new ArrayList<>();
                 for (XSSFShape shape : drawing.getShapes()) {
                     if (shape instanceof XSSFPicture pic) {
                         XSSFClientAnchor anchor = pic.getClientAnchor();
-
                         boolean inRow = anchor.getRow1() <= i && anchor.getRow2() >= i;
                         boolean inCol = anchor.getCol1() <= 13 && anchor.getCol2() >= 13;
 
@@ -2939,103 +2963,53 @@ public class RequisitionMonthlyController {
                                 String fileName = "req_" + groupId + "_" + (i + 1) + "_" + System.currentTimeMillis() + ext;
 
                                 String imgPath = saveImage(imgBytes, fileName, mimeType);
-                                if (imgPath != null) {
-                                    imageUrls.add(imgPath);
-                                }
+                                if (imgPath != null) imageUrls.add(imgPath);
                             } catch (Exception e) {
+                                // ảnh lỗi: theo fail-fast hay skip? bạn đang print err + skip
                                 System.err.println("Image save failed at row " + (i + 1) + ": " + e.getMessage());
                             }
                         }
                     }
                 }
 
-                // === XỬ LÝ DEPARTMENT (CHỈ CHECK TỒN TẠI + LẤY INFO TỪ DB) ===
+                // === Department check ===
                 String deptId = null;
                 String deptNameFromDb = null;
 
-                String deptNameTrim = (deptName == null) ? null : deptName.trim();
-                if (deptNameTrim != null && !deptNameTrim.isEmpty()) {
-                    Department dept = departmentRepository.findByDepartmentName(deptNameTrim);
-
+                if (deptName != null) {
+                    Department dept = departmentRepository.findByDepartmentName(deptName);
                     if (dept == null) {
-                        validationErrors.add("Row " + (i + 1) + ": Department '" + deptNameTrim + "' does not exist.");
-                        continue; // không tạo request cho dòng này
+                        return badRequest("Row " + (i + 1) + ": Department '" + deptName + "' does not exist.");
                     }
-
                     deptId = dept.getId();
-                    deptNameFromDb = dept.getDepartmentName(); // ✅ dùng tên chuẩn từ DB
+                    deptNameFromDb = dept.getDepartmentName();
                 }
 
-                // === XÁC ĐỊNH KEY ĐỂ GỘP ===
-                boolean isSapNewOrEmpty = !isSapValid;
-                String groupKey = isSapNewOrEmpty
-                        ? itemVN.toLowerCase().trim()
-                        : sapCode.trim().toLowerCase();
-
-                Map<String, Integer> currentMap = isSapNewOrEmpty ? materialMap : sapCodeMap;
-
-                // === GỘP DỮ LIỆU TRONG FILE ===
-                if (currentMap.containsKey(groupKey)) {
-                    int idx = currentMap.get(groupKey);
-                    RequisitionMonthly existing = requisitions.get(idx);
-
-                    // Gộp theo phòng ban
-                    boolean deptExists = false;
-                    for (DepartmentRequisitionMonthly dr : existing.getDepartmentRequisitions()) {
-                        if (dr.getId() != null && dr.getId().equals(deptId)) {
-                            dr.setQty(dr.getQty().add(requestQty));
-                            dr.setBuy(dr.getBuy().add(buy));
-                            deptExists = true;
-                            break;
-                        }
-                    }
-                    if (!deptExists && deptId != null) {
-                        DepartmentRequisitionMonthly ndr = new DepartmentRequisitionMonthly();
-                        ndr.setId(deptId);
-                        ndr.setName(deptNameFromDb); // ✅ lấy từ DB
-                        ndr.setQty(requestQty);
-                        ndr.setBuy(buy);
-                        existing.getDepartmentRequisitions().add(ndr);
-                    }
-
-                    existing.setTotalRequestQty(existing.getTotalRequestQty().add(requestQty));
-                    existing.setOrderQty(existing.getOrderQty().add(buy));
-
-                    if (existing.getUnit() == null && unit != null) existing.setUnit(unit);
-                    if (existing.getReason() == null && reason != null) existing.setReason(reason);
-
-                    if (!imageUrls.isEmpty()) {
-                        if (existing.getImageUrls() == null) {
-                            existing.setImageUrls(new ArrayList<>());
-                        }
-                        existing.getImageUrls().addAll(imageUrls);
-                    }
-
-                    continue;
-                }
-
-                // === TẠO MỚI ===
+                // ✅ 5) Create new record
                 RequisitionMonthly req = new RequisitionMonthly();
                 req.setGroupId(groupId);
                 req.setCreatedDate(LocalDateTime.now());
                 req.setUpdatedDate(LocalDateTime.now());
 
-                if (isSapValid) req.setOldSAPCode(sapCode);
+                // ✅ “NEW/new/New” -> ép thành "NEW" và VẪN LƯU oldSAP/hana
+                req.setOldSAPCode(sapCodeNorm);
+                req.setHanaSAPCode(hanaCodeNorm);
+
                 req.setItemDescriptionVN(itemVN);
                 req.setItemDescriptionEN(itemEN);
+
                 req.setTotalRequestQty(requestQty);
                 req.setOrderQty(buy);
                 req.setDailyMedInventory(inhand);
                 req.setUnit(unit);
                 req.setReason(reason);
                 req.setImageUrls(imageUrls.isEmpty() ? null : imageUrls);
-                req.setHanaSAPCode(hanaCode);
 
                 List<DepartmentRequisitionMonthly> deptList = new ArrayList<>();
                 if (deptId != null) {
                     DepartmentRequisitionMonthly dr = new DepartmentRequisitionMonthly();
                     dr.setId(deptId);
-                    dr.setName(deptNameFromDb); // ✅ lấy từ DB
+                    dr.setName(deptNameFromDb);
                     dr.setQty(requestQty);
                     dr.setBuy(buy);
                     deptList.add(dr);
@@ -3043,16 +3017,11 @@ public class RequisitionMonthlyController {
                 req.setDepartmentRequisitions(deptList);
 
                 requisitions.add(req);
-                currentMap.put(groupKey, requisitions.size() - 1);
-            }
-
-            // ✅ Nếu có bất kỳ lỗi validate nào -> KHÔNG LƯU GÌ
-            if (!validationErrors.isEmpty()) {
-                return badRequest("Validation failed:\n" + String.join("\n", validationErrors));
+                fileKeyMap.put(rowKey, requisitions.size() - 1);
             }
 
             if (requisitions.isEmpty()) {
-                return badRequest("No valid data found starting from row 9 (column B).");
+                return badRequest("No valid data found starting from row 9.");
             }
 
             List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);
@@ -3063,19 +3032,332 @@ public class RequisitionMonthlyController {
         }
     }
 
+/* =========================
+   Helpers (add these)
+   ========================= */
+
+    // "new", "New", "NEW" -> "NEW"
+    private String normalizeNew(String v) {
+        String t = safeTrim(v);
+        if (t == null) return null;
+        return t.equalsIgnoreCase("NEW") ? "NEW" : t;
+    }
+
+    private boolean isBlankOrNew(String v) {
+        String t = normalizeNew(v);
+        return (t == null) || "NEW".equals(t);
+    }
+
+    // Key merge/search theo rule có UNIT:
+    // UNIT + SAP (!NEW/blank) -> UNIT + HANA (!NEW/blank) -> UNIT + VN -> UNIT + EN
+    private String buildRowKey(String unit, String sapNorm, String hanaNorm, String itemVN, String itemEN) {
+        String u = safeTrim(unit);
+        if (u == null) return null;
+
+        if (!isBlankOrNew(sapNorm)) {
+            return "UNIT|" + u.toLowerCase() + "|SAP|" + sapNorm.trim().toUpperCase();
+        }
+        if (!isBlankOrNew(hanaNorm)) {
+            return "UNIT|" + u.toLowerCase() + "|HANA|" + hanaNorm.trim().toUpperCase();
+        }
+        String vn = safeTrim(itemVN);
+        if (vn != null) {
+            return "UNIT|" + u.toLowerCase() + "|VN|" + vn.toLowerCase();
+        }
+        String en = safeTrim(itemEN);
+        if (en != null) {
+            return "UNIT|" + u.toLowerCase() + "|EN|" + en.toLowerCase();
+        }
+        return null;
+    }
+
+
+    // Build key cho record DB để check trùng theo đúng rule cascade + UNIT
+    private String buildExistingKeyFromDb(RequisitionMonthly rm) {
+        String unit = rm.getUnit();
+
+        String sapNorm = normalizeNew(rm.getOldSAPCode());
+        String hanaNorm = normalizeNew(rm.getHanaSAPCode());
+
+        String vn = rm.getItemDescriptionVN();
+        String en = rm.getItemDescriptionEN();
+
+        return buildRowKey(unit, sapNorm, hanaNorm, vn, en);
+    }
+
     private BigDecimal parseBigDecimal(Cell cell) {
         if (cell == null) return null;
         try {
             if (cell.getCellType() == CellType.NUMERIC) {
                 return BigDecimal.valueOf(cell.getNumericCellValue());
             } else if (cell.getCellType() == CellType.STRING) {
-                return new BigDecimal(cell.getStringCellValue().trim());
+                String s = cell.getStringCellValue();
+                if (s == null) return null;
+                s = s.trim();
+                if (s.isEmpty()) return null;
+                return new BigDecimal(s);
             } else if (cell.getCellType() == CellType.FORMULA) {
                 return BigDecimal.valueOf(cell.getNumericCellValue());
             }
-        } catch (Exception e) {
+        } catch (Exception ignored) {
             return null;
         }
         return null;
     }
+
+    @PatchMapping("/requisition-monthly/auto-supplier/by-group")
+    @Transactional
+    public ResponseEntity<?> autoUpdateSupplierByGroup(
+            @RequestParam("groupId") String groupId,
+            @RequestParam("email") String email
+    ) {
+        try {
+            if (groupId == null || groupId.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "groupId is required"));
+            }
+            if (email == null || email.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "email is required"));
+            }
+
+            List<RequisitionMonthly> reqList = requisitionMonthlyRepository.findByGroupId(groupId);
+            if (reqList == null || reqList.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                        "message", "No requisitions found for groupId: " + groupId,
+                        "groupId", groupId
+                ));
+            }
+
+            int total = reqList.size();
+            int updated = 0;
+
+            int skippedAlreadyHasSupplier = 0;
+            int skippedNoKey = 0;
+            int skippedNoUnit = 0;
+            int skippedNoSupplier = 0;
+            int skippedAllNullPrice = 0;
+
+            List<Map<String, Object>> details = new ArrayList<>();
+
+            for (RequisitionMonthly req : reqList) {
+                try {
+                    // ===== currency: used for filter (default VND) =====
+                    String currency = safeTrim(req.getCurrency());
+                    if (currency == null) currency = "VND";
+
+                    // ===== SKIP: already selected supplier =====
+                    String existingSupplierId = safeTrim(req.getSupplierId());
+                    if (existingSupplierId != null) {
+                        skippedAlreadyHasSupplier++;
+                        details.add(makeDetail(req.getId(), "SKIP_ALREADY_HAS_SUPPLIER", existingSupplierId, 0, currency, safeTrim(req.getUnit())));
+                        continue;
+                    }
+
+                    // ===== unit: REQUIRED =====
+                    String unit = safeTrim(req.getUnit());
+                    if (unit == null) {
+                        skippedNoUnit++;
+                        details.add(makeDetail(req.getId(), "SKIP_NO_UNIT", null, 0, currency, null));
+                        continue;
+                    }
+
+                    // ===== get fields for cascade keyword rule =====
+                    String sapCode  = normalizeNew(safeTrim(req.getOldSAPCode()));   // null / "NEW" / value
+                    String hanaCode = normalizeNew(safeTrim(req.getHanaSAPCode()));  // null / "NEW" / value
+                    String desVn    = safeTrim(req.getItemDescriptionVN());
+                    String desEn    = safeTrim(req.getItemDescriptionEN());
+
+                    // ===== CASCADE PICK keyword: SAP -> HANA -> VN -> EN =====
+                    String keyword = null;
+                    int searchMode = 0; // 1=sap, 2=hana, 3=desVn, 4=desEn
+
+                    if (isUsableKey(sapCode)) {
+                        keyword = sapCode;
+                        searchMode = 1;
+                    } else if (isUsableKey(hanaCode)) {
+                        keyword = hanaCode;
+                        searchMode = 2;
+                    } else if (desVn != null && !desVn.isBlank()) {
+                        keyword = desVn;
+                        searchMode = 3;
+                    } else if (desEn != null && !desEn.isBlank()) {
+                        keyword = desEn;
+                        searchMode = 4;
+                    }
+
+                    if (keyword == null || keyword.isBlank()) {
+                        skippedNoKey++;
+                        details.add(makeDetail(req.getId(), "SKIP_NO_KEY", null, 0, currency, unit));
+                        continue;
+                    }
+
+                    // ===== SEARCH: keyword + unit + currency =====
+                    List<SupplierProduct> suppliers;
+
+                    if (searchMode == 1) {
+                        suppliers = supplierProductRepository
+                                .findBySapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
+                    } else if (searchMode == 2) {
+                        suppliers = supplierProductRepository
+                                .findByHanaSapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
+                    } else if (searchMode == 3) {
+                        suppliers = supplierProductRepository
+                                .findByItemDescriptionVNContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
+                    } else {
+                        suppliers = supplierProductRepository
+                                .findByItemDescriptionENContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
+                    }
+
+                    if (suppliers == null || suppliers.isEmpty()) {
+                        skippedNoSupplier++;
+                        details.add(makeDetail(req.getId(), "SKIP_NO_SUPPLIER", keyword, searchMode, currency, unit));
+                        continue;
+                    }
+
+                    // ===== pick best: min price, tie => latest createdAt =====
+                    SupplierProduct best = suppliers.stream()
+                            .filter(sp -> sp != null && sp.getPrice() != null)
+                            .min(
+                                    Comparator.comparing(SupplierProduct::getPrice)
+                                            .thenComparing(
+                                                    SupplierProduct::getCreatedAt,
+                                                    Comparator.nullsLast(Comparator.reverseOrder())
+                                            )
+                            )
+                            .orElse(null);
+
+                    if (best == null) {
+                        skippedAllNullPrice++;
+                        details.add(makeDetail(req.getId(), "SKIP_ALL_NULL_PRICE", keyword, searchMode, currency, unit));
+                        continue;
+                    }
+
+                    // ===== update requisition supplier fields =====
+                    req.setSupplierId(best.getId());
+                    req.setSupplierName(best.getSupplierName());
+
+                    req.setPrice(best.getPrice() != null ? best.getPrice() : BigDecimal.ZERO);
+                    req.setGoodType(best.getGoodType() != null ? best.getGoodType() : "");
+
+                    req.setCurrency(best.getCurrency() != null && !best.getCurrency().isBlank()
+                            ? best.getCurrency()
+                            : currency);
+
+                    req.setProductType1Id(best.getProductType1Id());
+                    req.setProductType2Id(best.getProductType2Id());
+
+                    // ===== SYNC BACK item codes/descriptions by searchMode =====
+                    // NOTE: normalize NEW => "NEW" (case-insensitive)
+                    String spSap  = normalizeNew(safeTrim(best.getSapCode()));
+                    String spHana = normalizeNew(safeTrim(best.getHanaSapCode()));
+                    String spVn   = safeTrim(best.getItemDescriptionVN());
+                    String spEn   = safeTrim(best.getItemDescriptionEN());
+
+                    if (searchMode == 1) {
+                        // 1) search by SAP => update hana + desVN + desEN from supplier
+                        req.setHanaSAPCode(spHana);
+                        req.setItemDescriptionVN(spVn);
+                        req.setItemDescriptionEN(spEn);
+                        // oldSAP giữ nguyên (đang search bằng sap)
+                        // req.setOldSAPCode(req.getOldSAPCode());
+                    } else if (searchMode == 2) {
+                        // 2) search by HANA => update sap + desVN + desEN
+                        req.setOldSAPCode(spSap);
+                        req.setItemDescriptionVN(spVn);
+                        req.setItemDescriptionEN(spEn);
+                        // hana giữ nguyên (đang search bằng hana)
+                    } else if (searchMode == 3) {
+                        // 3) search by DES VN => update oldSAP + hana + desEN
+                        req.setOldSAPCode(spSap);
+                        req.setHanaSAPCode(spHana);
+                        req.setItemDescriptionEN(spEn);
+                        // desVN giữ nguyên (đang search theo desVN)
+                    } else if (searchMode == 4) {
+                        // 4) search by DES EN => update oldSAP + hana + desVN
+                        req.setOldSAPCode(spSap);
+                        req.setHanaSAPCode(spHana);
+                        req.setItemDescriptionVN(spVn);
+                        // desEN giữ nguyên (đang search theo desEN)
+                    }
+
+                    // ===== amount =====
+                    BigDecimal orderQty = req.getOrderQty() != null
+                            ? req.getOrderQty()
+                            : (req.getDailyMedInventory() != null ? req.getDailyMedInventory() : BigDecimal.ZERO);
+
+                    BigDecimal price = req.getPrice() != null ? req.getPrice() : BigDecimal.ZERO;
+                    req.setAmount(price.multiply(orderQty));
+
+                    req.setUpdatedByEmail(email);
+                    req.setUpdatedDate(LocalDateTime.now());
+
+                    requisitionMonthlyRepository.save(req);
+                    updated++;
+
+                    // details UPDATED
+                    Map<String, Object> d = new LinkedHashMap<>();
+                    d.put("requisitionId", req.getId());
+                    d.put("status", "UPDATED");
+                    d.put("searchMode", searchMode);
+                    d.put("keyword", keyword);
+                    d.put("unit", unit);
+                    d.put("currency", currency);
+                    d.put("pickedSupplierId", best.getId());
+                    d.put("pickedSupplierName", best.getSupplierName());
+                    d.put("pickedPrice", best.getPrice());
+                    d.put("pickedCreatedAt", best.getCreatedAt());
+
+                    // log sync back
+                    d.put("syncedOldSap", req.getOldSAPCode());
+                    d.put("syncedHana", req.getHanaSAPCode());
+                    d.put("syncedDesVn", req.getItemDescriptionVN());
+                    d.put("syncedDesEn", req.getItemDescriptionEN());
+
+                    details.add(d);
+
+                } catch (Exception perItemEx) {
+                    Map<String, Object> d = new LinkedHashMap<>();
+                    d.put("requisitionId", req.getId());
+                    d.put("status", "ERROR");
+                    d.put("error", perItemEx.getMessage());
+                    details.add(d);
+                }
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Batch auto supplier completed",
+                    "groupId", groupId,
+                    "total", total,
+                    "updated", updated,
+                    "skippedAlreadyHasSupplier", skippedAlreadyHasSupplier,
+                    "skippedNoUnit", skippedNoUnit,
+                    "skippedNoKey", skippedNoKey,
+                    "skippedNoSupplier", skippedNoSupplier,
+                    "skippedAllNullPrice", skippedAllNullPrice,
+                    "details", details
+            ));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Unexpected error: " + e.getMessage()));
+        }
+    }
+
+    private static Map<String, Object> makeDetail(
+            String reqId, String status, String keyword, int searchMode,
+            String currency, String unit
+    ) {
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("requisitionId", reqId);
+        d.put("status", status);
+        if (keyword != null) d.put("keyword", keyword);
+        if (searchMode != 0) d.put("searchMode", searchMode);
+        if (currency != null) d.put("currency", currency);
+        if (unit != null) d.put("unit", unit);
+        return d;
+    }
+
+
 }

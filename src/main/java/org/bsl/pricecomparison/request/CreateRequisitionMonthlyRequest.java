@@ -32,6 +32,11 @@ public class CreateRequisitionMonthlyRequest {
     @Schema(description = "HANA SAP code", example = "NEW456")
     private String hanaSAPCode;
 
+    // ✅ NEW: unit
+    @Schema(description = "Unit of measure", example = "BOX")
+    @NotNull(message = "unit is required")
+    private String unit;
+
     @Schema(description = "Department requisitions as JSON string",
             example = "[{\"id\": \"dept1\", \"name\": \"Finance Department\", \"qty\": 10, \"buy\": 8}, {\"id\": \"dept2\", \"name\": \"HR Department\", \"qty\": 20, \"buy\": 15}]")
     private String departmentRequisitions;
@@ -115,6 +120,15 @@ public class CreateRequisitionMonthlyRequest {
 
     public void setHanaSAPCode(String hanaSAPCode) {
         this.hanaSAPCode = hanaSAPCode;
+    }
+
+    // ✅ NEW: unit getter/setter
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
     }
 
     public String getDepartmentRequisitions() {

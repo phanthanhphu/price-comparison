@@ -35,7 +35,13 @@ public class UpdateRequisitionMonthlyRequest {
     @Schema(description = "HANA SAP code", example = "NEW456", nullable = true)
     private String hanaSAPCode;
 
-    @Schema(description = "Department requisitions as JSON string", example = "[{\"id\": \"dept1\", \"name\": \"IT Department\", \"qty\": 15, \"buy\": 12}, {\"id\": \"dept2\", \"name\": \"HR Department\", \"qty\": 25, \"buy\": 20}]", nullable = true)
+    // ✅ NEW: Unit field
+    @Schema(description = "Unit of requisition (editable from client request)", example = "Box", nullable = true)
+    private String unit;
+
+    @Schema(description = "Department requisitions as JSON string",
+            example = "[{\"id\": \"dept1\", \"name\": \"IT Department\", \"qty\": 15, \"buy\": 12}, {\"id\": \"dept2\", \"name\": \"HR Department\", \"qty\": 25, \"buy\": 20}]",
+            nullable = true)
     private String departmentRequisitions;
 
     @Schema(description = "Daily medical inventory", example = "75.0", nullable = true)
@@ -71,6 +77,10 @@ public class UpdateRequisitionMonthlyRequest {
 
     @Schema(description = "Group ID", example = "689dbaddf1bf4d67a76ebae5", nullable = true)
     private String groupId;
+
+    // ===========================
+    // ✅ GETTERS & SETTERS
+    // ===========================
 
     public List<MultipartFile> getFiles() {
         return files;
@@ -118,6 +128,15 @@ public class UpdateRequisitionMonthlyRequest {
 
     public void setHanaSAPCode(String hanaSAPCode) {
         this.hanaSAPCode = hanaSAPCode;
+    }
+
+    // ✅ NEW: getter/setter for unit
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
     }
 
     public String getDepartmentRequisitions() {

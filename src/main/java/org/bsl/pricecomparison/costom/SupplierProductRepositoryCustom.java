@@ -19,7 +19,6 @@ public interface SupplierProductRepositoryCustom {
             Pageable pageable
     );
 
-//    Page<SupplierProduct> findBySapCodeWithPagination(String sapCode, String itemNo, String itemDescription, String currency, Pageable pageable);
     Page<SupplierProduct> findByFiltersWithPagination(
             String sapCode,
             String hanaSapCode,
@@ -27,6 +26,7 @@ public interface SupplierProductRepositoryCustom {
             String itemDescriptionEN,
             String supplierName,   // ✅ NEW
             String currency,
+            String unit,           // ✅ NEW: Thêm trường Unit
             Pageable pageable
     );
 }
