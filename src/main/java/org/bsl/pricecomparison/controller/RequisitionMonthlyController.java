@@ -11,9 +11,7 @@ import org.bsl.pricecomparison.common.CommonRequisitionUtils;
 import org.bsl.pricecomparison.dto.*;
 import org.bsl.pricecomparison.enums.RequisitionType;
 import org.bsl.pricecomparison.model.*;
-import org.bsl.pricecomparison.repository.DepartmentRepository;
-import org.bsl.pricecomparison.repository.RequisitionMonthlyRepository;
-import org.bsl.pricecomparison.repository.SupplierProductRepository;
+import org.bsl.pricecomparison.repository.*;
 import org.bsl.pricecomparison.request.CreateRequisitionMonthlyRequest;
 import org.bsl.pricecomparison.request.UpdateRequisitionMonthlyRequest;
 import org.bsl.pricecomparison.response.RequisitionMonthlyPagedResponse;
@@ -76,6 +74,11 @@ public class RequisitionMonthlyController {
     @Autowired
     private CommonRequisitionUtils commonRequisitionUtils;
 
+    @Autowired
+    private RequisitionMonthlyController requisitionMonthlyController;
+
+    @Autowired
+    private GroupSummaryRequisitionRepository groupSummaryRequisitionRepository;
 
     private static final String UPLOAD_DIR = "./uploads/";
 
@@ -566,26 +569,40 @@ public class RequisitionMonthlyController {
             LocalDateTime monthEndExclusive
     ) {
         String currency = req.getCurrency();
-        if (currency == null || currency.trim().isEmpty()) return null;
+        if (currency == null || currency.trim().isEmpty()) {
+            // vẫn trả object để khỏi null pointer ở client
+            return new LastPurchaseInfo(BigDecimal.ZERO, null, null, null);
+        }
+        currency = currency.trim();
 
-        // ✅ default = 0
+        // ✅ NEW: lấy unit để search purchasing
+        String unit = req.getUnit();
+        if (unit == null || unit.trim().isEmpty()) {
+            return new LastPurchaseInfo(BigDecimal.ZERO, null, null, null);
+        }
+        unit = unit.trim();
+
         BigDecimal lastMonthTotalQty = BigDecimal.ZERO;
 
-        // ===== (A) SUM QTY theo tháng trước =====
+        // ===== (A) SUM QTY theo tháng trước (✅ add unit) =====
         List<RequisitionMonthly> matchesMonth = null;
 
         if (isValidKey(req.getOldSAPCode())) {
-            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByOldSapCodeAndCurrency(
-                    req.getOldSAPCode().trim(), currency, monthStart, monthEndExclusive);
+            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByOldSapCodeAndCurrencyAndUnit(
+                    req.getOldSAPCode().trim(), currency, unit, monthStart, monthEndExclusive
+            );
         } else if (isValidKey(req.getHanaSAPCode())) {
-            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByHanaSapCodeAndCurrency(
-                    req.getHanaSAPCode().trim(), currency, monthStart, monthEndExclusive);
+            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByHanaSapCodeAndCurrencyAndUnit(
+                    req.getHanaSAPCode().trim(), currency, unit, monthStart, monthEndExclusive
+            );
         } else if (isValidKey(req.getItemDescriptionVN())) {
-            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionVNAndCurrency(
-                    req.getItemDescriptionVN().trim(), currency, monthStart, monthEndExclusive);
+            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionVNAndCurrencyAndUnit(
+                    req.getItemDescriptionVN().trim(), currency, unit, monthStart, monthEndExclusive
+            );
         } else if (isValidKey(req.getItemDescriptionEN())) {
-            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionENAndCurrency(
-                    req.getItemDescriptionEN().trim(), currency, monthStart, monthEndExclusive);
+            matchesMonth = requisitionMonthlyRepository.findLastPurchaseByItemDescriptionENAndCurrencyAndUnit(
+                    req.getItemDescriptionEN().trim(), currency, unit, monthStart, monthEndExclusive
+            );
         }
 
         if (matchesMonth != null && !matchesMonth.isEmpty()) {
@@ -595,32 +612,38 @@ public class RequisitionMonthlyController {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
-        // ===== (B) latest completed ALL TIME (✅ skip current request id) =====
-        Pageable top2 = PageRequest.of(0, 2); // ✅ lấy 2 record mới nhất
+        // ===== (B) latest completed ALL TIME (✅ add unit + skip current id) =====
+        Pageable top2 = PageRequest.of(0, 2); // lấy 2 record mới nhất
         RequisitionMonthly latestAllTime = null;
 
         List<RequisitionMonthly> list = null;
 
         if (isValidKey(req.getOldSAPCode())) {
-            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByOldSapCodeAndCurrency(
-                    req.getOldSAPCode().trim(), currency, top2);
+            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByOldSapCodeAndCurrencyAndUnit(
+                    req.getOldSAPCode().trim(), currency, unit, top2
+            );
 
         } else if (isValidKey(req.getHanaSAPCode())) {
-            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByHanaSapCodeAndCurrency(
-                    req.getHanaSAPCode().trim(), currency, top2);
+            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByHanaSapCodeAndCurrencyAndUnit(
+                    req.getHanaSAPCode().trim(), currency, unit, top2
+            );
 
         } else if (isValidKey(req.getItemDescriptionVN())) {
-            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionVNAndCurrency(
-                    req.getItemDescriptionVN().trim(), currency, top2);
+            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionVNAndCurrencyAndUnit(
+                    req.getItemDescriptionVN().trim(), currency, unit, top2
+            );
 
         } else if (isValidKey(req.getItemDescriptionEN())) {
-            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionENAndCurrency(
-                    req.getItemDescriptionEN().trim(), currency, top2);
+            list = requisitionMonthlyRepository.findLatestPurchaseAllTimeByItemDescriptionENAndCurrencyAndUnit(
+                    req.getItemDescriptionEN().trim(), currency, unit, top2
+            );
         }
 
         if (list != null && !list.isEmpty()) {
-            // ✅ nếu record mới nhất trùng req hiện tại -> lấy record kế
-            if (req.getId() != null && list.get(0).getId() != null && list.get(0).getId().equals(req.getId())) {
+            // nếu record mới nhất trùng req hiện tại -> lấy record kế
+            if (req.getId() != null
+                    && list.get(0).getId() != null
+                    && list.get(0).getId().equals(req.getId())) {
                 latestAllTime = (list.size() > 1) ? list.get(1) : null;
             } else {
                 latestAllTime = list.get(0);
@@ -639,7 +662,6 @@ public class RequisitionMonthlyController {
             supplierName = latestAllTime.getSupplierName();
         }
 
-        // ✅ nếu không có ALL TIME info thì vẫn trả về object (qty=0), KHÔNG return null
         return new LastPurchaseInfo(lastMonthTotalQty, price, date, supplierName);
     }
 
@@ -1659,11 +1681,7 @@ public class RequisitionMonthlyController {
         return t.isEmpty() ? null : t;
     }
 
-    private boolean isAllowedImageMime(String mimeType) {
-        if (mimeType == null) return false;
-        Set<String> allowed = Set.of("image/jpeg", "image/jpg", "image/png", "image/gif", "image/bmp", "image/webp");
-        return allowed.contains(mimeType);
-    }
+
 
     // === HELPER: Trả về lỗi nhanh (single) ===
     private ResponseEntity<List<RequisitionMonthly>> badRequest(String message) {
@@ -1712,32 +1730,6 @@ public class RequisitionMonthlyController {
         Row row = sheet.getRow(rowIndex);
         if (row == null) return null;
         return row.getCell(colIndex, Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
-    }
-
-    public String saveImage(byte[] imageBytes, String fileName, String mimeType) throws IOException {
-        if (imageBytes == null || imageBytes.length == 0) return null;
-
-        if (!isAllowedImageMime(mimeType)) {
-            System.err.println("Skipped unsupported format: " + mimeType);
-            return null;
-        }
-
-        Path path = Paths.get(UPLOAD_DIR).resolve(fileName);
-        Files.createDirectories(path.getParent());
-        Files.write(path, imageBytes);
-
-        return "/uploads/" + fileName;
-    }
-
-    public String getImageExtension(String mimeType) {
-        return switch (mimeType) {
-            case "image/jpeg", "image/jpg" -> ".jpg";
-            case "image/png" -> ".png";
-            case "image/gif" -> ".gif";
-            case "image/bmp" -> ".bmp";
-            case "image/webp" -> ".webp";
-            default -> ".png";
-        };
     }
 
     @Transactional
@@ -2847,185 +2839,257 @@ public class RequisitionMonthlyController {
         public List<String> warnings = new ArrayList<>();
     }
 
-    @PostMapping(value = "/requisition-monthly/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/upload-requisition", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(
-            summary = "Upload Requisition File",
-            description = "Upload Excel .xlsx file. Data starts from row 9 (index=8), column B (Item VN). " +
-                    "Columns: B=Item VN, C=Item EN, D=Old SAP, E=Hana SAP, I=Request, J=Unit, K=Dept, N=Picture, O=Remarks"
+            summary = "Upload Requisition File (Weekly)",
+            description = "Upload Excel .xlsx file. Data starts from row 9, column B (Item VN). " +
+                    "Columns: B=Item VN, C=Item EN, D=Old SAP, E=Hana Code (if any), " +
+                    "I=Request, J=Unit, K=Dept request, M=DailyMedInventory, N=Picture, O=Reason. " +
+                    "Note: Buy/OrderQty = DailyMedInventory (column M)."
     )
     public ResponseEntity<List<RequisitionMonthly>> uploadRequisitionFile(
-            @Parameter(description = "Excel .xlsx file") @RequestPart("file") MultipartFile file,
-            @Parameter(description = "Group ID", required = true) @RequestParam("groupId") String groupId
+            @RequestPart("file") MultipartFile file,
+            @RequestParam("groupId") String groupId
     ) {
-        // ✅ validate input
-        if (groupId == null || groupId.isBlank()) return badRequest("groupId is required.");
-        if (file == null || file.isEmpty()) return badRequest("No file uploaded.");
-        if (file.getOriginalFilename() == null || !file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
+
+        // ================= VALIDATE INPUT =================
+        if (groupId == null || groupId.isBlank()) {
+            return badRequest("groupId is required.");
+        }
+        if (file == null || file.isEmpty()) {
+            return badRequest("No file uploaded.");
+        }
+        if (file.getOriginalFilename() == null ||
+                !file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
             return badRequest("Only .xlsx files are allowed.");
         }
 
-        // ✅ 1) Load data existing (CHỈ trong cùng groupId) để check trùng theo rule cascade + UNIT
-        List<RequisitionMonthly> allMonthly = requisitionMonthlyRepository.findByGroupId(groupId);
+        // ================= GET CURRENCY FROM GROUP SUMMARY (1 doc / group) =================
+        GroupSummaryRequisition groupSummary = groupSummaryRequisitionRepository
+                .findById(groupId)
+                .orElse(null);
 
-        Set<String> existingKeys = allMonthly.stream()
+        if (groupSummary == null) {
+            return badRequest("GroupSummaryRequisition not found with id = " + groupId);
+        }
+
+        String groupCurrency = groupSummary.getCurrency();
+        if (groupCurrency == null || groupCurrency.isBlank()) {
+            return badRequest("Currency is empty for groupId = " + groupId);
+        }
+        groupCurrency = groupCurrency.trim();
+
+        // ================= LOAD DB DATA (SAME GROUP) =================
+        List<RequisitionMonthly> allInDb = requisitionMonthlyRepository.findByGroupId(groupId);
+
+        Set<String> existingKeys = allInDb.stream()
                 .map(CommonRequisitionUtils::buildExistingKeyFromDb)
                 .filter(k -> k != null && !k.isBlank())
                 .collect(Collectors.toSet());
 
-        List<RequisitionMonthly> requisitions = new ArrayList<>();
-        Map<String, Integer> fileKeyMap = new HashMap<>(); // <rowKey, index in requisitions>
+        // ✅ merge theo itemKey (không có dept) -> 1 request có nhiều phòng
+        Map<String, RequisitionMonthly> mergedByItemKey = new LinkedHashMap<>();
+
+        // ✅ check duplicate theo rowKey có dept
+        Set<String> fileDeptKeys = new HashSet<>();
 
         try (InputStream is = file.getInputStream()) {
+
             XSSFWorkbook workbook = new XSSFWorkbook(is);
             Sheet sheet = workbook.getSheetAt(0);
-            if (sheet == null) return badRequest("Sheet not found.");
+            if (sheet == null) {
+                return badRequest("Sheet not found.");
+            }
 
             XSSFDrawing drawing = (XSSFDrawing) sheet.createDrawingPatriarch();
             List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
 
-            // === START from row 9 (index 8) ===
-            for (int i = 8; i <= sheet.getLastRowNum(); i++) {
+            // ================= START FROM ROW 9 (index = 8) =================
+            final int START_ROW = 8;
+
+            // ===== Column indexes (0-based) =====
+
+            final int COL_ITEM_VN   = 1;   // B
+            final int COL_ITEM_EN   = 2;   // C
+            final int COL_OLD_SAP   = 3;   // D
+            final int COL_HANA      = 4;   // E
+
+            final int COL_REQUEST   = 8;   // I
+            final int COL_UNIT      = 9;   // J
+            final int COL_DEPT      = 10;  // K
+
+            final int COL_DAILY_MED = 12;  // M
+            final int COL_PICTURE   = 13;  // N
+            final int COL_REASON    = 14;  // O
+
+            for (int i = START_ROW; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
 
-                // --- Item VN (B) ---
-                Cell itemVNCell = getMergedCellValue(sheet, i, 1, mergedRegions); // B
-                if (itemVNCell == null) itemVNCell = row.getCell(1, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
-                String itemVN = safeTrim(getCellValue(itemVNCell));
+                // -------- READ CELLS --------
+                String itemVN = getCellValue(getMergedCellValue(sheet, i, COL_ITEM_VN, mergedRegions));
+                String itemEN = getCellValue(getMergedCellValue(sheet, i, COL_ITEM_EN, mergedRegions));
 
-                // --- Other cells ---
-                Cell itemENCell  = getMergedCellValue(sheet, i, 2, mergedRegions);   // C
-                Cell sapCell     = getMergedCellValue(sheet, i, 3, mergedRegions);   // D (Old SAP)
-                Cell hanaCell    = getMergedCellValue(sheet, i, 4, mergedRegions);   // E (Hana SAP)
-                Cell requestCell = getMergedCellValue(sheet, i, 8, mergedRegions);   // I
-                Cell unitCell    = getMergedCellValue(sheet, i, 9, mergedRegions);   // J
-                Cell deptCell    = getMergedCellValue(sheet, i, 10, mergedRegions);  // K
-                Cell reasonCell  = getMergedCellValue(sheet, i, 14, mergedRegions);  // O
+                String oldSap = normalizeNew(
+                        getCellValue(getMergedCellValue(sheet, i, COL_OLD_SAP, mergedRegions))
+                );
+                String hanaCode = normalizeNew(
+                        getCellValue(getMergedCellValue(sheet, i, COL_HANA, mergedRegions))
+                );
 
-                String itemEN = safeTrim(getCellValue(itemENCell));
+                // Skip row nếu không có identifier nào
+                boolean hasAnyId =
+                        isUsableKey(oldSap) || isUsableKey(hanaCode) ||
+                                (itemVN != null && !itemVN.trim().isEmpty()) ||
+                                (itemEN != null && !itemEN.trim().isEmpty());
+                if (!hasAnyId) continue;
 
-                // ✅ normalize NEW/new/New -> "NEW"
-                String sapCodeNorm  = normalizeNew(getCellValue(sapCell));
-                String hanaCodeNorm = normalizeNew(getCellValue(hanaCell));
+                // I = Request
+                BigDecimal requestQty = parseBigDecimal(getMergedCellValue(sheet, i, COL_REQUEST, mergedRegions));
+                if (requestQty == null || requestQty.compareTo(BigDecimal.ZERO) < 0) {
+                    requestQty = BigDecimal.ZERO;
+                }
 
-                BigDecimal requestQty = parseBigDecimal(requestCell);
-                if (requestQty == null) requestQty = BigDecimal.ZERO;
+                // M = DailyMedInventory
+                BigDecimal dailyMedInventory = parseBigDecimal(getMergedCellValue(sheet, i, COL_DAILY_MED, mergedRegions));
+                if (dailyMedInventory == null || dailyMedInventory.compareTo(BigDecimal.ZERO) < 0) {
+                    dailyMedInventory = BigDecimal.ZERO;
+                }
 
-                // Inhand/Buy không còn -> 0
-                BigDecimal inhand = BigDecimal.ZERO;
-                BigDecimal buy = BigDecimal.ZERO;
+                // ✅ BUY/OrderQty = DailyMedInventory
+                BigDecimal buy = dailyMedInventory;
 
-                String unit = safeTrim(getCellValue(unitCell));
-                String deptName = safeTrim(getCellValue(deptCell));
-                String reason = safeTrim(getCellValue(reasonCell));
+                // J = Unit
+                String unit = getCellValue(getMergedCellValue(sheet, i, COL_UNIT, mergedRegions));
 
-                // ✅ FAIL-FAST: unit required
-                if (unit == null || unit.isBlank()) {
+                // K = Dept request
+                String deptName = getCellValue(getMergedCellValue(sheet, i, COL_DEPT, mergedRegions));
+
+                // O = Reason
+                String reason = getCellValue(getMergedCellValue(sheet, i, COL_REASON, mergedRegions));
+
+                // ================= FAIL FAST: UNIT =================
+                if (unit == null || unit.trim().isEmpty()) {
                     return badRequest("Row " + (i + 1) + ": Unit is required (column J).");
                 }
 
-                // ✅ 2) Build key theo rule cascade + UNIT (CHỈ trong groupId này)
-                String rowKey = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
-                        unit,
-                        sapCodeNorm,   // bạn đang normalize "NEW" -> "NEW", ok
-                        hanaCodeNorm,
-                        itemVN,
-                        itemEN
-                );
-
-                if (rowKey == null) {
-                    return badRequest("Row " + (i + 1) + ": Cannot determine merge key (UNIT + SAP/HANA/VN/EN all empty).");
-                }
-
-                // ✅ FAIL-FAST: trùng với DB trong groupId
-                if (existingKeys.contains(rowKey)) {
-                    return badRequest("Row " + (i + 1) + ": Duplicate record exists in this group with key = " + rowKey);
-                }
-
-                // ✅ FAIL-FAST: trùng trong chính file (không merge nữa)
-                if (fileKeyMap.containsKey(rowKey)) {
-                    return badRequest("Row " + (i + 1) + ": Duplicate key in uploaded file with key = " + rowKey);
-                }
-
-                // === Image handling (col N index 13) ===
-                List<String> imageUrls = new ArrayList<>();
-                for (XSSFShape shape : drawing.getShapes()) {
-                    if (shape instanceof XSSFPicture pic) {
-                        XSSFClientAnchor anchor = pic.getClientAnchor();
-                        boolean inRow = anchor.getRow1() <= i && anchor.getRow2() >= i;
-                        boolean inCol = anchor.getCol1() <= 13 && anchor.getCol2() >= 13;
-
-                        if (inRow && inCol) {
-                            try {
-                                byte[] imgBytes = pic.getPictureData().getData();
-                                String mimeType = pic.getPictureData().getMimeType();
-                                String ext = getImageExtension(mimeType);
-                                String fileName = "req_" + groupId + "_" + (i + 1) + "_" + System.currentTimeMillis() + ext;
-
-                                String imgPath = saveImage(imgBytes, fileName, mimeType);
-                                if (imgPath != null) imageUrls.add(imgPath);
-                            } catch (Exception e) {
-                                // ảnh lỗi: theo fail-fast hay skip? bạn đang print err + skip
-                                System.err.println("Image save failed at row " + (i + 1) + ": " + e.getMessage());
-                            }
-                        }
-                    }
-                }
-
-                // === Department check ===
+                // ================= DEPARTMENT (MUST DO BEFORE KEY) =================
                 String deptId = null;
                 String deptNameFromDb = null;
 
-                if (deptName != null) {
-                    Department dept = departmentRepository.findByDepartmentName(deptName);
+                if (deptName != null && !deptName.trim().isEmpty()) {
+                    Department dept = departmentRepository.findByDepartmentName(deptName.trim());
                     if (dept == null) {
-                        return badRequest("Row " + (i + 1) + ": Department '" + deptName + "' does not exist.");
+                        return badRequest(
+                                "Row " + (i + 1) +
+                                        ": Department '" + deptName + "' does not exist."
+                        );
                     }
                     deptId = dept.getId();
                     deptNameFromDb = dept.getDepartmentName();
                 }
 
-                // ✅ 5) Create new record
-                RequisitionMonthly req = new RequisitionMonthly();
-                req.setGroupId(groupId);
-                req.setCreatedDate(LocalDateTime.now());
-                req.setUpdatedDate(LocalDateTime.now());
+                // ================= BUILD ROW KEY (UNIT + PRIORITY + DEPT) =================
+                String rowKey = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                        unit,
+                        oldSap,
+                        hanaCode,
+                        itemVN,
+                        itemEN,
+                        deptNameFromDb
+                );
 
-                // ✅ “NEW/new/New” -> ép thành "NEW" và VẪN LƯU oldSAP/hana
-                req.setOldSAPCode(sapCodeNorm);
-                req.setHanaSAPCode(hanaCodeNorm);
-
-                req.setItemDescriptionVN(itemVN);
-                req.setItemDescriptionEN(itemEN);
-
-                req.setTotalRequestQty(requestQty);
-                req.setOrderQty(buy);
-                req.setDailyMedInventory(inhand);
-                req.setUnit(unit);
-                req.setReason(reason);
-                req.setImageUrls(imageUrls.isEmpty() ? null : imageUrls);
-
-                List<DepartmentRequisitionMonthly> deptList = new ArrayList<>();
-                if (deptId != null) {
-                    DepartmentRequisitionMonthly dr = new DepartmentRequisitionMonthly();
-                    dr.setId(deptId);
-                    dr.setName(deptNameFromDb);
-                    dr.setQty(requestQty);
-                    dr.setBuy(buy);
-                    deptList.add(dr);
+                if (rowKey == null) {
+                    return badRequest(
+                            "Row " + (i + 1) +
+                                    ": Cannot determine merge key (UNIT + SAP/HANA/VN/EN all empty)."
+                    );
                 }
-                req.setDepartmentRequisitions(deptList);
 
-                requisitions.add(req);
-                fileKeyMap.put(rowKey, requisitions.size() - 1);
+                // ================= FAIL-FAST DUPLICATE =================
+                if (existingKeys.contains(rowKey)) {
+                    return badRequest(
+                            "Row " + (i + 1) +
+                                    ": Duplicate record exists in this group with key = " + rowKey
+                    );
+                }
+
+                if (fileDeptKeys.contains(rowKey)) {
+                    return badRequest(
+                            "Row " + (i + 1) +
+                                    ": Duplicate key in uploaded file with key = " + rowKey
+                    );
+                }
+                fileDeptKeys.add(rowKey);
+
+                // ✅ itemKey để gộp request (KHÔNG có dept)
+                String itemKey = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                        unit,
+                        oldSap,
+                        hanaCode,
+                        itemVN,
+                        itemEN
+                );
+
+                if (itemKey == null) {
+                    return badRequest(
+                            "Row " + (i + 1) +
+                                    ": Cannot determine item key (UNIT + SAP/HANA/VN/EN all empty)."
+                    );
+                }
+
+                // ================= IMAGE (N = Picture) =================
+                List<String> imageUrls = new ArrayList<>();
+                for (XSSFShape shape : drawing.getShapes()) {
+                    if (shape instanceof XSSFPicture pic) {
+                        XSSFClientAnchor a = pic.getClientAnchor();
+                        if (a.getRow1() <= i && i <= a.getRow2()
+                                && a.getCol1() <= COL_PICTURE && a.getCol2() >= COL_PICTURE) {
+
+                            String ext = commonRequisitionUtils
+                                    .getImageExtension(pic.getPictureData().getMimeType());
+                            String name = "req_weekly_" + groupId + "_" + (i + 1) +
+                                    "_" + System.currentTimeMillis() + ext;
+
+                            String url = commonRequisitionUtils.saveImage(
+                                    pic.getPictureData().getData(),
+                                    name,
+                                    pic.getPictureData().getMimeType()
+                            );
+                            if (url != null) imageUrls.add(url);
+                        }
+                    }
+                }
+
+                // ================= CREATE OR MERGE ENTITY (USING SHARED FUNCTION) =================
+                commonRequisitionUtils.upsertMergedRequisition(
+                        mergedByItemKey,
+                        itemKey,
+                        groupId,
+                        oldSap,
+                        hanaCode,
+                        itemVN,
+                        itemEN,
+                        unit,
+                        requestQty,
+                        buy,                 // ✅ buy = dailyMedInventory
+                        dailyMedInventory,   // ✅ dailyMedInventory from column M
+                        deptId,
+                        deptNameFromDb,
+                        reason,
+                        imageUrls,
+                        groupCurrency        // ✅ currency from group summary
+                );
             }
 
-            if (requisitions.isEmpty()) {
+            if (mergedByItemKey.isEmpty()) {
                 return badRequest("No valid data found starting from row 9.");
             }
 
-            List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);
-            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            List<RequisitionMonthly> requisitions = new ArrayList<>(mergedByItemKey.values());
+
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(requisitionMonthlyRepository.saveAll(requisitions));
 
         } catch (Exception e) {
             return badRequest("Error processing file: " + e.getMessage());
@@ -3033,56 +3097,14 @@ public class RequisitionMonthlyController {
     }
 
 /* =========================
-   Helpers (add these)
-   ========================= */
+   Helpers (yours - keep)
+========================= */
 
     // "new", "New", "NEW" -> "NEW"
     private String normalizeNew(String v) {
         String t = safeTrim(v);
         if (t == null) return null;
         return t.equalsIgnoreCase("NEW") ? "NEW" : t;
-    }
-
-    private boolean isBlankOrNew(String v) {
-        String t = normalizeNew(v);
-        return (t == null) || "NEW".equals(t);
-    }
-
-    // Key merge/search theo rule có UNIT:
-    // UNIT + SAP (!NEW/blank) -> UNIT + HANA (!NEW/blank) -> UNIT + VN -> UNIT + EN
-    private String buildRowKey(String unit, String sapNorm, String hanaNorm, String itemVN, String itemEN) {
-        String u = safeTrim(unit);
-        if (u == null) return null;
-
-        if (!isBlankOrNew(sapNorm)) {
-            return "UNIT|" + u.toLowerCase() + "|SAP|" + sapNorm.trim().toUpperCase();
-        }
-        if (!isBlankOrNew(hanaNorm)) {
-            return "UNIT|" + u.toLowerCase() + "|HANA|" + hanaNorm.trim().toUpperCase();
-        }
-        String vn = safeTrim(itemVN);
-        if (vn != null) {
-            return "UNIT|" + u.toLowerCase() + "|VN|" + vn.toLowerCase();
-        }
-        String en = safeTrim(itemEN);
-        if (en != null) {
-            return "UNIT|" + u.toLowerCase() + "|EN|" + en.toLowerCase();
-        }
-        return null;
-    }
-
-
-    // Build key cho record DB để check trùng theo đúng rule cascade + UNIT
-    private String buildExistingKeyFromDb(RequisitionMonthly rm) {
-        String unit = rm.getUnit();
-
-        String sapNorm = normalizeNew(rm.getOldSAPCode());
-        String hanaNorm = normalizeNew(rm.getHanaSAPCode());
-
-        String vn = rm.getItemDescriptionVN();
-        String en = rm.getItemDescriptionEN();
-
-        return buildRowKey(unit, sapNorm, hanaNorm, vn, en);
     }
 
     private BigDecimal parseBigDecimal(Cell cell) {

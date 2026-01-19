@@ -63,6 +63,9 @@ public class SummaryRequisitionController {
     private UserService userService;
 
     @Autowired
+    private GroupSummaryRequisitionRepository groupSummaryRequisitionRepository;
+
+    @Autowired
     public SummaryRequisitionController(SummaryRequisitionRepository requisitionRepository,
                                         SupplierProductRepository supplierProductRepository) {
         this.requisitionRepository = requisitionRepository;
@@ -1011,37 +1014,54 @@ public class SummaryRequisitionController {
                     "H=Request, I=Inhand, J=Buy, K=Unit, N=Dept request, O=Reason, P=Picture"
     )
     public ResponseEntity<List<RequisitionMonthly>> uploadRequisitionFile(
-            @Parameter(description = "Excel .xlsx file") @RequestPart("file") MultipartFile file,
-            @Parameter(description = "Group ID", required = true) @RequestParam("groupId") String groupId
+            @RequestPart("file") MultipartFile file,
+            @RequestParam("groupId") String groupId
     ) {
 
-        // ✅ gom lỗi validate — chỉ khi không có lỗi mới saveAll
-        List<String> validationErrors = new ArrayList<>();
-
-        // ✅ validate input
+        // ================= VALIDATE INPUT =================
         if (groupId == null || groupId.isBlank()) {
             return badRequest("groupId is required.");
         }
         if (file == null || file.isEmpty()) {
             return badRequest("No file uploaded.");
         }
-        if (file.getOriginalFilename() == null || !file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
+        if (file.getOriginalFilename() == null ||
+                !file.getOriginalFilename().toLowerCase().endsWith(".xlsx")) {
             return badRequest("Only .xlsx files are allowed.");
         }
 
-        // ✅ 1) LẤY DỮ LIỆU ĐÃ TỒN TẠI TRONG DB (chỉ trong 1 groupId)
-        List<RequisitionMonthly> allInDb = requisitionMonthlyRepository.findByGroupId(groupId);
+        // ================= GET CURRENCY FROM GROUP SUMMARY (1 doc / group) =================
+        GroupSummaryRequisition groupSummary = groupSummaryRequisitionRepository
+                .findById(groupId)
+                .orElse(null);
 
-        // ✅ Build set key đã tồn tại theo rule CHUNG: UNIT + (SAP -> HANA -> VN -> EN)
+        if (groupSummary == null) {
+            return badRequest("GroupSummaryRequisition not found with id = " + groupId);
+        }
+
+        String groupCurrency = groupSummary.getCurrency();
+        if (groupCurrency == null || groupCurrency.isBlank()) {
+            return badRequest("Currency is empty for groupId = " + groupId);
+        }
+        groupCurrency = groupCurrency.trim();
+
+        // ================= LOAD DB DATA (SAME GROUP) =================
+        List<RequisitionMonthly> allInDb =
+                requisitionMonthlyRepository.findByGroupId(groupId);
+
         Set<String> existingKeys = allInDb.stream()
                 .map(CommonRequisitionUtils::buildExistingKeyFromDb)
                 .filter(k -> k != null && !k.isBlank())
                 .collect(Collectors.toSet());
 
-        List<RequisitionMonthly> requisitions = new ArrayList<>();
-        Map<String, Integer> fileKeyMap = new HashMap<>(); // <rowKey, index>
+        // ✅ merge theo itemKey (không có dept) -> 1 request có nhiều phòng
+        Map<String, RequisitionMonthly> mergedByItemKey = new LinkedHashMap<>();
+
+        // ✅ check duplicate theo rowKey có dept
+        Set<String> fileDeptKeys = new HashSet<>();
 
         try (InputStream is = file.getInputStream()) {
+
             XSSFWorkbook workbook = new XSSFWorkbook(is);
             Sheet sheet = workbook.getSheetAt(0);
             if (sheet == null) {
@@ -1051,68 +1071,103 @@ public class SummaryRequisitionController {
             XSSFDrawing drawing = (XSSFDrawing) sheet.createDrawingPatriarch();
             List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
 
-            // === BẮT ĐẦU TỪ DÒNG 6 (index = 5) ===
+            // ================= START FROM ROW 6 (index = 5) =================
             for (int i = 5; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
 
-                // B (1) Item VN
-                Cell itemVNCell = getMergedCellValue(sheet, i, 1, mergedRegions);
-                String itemVN = getCellValue(itemVNCell);
+                // -------- READ CELLS --------
+                String itemVN = getCellValue(getMergedCellValue(sheet, i, 1, mergedRegions));
+                String itemEN = getCellValue(getMergedCellValue(sheet, i, 2, mergedRegions));
 
-                // C (2) Item EN
-                Cell itemENCell = getMergedCellValue(sheet, i, 2, mergedRegions);
-                String itemEN = getCellValue(itemENCell);
+                String oldSap = normalizeNew(
+                        getCellValue(getMergedCellValue(sheet, i, 3, mergedRegions))
+                );
+                String hanaCode = normalizeNew(
+                        getCellValue(getMergedCellValue(sheet, i, 4, mergedRegions))
+                );
 
-                // D (3) Old SAP
-                Cell oldSapCell = getMergedCellValue(sheet, i, 3, mergedRegions);
-                String oldSapRaw = getCellValue(oldSapCell);
-
-                // E (4) Hana Code
-                Cell hanaCodeCell = getMergedCellValue(sheet, i, 4, mergedRegions);
-                String hanaCodeRaw = getCellValue(hanaCodeCell);
-
-                // Normalize NEW (new/New/NEW -> NEW)
-                String oldSap = normalizeNew(oldSapRaw);     // null / "NEW" / value
-                String hanaCode = normalizeNew(hanaCodeRaw); // null / "NEW" / value
-
-                // Nếu dòng không có dữ liệu nhận diện nào -> skip
+                // Skip row nếu không có identifier nào
                 boolean hasAnyId =
                         isUsableKey(oldSap) || isUsableKey(hanaCode) ||
                                 (itemVN != null && !itemVN.trim().isEmpty()) ||
                                 (itemEN != null && !itemEN.trim().isEmpty());
                 if (!hasAnyId) continue;
 
-                // H (7) Request, I (8) Inhand, J (9) Buy, K (10) Unit
-                Cell requestCell = getMergedCellValue(sheet, i, 7, mergedRegions);
-                Cell inhandCell = getMergedCellValue(sheet, i, 8, mergedRegions);
-                Cell unitCell = getMergedCellValue(sheet, i, 10, mergedRegions); // Column K
+                BigDecimal requestQty = parseBigDecimal(
+                        getMergedCellValue(sheet, i, 7, mergedRegions)
+                );
+                if (requestQty == null || requestQty.compareTo(BigDecimal.ZERO) < 0)
+                    requestQty = BigDecimal.ZERO;
 
-                // N (13) Dept request, O (14) Reason
-                Cell deptCell = getMergedCellValue(sheet, i, 13, mergedRegions);
-                Cell reasonCell = getMergedCellValue(sheet, i, 14, mergedRegions);
+                BigDecimal inhand = parseBigDecimal(
+                        getMergedCellValue(sheet, i, 8, mergedRegions)
+                );
+                if (inhand == null || inhand.compareTo(BigDecimal.ZERO) < 0)
+                    inhand = BigDecimal.ZERO;
 
-                BigDecimal requestQty = parseBigDecimal(requestCell);
-                if (requestQty == null || requestQty.compareTo(BigDecimal.ZERO) < 0) requestQty = BigDecimal.ZERO;
-
-                BigDecimal inhand = parseBigDecimal(inhandCell);
-                if (inhand == null || inhand.compareTo(BigDecimal.ZERO) < 0) inhand = BigDecimal.ZERO;
-
-                // Buy = request - inhand
                 BigDecimal buy = requestQty.subtract(inhand).max(BigDecimal.ZERO);
 
-                String unit = getCellValue(unitCell);
-                String deptName = getCellValue(deptCell);
-                String reason = getCellValue(reasonCell);
+                String unit = getCellValue(getMergedCellValue(sheet, i, 10, mergedRegions));
+                String deptName = getCellValue(getMergedCellValue(sheet, i, 13, mergedRegions));
+                String reason = getCellValue(getMergedCellValue(sheet, i, 14, mergedRegions));
 
-                // ✅ unit required (theo rule mới)
+                // ================= FAIL FAST: UNIT =================
                 if (unit == null || unit.trim().isEmpty()) {
-                    validationErrors.add("Row " + (i + 1) + ": Unit is required (column K).");
-                    continue;
+                    return badRequest("Row " + (i + 1) + ": Unit is required (column K).");
                 }
 
-                // ✅ KEY CHUNG: UNIT + (SAP -> HANA -> VN -> EN)
-                String key = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                // ================= DEPARTMENT (MUST DO BEFORE KEY) =================
+                String deptId = null;
+                String deptNameFromDb = null;
+
+                if (deptName != null && !deptName.trim().isEmpty()) {
+                    Department dept = departmentRepository.findByDepartmentName(deptName);
+                    if (dept == null) {
+                        return badRequest(
+                                "Row " + (i + 1) +
+                                        ": Department '" + deptName + "' does not exist."
+                        );
+                    }
+                    deptId = dept.getId();
+                    deptNameFromDb = dept.getDepartmentName();
+                }
+
+                // ================= BUILD ROW KEY (UNIT + PRIORITY + DEPT NAME) =================
+                String deptRowKey = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                        unit,
+                        oldSap,
+                        hanaCode,
+                        itemVN,
+                        itemEN,
+                        deptNameFromDb
+                );
+
+                if (deptRowKey == null) {
+                    return badRequest(
+                            "Row " + (i + 1) +
+                                    ": Cannot determine merge key (UNIT + SAP/HANA/VN/EN all empty)."
+                    );
+                }
+
+                // ================= FAIL-FAST DUPLICATE (PER-DEPT) =================
+                if (existingKeys.contains(deptRowKey)) {
+                    return badRequest(
+                            "Row " + (i + 1) +
+                                    ": Duplicate record exists in this group with key = " + deptRowKey
+                    );
+                }
+
+                if (fileDeptKeys.contains(deptRowKey)) {
+                    return badRequest(
+                            "Row " + (i + 1) +
+                                    ": Duplicate key in uploaded file with key = " + deptRowKey
+                    );
+                }
+                fileDeptKeys.add(deptRowKey);
+
+                // ✅ itemKey dùng để GỘP request (KHÔNG tính dept)
+                String itemKey = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
                         unit,
                         oldSap,
                         hanaCode,
@@ -1120,165 +1175,68 @@ public class SummaryRequisitionController {
                         itemEN
                 );
 
-                if (key == null) {
-                    validationErrors.add("Row " + (i + 1) + ": Cannot build merge key (UNIT + SAP/HANA/VN/EN all empty).");
-                    continue;
+                if (itemKey == null) {
+                    return badRequest(
+                            "Row " + (i + 1) +
+                                    ": Cannot determine item key (UNIT + SAP/HANA/VN/EN all empty)."
+                    );
                 }
 
-                // ✅ Check trùng DB (trong groupId)
-                if (existingKeys.contains(key)) {
-                    validationErrors.add("Row " + (i + 1) + ": Duplicate record exists in this group with key = " + key);
-                    continue;
-                }
-
-                // ✅ Check trùng trong file (weekly hiện đang merge, bạn muốn giống monthly hay merge?)
-                // Ở đây giữ đúng style weekly hiện tại: merge theo key
-                // Nếu bạn muốn "trùng trong file cũng là lỗi" thì đổi thành validationErrors.add + continue
-                // hoặc return badRequest (fail-fast)
-                boolean duplicateInFile = fileKeyMap.containsKey(key);
-
-                // === XỬ LÝ DEPARTMENT (check tồn tại -> lấy name chuẩn từ DB) ===
-                String deptId = null;
-                String deptNameFromDb = null;
-
-                String deptNameTrim = (deptName == null) ? null : deptName.trim();
-                if (deptNameTrim != null && !deptNameTrim.isEmpty()) {
-                    Department dept = departmentRepository.findByDepartmentName(deptNameTrim);
-                    if (dept == null) {
-                        validationErrors.add("Row " + (i + 1) + ": Department '" + deptNameTrim + "' does not exist.");
-                        continue;
-                    }
-                    deptId = dept.getId();
-                    deptNameFromDb = dept.getDepartmentName();
-                }
-
-                // === XỬ LÝ HÌNH ẢNH (cột P index 15) ===
+                // ================= IMAGE (P) =================
                 List<String> imageUrls = new ArrayList<>();
                 for (XSSFShape shape : drawing.getShapes()) {
                     if (shape instanceof XSSFPicture pic) {
-                        XSSFClientAnchor anchor = pic.getClientAnchor();
-
-                        int col1 = anchor.getCol1();
-                        int col2 = anchor.getCol2();
-                        int row1 = anchor.getRow1();
-                        int row2 = anchor.getRow2();
-
-                        boolean colMatches = (col1 == 14 || col1 == 15 || (col1 <= 14 && col2 >= 14));
-                        boolean rowMatches = (row1 <= i && i <= row2);
-
-                        if (colMatches && rowMatches) {
-                            try {
-                                byte[] imgBytes = pic.getPictureData().getData();
-                                String mimeType = pic.getPictureData().getMimeType();
-                                String ext = requisitionMonthlyController.getImageExtension(mimeType);
-                                String fileName = "req_weekly_" + groupId + "_" + (i + 1) + "_" + System.currentTimeMillis() + ext;
-
-                                String imgPath = requisitionMonthlyController.saveImage(imgBytes, fileName, mimeType);
-                                if (imgPath != null) imageUrls.add(imgPath);
-                            } catch (Exception e) {
-                                System.err.println("Image save failed at row " + (i + 1) + ": " + e.getMessage());
-                            }
+                        XSSFClientAnchor a = pic.getClientAnchor();
+                        int pictureCol = 15; // P
+                        if (a.getRow1() <= i && i <= a.getRow2()
+                                && a.getCol1() <= pictureCol && a.getCol2() >= pictureCol) {
+                            String ext = commonRequisitionUtils
+                                    .getImageExtension(pic.getPictureData().getMimeType());
+                            String name = "req_weekly_" + groupId + "_" + (i + 1) +
+                                    "_" + System.currentTimeMillis() + ext;
+                            String url = commonRequisitionUtils.saveImage(
+                                    pic.getPictureData().getData(), name,
+                                    pic.getPictureData().getMimeType()
+                            );
+                            if (url != null) imageUrls.add(url);
                         }
                     }
                 }
 
-                // === MERGE TRONG FILE (giữ đúng weekly hiện tại) ===
-                if (duplicateInFile) {
-                    int idx = fileKeyMap.get(key);
-                    RequisitionMonthly existing = requisitions.get(idx);
-
-                    if (existing.getDepartmentRequisitions() == null) {
-                        existing.setDepartmentRequisitions(new ArrayList<>());
-                    }
-
-                    boolean deptExists = false;
-                    for (DepartmentRequisitionMonthly dr : existing.getDepartmentRequisitions()) {
-                        if (dr.getId() != null && dr.getId().equals(deptId)) {
-                            dr.setQty(dr.getQty().add(requestQty));
-                            dr.setBuy(dr.getBuy().add(buy));
-                            deptExists = true;
-                            break;
-                        }
-                    }
-
-                    if (!deptExists && deptId != null) {
-                        DepartmentRequisitionMonthly ndr = new DepartmentRequisitionMonthly();
-                        ndr.setId(deptId);
-                        ndr.setName(deptNameFromDb);
-                        ndr.setQty(requestQty);
-                        ndr.setBuy(buy);
-                        existing.getDepartmentRequisitions().add(ndr);
-                    }
-
-                    existing.setTotalRequestQty(existing.getTotalRequestQty().add(requestQty));
-                    existing.setOrderQty(existing.getOrderQty().add(buy));
-
-                    if (existing.getUnit() == null && unit != null) existing.setUnit(unit);
-                    if (existing.getReason() == null && reason != null) existing.setReason(reason);
-
-                    if (existing.getOldSAPCode() == null && oldSap != null) existing.setOldSAPCode(oldSap);
-                    if (existing.getHanaSAPCode() == null && hanaCode != null) existing.setHanaSAPCode(hanaCode);
-
-                    if (!imageUrls.isEmpty()) {
-                        if (existing.getImageUrls() == null) existing.setImageUrls(new ArrayList<>());
-                        existing.getImageUrls().addAll(imageUrls);
-                    }
-
-                    continue;
-                }
-
-                // === TẠO MỚI ===
-                RequisitionMonthly req = new RequisitionMonthly();
-                req.setGroupId(groupId);
-                req.setCreatedDate(LocalDateTime.now());
-                req.setUpdatedDate(LocalDateTime.now());
-
-                req.setOldSAPCode(oldSap);
-                req.setHanaSAPCode(hanaCode);
-
-                req.setItemDescriptionVN(itemVN);
-                req.setItemDescriptionEN(itemEN);
-
-                req.setTotalRequestQty(requestQty);
-                req.setOrderQty(buy);
-                req.setDailyMedInventory(inhand);
-
-                req.setUnit(unit);
-                req.setReason(reason);
-
-                req.setImageUrls(imageUrls.isEmpty() ? null : imageUrls);
-
-                List<DepartmentRequisitionMonthly> deptList = new ArrayList<>();
-                if (deptId != null) {
-                    DepartmentRequisitionMonthly dr = new DepartmentRequisitionMonthly();
-                    dr.setId(deptId);
-                    dr.setName(deptNameFromDb);
-                    dr.setQty(requestQty);
-                    dr.setBuy(buy);
-                    deptList.add(dr);
-                }
-                req.setDepartmentRequisitions(deptList);
-
-                requisitions.add(req);
-                fileKeyMap.put(key, requisitions.size() - 1);
+                // ================= CREATE OR MERGE ENTITY (USING SHARED FUNCTION) =================
+                commonRequisitionUtils.upsertMergedRequisition(
+                        mergedByItemKey,
+                        itemKey,
+                        groupId,
+                        oldSap,
+                        hanaCode,
+                        itemVN,
+                        itemEN,
+                        unit,
+                        requestQty,
+                        buy,
+                        inhand,          // ✅ dailyMedInventory = inhand (weekly format row6)
+                        deptId,
+                        deptNameFromDb,
+                        reason,
+                        imageUrls,
+                        groupCurrency             // ✅ row6 API không set currency từ group (giữ behavior cũ)
+                );
             }
 
-            if (!validationErrors.isEmpty()) {
-                return badRequest("Validation failed:\n" + String.join("\n", validationErrors));
-            }
-
-            if (requisitions.isEmpty()) {
+            if (mergedByItemKey.isEmpty()) {
                 return badRequest("No valid data found starting from row 6.");
             }
 
-            List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);
-            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            List<RequisitionMonthly> requisitions = new ArrayList<>(mergedByItemKey.values());
+
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(requisitionMonthlyRepository.saveAll(requisitions));
 
         } catch (Exception e) {
             return badRequest("Error processing file: " + e.getMessage());
         }
     }
-
     /* ===================== HELPERS (giống monthly + cascade) ===================== */
 
     private String normalizeNew(String v) {
@@ -1296,21 +1254,6 @@ public class SummaryRequisitionController {
         if (v == null) return null;
         String t = v.trim();
         return t.isEmpty() ? null : t.toLowerCase();
-    }
-
-    /**
-     * Build key theo rule:
-     * - Nếu oldSap usable -> "SAP|<oldSapLower>"
-     * - else nếu hana usable -> "HANA|<hanaLower>"
-     * - else nếu vn usable -> "VN|<vnLower>"
-     * - else nếu en usable -> "EN|<enLower>"
-     */
-    private String buildCascadeKey(String oldSap, String hana, String vnLower, String enLower) {
-        if (isUsableKey(oldSap)) return "SAP|" + oldSap.trim().toLowerCase();
-        if (isUsableKey(hana)) return "HANA|" + hana.trim().toLowerCase();
-        if (vnLower != null && !vnLower.isEmpty()) return "VN|" + vnLower;
-        if (enLower != null && !enLower.isEmpty()) return "EN|" + enLower;
-        return null;
     }
 
     private ResponseEntity<List<RequisitionMonthly>> badRequest(String message) {
@@ -1360,26 +1303,6 @@ public class SummaryRequisitionController {
         if (row == null) return null;
         return row.getCell(colIndex, Row.MissingCellPolicy.RETURN_NULL_AND_BLANK);
     }
-
-    private String saveImage(byte[] imageBytes, String originalFileName) throws IOException {
-        if (imageBytes == null || imageBytes.length == 0) {
-            return null;
-        }
-
-        String contentType = "image/png"; // Mặc định là PNG, có thể điều chỉnh
-        if (!Arrays.asList("image/jpeg", "image/png", "image/gif").contains(contentType)) {
-            throw new IOException("Only JPEG, PNG, and GIF files are allowed");
-        }
-
-        String fileName = System.currentTimeMillis() + "_" + originalFileName;
-        Path path = Paths.get(UPLOAD_DIR + fileName);
-
-        Files.createDirectories(path.getParent());
-        Files.write(path, imageBytes); // Ghi byte[] trực tiếp vào file
-
-        return "/uploads/" + fileName;
-    }
-
 
     @GetMapping("/search/comparison")
     @Operation(
@@ -1909,7 +1832,7 @@ public class SummaryRequisitionController {
     @PatchMapping("/mark-completed")
     @Operation(
             summary = "Mark multiple requisitions as completed",
-            description = "Updates isCompleted=true, completedDate=now, updatedDate=now + set completedByEmail/updatedByEmail"
+            description = "Updates isCompleted=true, completedDate=now, updatedDate=now + set completedByEmail/updatedByEmail. FAIL if any requisition has no supplierId."
     )
     public ResponseEntity<?> markAsCompleted(
             @RequestBody MarkCompletedRequest request,
@@ -1928,7 +1851,8 @@ public class SummaryRequisitionController {
             String emailNorm = email.trim().toLowerCase();
             LocalDateTime now = LocalDateTime.now();
 
-            List<RequisitionMonthly> requisitions = requisitionMonthlyRepository.findAllById(request.getRequisitionIds());
+            List<RequisitionMonthly> requisitions =
+                    requisitionMonthlyRepository.findAllById(request.getRequisitionIds());
 
             if (requisitions.isEmpty()) {
                 return ResponseEntity.ok(Map.of(
@@ -1937,16 +1861,42 @@ public class SummaryRequisitionController {
                 ));
             }
 
+            // ✅ FAIL-FAST: thiếu supplierId => show DesVN/DesEN
+            Optional<RequisitionMonthly> missingSupplier = requisitions.stream()
+                    .filter(r -> r.getSupplierId() == null || r.getSupplierId().trim().isEmpty())
+                    .findFirst();
+
+            if (missingSupplier.isPresent()) {
+                RequisitionMonthly bad = missingSupplier.get();
+
+                String desVN = bad.getItemDescriptionVN();
+                String desEN = bad.getItemDescriptionEN();
+
+                String displayName =
+                        (desVN != null && !desVN.trim().isEmpty())
+                                ? desVN.trim()
+                                : ((desEN != null && !desEN.trim().isEmpty()) ? desEN.trim() : "(no description)");
+
+                String displayType =
+                        (desVN != null && !desVN.trim().isEmpty()) ? "Des VN" : "Des EN";
+
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of(
+                                "message", displayType + " '" + displayName + "' does not have a supplier assigned, therefore it cannot be completed.",
+                                "requisitionId", bad.getId(),
+                                "itemDescriptionVN", desVN,
+                                "itemDescriptionEN", desEN
+                        ));
+            }
+
             requisitions.forEach(req -> {
                 req.setIsCompleted(true);
                 req.setCompletedDate(now);
                 req.setUpdatedDate(now);
 
-                // ✅ audit email-only
                 req.setCompletedByEmail(emailNorm);
                 req.setUpdatedByEmail(emailNorm);
 
-                // optional: clear uncomplete audit cho sạch
                 req.setUncompletedByEmail(null);
             });
 
@@ -1965,10 +1915,11 @@ public class SummaryRequisitionController {
         }
     }
 
+
     @PatchMapping("/mark-uncompleted")
     @Operation(
             summary = "Remove completed status from multiple requisitions",
-            description = "Updates isCompleted=false, completedDate=null, updatedDate=now + set uncompletedByEmail/updatedByEmail (and clear completedByEmail)"
+            description = "Updates isCompleted=false, completedDate=null, updatedDate=now + set uncompletedByEmail/updatedByEmail (and clear completedByEmail). FAIL if any requisition has no supplierId."
     )
     public ResponseEntity<?> markAsUncompleted(
             @RequestBody MarkCompletedRequest request,
@@ -1987,7 +1938,8 @@ public class SummaryRequisitionController {
             String emailNorm = email.trim().toLowerCase();
             LocalDateTime now = LocalDateTime.now();
 
-            List<RequisitionMonthly> requisitions = requisitionMonthlyRepository.findAllById(request.getRequisitionIds());
+            List<RequisitionMonthly> requisitions =
+                    requisitionMonthlyRepository.findAllById(request.getRequisitionIds());
 
             if (requisitions.isEmpty()) {
                 return ResponseEntity.ok(Map.of(
@@ -1996,16 +1948,42 @@ public class SummaryRequisitionController {
                 ));
             }
 
+            // ✅ FAIL-FAST: thiếu supplierId => show DesVN/DesEN
+            Optional<RequisitionMonthly> missingSupplier = requisitions.stream()
+                    .filter(r -> r.getSupplierId() == null || r.getSupplierId().trim().isEmpty())
+                    .findFirst();
+
+            if (missingSupplier.isPresent()) {
+                RequisitionMonthly bad = missingSupplier.get();
+
+                String desVN = bad.getItemDescriptionVN();
+                String desEN = bad.getItemDescriptionEN();
+
+                String displayName =
+                        (desVN != null && !desVN.trim().isEmpty())
+                                ? desVN.trim()
+                                : ((desEN != null && !desEN.trim().isEmpty()) ? desEN.trim() : "(no description)");
+
+                String displayType =
+                        (desVN != null && !desVN.trim().isEmpty()) ? "Des VN" : "Des EN";
+
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of(
+                                "message", displayType + " '" + displayName + "' does not have a supplier assigned, therefore it cannot be uncompleted.",
+                                "requisitionId", bad.getId(),
+                                "itemDescriptionVN", desVN,
+                                "itemDescriptionEN", desEN
+                        ));
+            }
+
             requisitions.forEach(req -> {
                 req.setIsCompleted(false);
                 req.setCompletedDate(null);
                 req.setUpdatedDate(now);
 
-                // ✅ audit email-only
                 req.setUncompletedByEmail(emailNorm);
                 req.setUpdatedByEmail(emailNorm);
 
-                // ✅ clear completed email trước đó
                 req.setCompletedByEmail(null);
             });
 
@@ -2022,5 +2000,4 @@ public class SummaryRequisitionController {
                     .body(Map.of("message", "Failed to update: " + e.getMessage()));
         }
     }
-
 }

@@ -138,7 +138,54 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
             String itemDescriptionEN, String currency, Pageable pageable
     );
 
+
+
     // End
+
+    // 1) Latest theo hanaSAPCode + unit
+    @Query(
+            value = "{ 'isCompleted': true, 'hanaSAPCode': ?0, 'currency': ?1, 'unit': ?2, " +
+                    "  'supplierId': { $nin: [null, ''] }, " +
+                    "  'completedDate': { $ne: null } }",
+            sort  = "{ 'completedDate': -1 }"
+    )
+    List<RequisitionMonthly> findLatestPurchaseAllTimeByHanaSapCodeAndCurrencyAndUnit(
+            String hanaSapCode, String currency, String unit, Pageable pageable
+    );
+
+    // 2) Latest theo oldSAPCode + unit
+    @Query(
+            value = "{ 'isCompleted': true, 'oldSAPCode': ?0, 'currency': ?1, 'unit': ?2, " +
+                    "  'supplierId': { $nin: [null, ''] }, " +
+                    "  'completedDate': { $ne: null } }",
+            sort  = "{ 'completedDate': -1 }"
+    )
+    List<RequisitionMonthly> findLatestPurchaseAllTimeByOldSapCodeAndCurrencyAndUnit(
+            String oldSapCode, String currency, String unit, Pageable pageable
+    );
+
+    // 3) Latest theo itemDescriptionVN + unit
+    @Query(
+            value = "{ 'isCompleted': true, 'itemDescriptionVN': ?0, 'currency': ?1, 'unit': ?2, " +
+                    "  'supplierId': { $nin: [null, ''] }, " +
+                    "  'completedDate': { $ne: null } }",
+            sort  = "{ 'completedDate': -1 }"
+    )
+    List<RequisitionMonthly> findLatestPurchaseAllTimeByItemDescriptionVNAndCurrencyAndUnit(
+            String itemDescriptionVN, String currency, String unit, Pageable pageable
+    );
+
+    // 4) Latest theo itemDescriptionEN + unit
+    @Query(
+            value = "{ 'isCompleted': true, 'itemDescriptionEN': ?0, 'currency': ?1, 'unit': ?2, " +
+                    "  'supplierId': { $nin: [null, ''] }, " +
+                    "  'completedDate': { $ne: null } }",
+            sort  = "{ 'completedDate': -1 }"
+    )
+    List<RequisitionMonthly> findLatestPurchaseAllTimeByItemDescriptionENAndCurrencyAndUnit(
+            String itemDescriptionEN, String currency, String unit, Pageable pageable
+    );
+
 
     // SUMMARY
     @Query(value = "{ 'isCompleted': true, 'oldSAPCode': ?0, 'currency': ?1, " +
@@ -199,4 +246,58 @@ public interface RequisitionMonthlyRepository extends MongoRepository<Requisitio
     findFirstByGroupIdAndUnitIgnoreCaseAndItemDescriptionENIgnoreCase(
             String groupId, String unit, String itemDescriptionEN
     );
+
+    // =============================
+// PREVIOUS MONTH: SUM QTY WINDOW
+// Add: unit
+// =============================
+
+    // 1) Theo oldSAPCode + currency + unit + completedDate window
+    @Query("{ 'isCompleted': true, 'oldSAPCode': ?0, 'currency': ?1, 'unit': ?2, " +
+            "'supplierId': { $nin: [null, ''] }, " +
+            "'completedDate': { $ne: null, $gte: ?3, $lt: ?4 } }")
+    List<RequisitionMonthly> findLastPurchaseByOldSapCodeAndCurrencyAndUnit(
+            String oldSapCode,
+            String currency,
+            String unit,
+            LocalDateTime start,
+            LocalDateTime endExclusive
+    );
+
+    // 2) Theo hanaSAPCode + currency + unit + completedDate window
+    @Query("{ 'isCompleted': true, 'hanaSAPCode': ?0, 'currency': ?1, 'unit': ?2, " +
+            "'supplierId': { $nin: [null, ''] }, " +
+            "'completedDate': { $ne: null, $gte: ?3, $lt: ?4 } }")
+    List<RequisitionMonthly> findLastPurchaseByHanaSapCodeAndCurrencyAndUnit(
+            String hanaSapCode,
+            String currency,
+            String unit,
+            LocalDateTime start,
+            LocalDateTime endExclusive
+    );
+
+    // 3) Theo itemDescriptionVN + currency + unit + completedDate window
+    @Query("{ 'isCompleted': true, 'itemDescriptionVN': ?0, 'currency': ?1, 'unit': ?2, " +
+            "'supplierId': { $nin: [null, ''] }, " +
+            "'completedDate': { $ne: null, $gte: ?3, $lt: ?4 } }")
+    List<RequisitionMonthly> findLastPurchaseByItemDescriptionVNAndCurrencyAndUnit(
+            String itemDescriptionVN,
+            String currency,
+            String unit,
+            LocalDateTime start,
+            LocalDateTime endExclusive
+    );
+
+    // 4) Theo itemDescriptionEN + currency + unit + completedDate window
+    @Query("{ 'isCompleted': true, 'itemDescriptionEN': ?0, 'currency': ?1, 'unit': ?2, " +
+            "'supplierId': { $nin: [null, ''] }, " +
+            "'completedDate': { $ne: null, $gte: ?3, $lt: ?4 } }")
+    List<RequisitionMonthly> findLastPurchaseByItemDescriptionENAndCurrencyAndUnit(
+            String itemDescriptionEN,
+            String currency,
+            String unit,
+            LocalDateTime start,
+            LocalDateTime endExclusive
+    );
+
 }
