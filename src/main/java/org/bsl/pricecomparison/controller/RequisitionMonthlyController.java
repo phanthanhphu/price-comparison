@@ -37,10 +37,10 @@ import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.YearMonth;
+import java.text.Normalizer;
+import java.time.*;
 import java.util.*;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -3237,17 +3237,8 @@ public class RequisitionMonthlyController {
                         continue;
                     }
 
-                    // ===== pick best: min price, tie => latest createdAt =====
-                    SupplierProduct best = suppliers.stream()
-                            .filter(sp -> sp != null && sp.getPrice() != null)
-                            .min(
-                                    Comparator.comparing(SupplierProduct::getPrice)
-                                            .thenComparing(
-                                                    SupplierProduct::getCreatedAt,
-                                                    Comparator.nullsLast(Comparator.reverseOrder())
-                                            )
-                            )
-                            .orElse(null);
+                    // ===== pick best (NEW RULE):
+                    SupplierProduct best = pickBestSupplierProductByLatestPerCompanyThenMinPrice(suppliers);
 
                     if (best == null) {
                         skippedAllNullPrice++;
@@ -3380,6 +3371,145 @@ public class RequisitionMonthlyController {
         if (unit != null) d.put("unit", unit);
         return d;
     }
+
+
+    private SupplierProduct pickBestSupplierProductByLatestPerCompanyThenMinPrice(List<SupplierProduct> suppliers) {
+        if (suppliers == null || suppliers.isEmpty()) return null;
+
+        // 1) Filter: bỏ null + bỏ price null
+        List<SupplierProduct> valid = new ArrayList<>();
+        for (SupplierProduct sp : suppliers) {
+            if (sp == null) continue;
+            if (sp.getPrice() == null) continue;
+            valid.add(sp);
+        }
+        if (valid.isEmpty()) return null;
+
+        // 2) DEDUPE theo tên công ty: giữ record createdAt mới nhất
+        Map<String, SupplierProduct> latestByCompany = new LinkedHashMap<>();
+
+        for (SupplierProduct sp : valid) {
+            String key = normalizeCompanyNameStrong(sp.getSupplierName());
+
+            SupplierProduct existing = latestByCompany.get(key);
+            if (existing == null) {
+                latestByCompany.put(key, sp);
+                continue;
+            }
+
+            Instant eTime = toInstantSafe(existing.getCreatedAt());
+            Instant cTime = toInstantSafe(sp.getCreatedAt());
+
+            SupplierProduct keep;
+            if (eTime == null && cTime == null) {
+                keep = existing;
+            } else if (eTime == null) {
+                keep = sp;
+            } else if (cTime == null) {
+                keep = existing;
+            } else {
+                keep = cTime.isAfter(eTime) ? sp : existing;
+            }
+
+            latestByCompany.put(key, keep);
+
+            // DEBUG dễ nhìn:
+            // System.out.println("[DEDUP] " + key
+            //         + " | existing price=" + existing.getPrice() + " createdAt=" + existing.getCreatedAt()
+            //         + " | new price=" + sp.getPrice() + " createdAt=" + sp.getCreatedAt()
+            //         + " => KEEP price=" + keep.getPrice() + " createdAt=" + keep.getCreatedAt());
+        }
+
+        // 3) So giá giữa các công ty (đã dedupe)
+        SupplierProduct best = null;
+
+        for (SupplierProduct sp : latestByCompany.values()) {
+            if (best == null) {
+                best = sp;
+                continue;
+            }
+
+            int cmpPrice = sp.getPrice().compareTo(best.getPrice());
+            if (cmpPrice < 0) {
+                best = sp;
+            } else if (cmpPrice == 0) {
+                Instant bTime = toInstantSafe(best.getCreatedAt());
+                Instant cTime = toInstantSafe(sp.getCreatedAt());
+
+                // tie giá => lấy createdAt mới nhất
+                if (bTime == null && cTime == null) {
+                    // giữ best
+                } else if (bTime == null) {
+                    best = sp;
+                } else if (cTime == null) {
+                    // giữ best
+                } else if (cTime.isAfter(bTime)) {
+                    best = sp;
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /**
+     * Normalize tên công ty mạnh hơn:
+     * - xử lý NBSP
+     * - normalize unicode
+     * - gộp whitespace
+     * - lowercase
+     */
+    private String normalizeCompanyNameStrong(String supplierName) {
+        if (supplierName == null) return "";
+        String s = supplierName;
+
+        // NBSP -> space
+        s = s.replace('\u00A0', ' ');
+
+        // Unicode normalize
+        s = Normalizer.normalize(s, Normalizer.Form.NFKC);
+
+        // trim + collapse spaces
+        s = s.trim().replaceAll("\\s+", " ");
+
+        return s.toLowerCase();
+    }
+
+    /**
+     * Convert createdAt về Instant an toàn.
+     * Bạn hãy chỉnh type theo thực tế getCreatedAt() của bạn:
+     * - Nếu getCreatedAt() là Instant => return luôn
+     * - Nếu là Date => date.toInstant()
+     * - Nếu là OffsetDateTime/ZonedDateTime => toInstant()
+     * - Nếu là LocalDateTime => assume UTC (hoặc zone của bạn)
+     */
+    private Instant toInstantSafe(Object createdAt) {
+        if (createdAt == null) return null;
+
+        if (createdAt instanceof Instant i) return i;
+        if (createdAt instanceof Date d) return d.toInstant();
+        if (createdAt instanceof OffsetDateTime odt) return odt.toInstant();
+        if (createdAt instanceof ZonedDateTime zdt) return zdt.toInstant();
+        if (createdAt instanceof LocalDateTime ldt) return ldt.toInstant(ZoneOffset.UTC);
+
+        // Nếu lỡ createdAt là String ISO
+        if (createdAt instanceof String s) {
+            try {
+                return OffsetDateTime.parse(s).toInstant();
+            } catch (Exception ignored) {
+                // try LocalDateTime parse nếu không có offset
+                try {
+                    return LocalDateTime.parse(s).toInstant(ZoneOffset.UTC);
+                } catch (Exception ignored2) {
+                    return null;
+                }
+            }
+        }
+
+        // Không biết type => chịu
+        return null;
+    }
+
 
 
 }

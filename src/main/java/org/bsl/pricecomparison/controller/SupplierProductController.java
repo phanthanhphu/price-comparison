@@ -767,6 +767,7 @@ public class SupplierProductController {
                 dto.setImageUrls(product.getImageUrls() != null ? product.getImageUrls() : new ArrayList<>());
                 dto.setProductType1Id(Objects.toString(product.getProductType1Id(), ""));
                 dto.setProductType2Id(Objects.toString(product.getProductType2Id(), ""));
+                dto.setCreatedAt(product.getCreatedAt());
 
                 if (product.getProductType1Id() != null && !product.getProductType1Id().isEmpty()) {
                     productType1Repository.findById(product.getProductType1Id())
