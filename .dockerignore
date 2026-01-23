@@ -9,10 +9,3 @@ build
 .idea
 *.iml
 out
-
-# Runtime / user uploads
-uploads
-uploads/**
-*.jpg
-*.jpeg
-*.png
