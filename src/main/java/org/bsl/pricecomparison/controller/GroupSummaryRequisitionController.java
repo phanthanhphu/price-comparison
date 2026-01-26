@@ -124,6 +124,8 @@ public class GroupSummaryRequisitionController {
                     .updateStatusOnly(groupId, newStatus, userId);
             if (newStatus.equals("Completed")) {
                 requisitionMonthlyController.autoSelectBestSupplierAndSave(groupId, updated.get().getCurrency());
+            } else {
+                requisitionMonthlyController.clearSupplierComparisonAndBestPrice(groupId);
             }
             return updated
                     .map(g -> ResponseEntity.ok(Map.of(

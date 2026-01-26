@@ -66,6 +66,9 @@ public class SupplierProductController {
     @Autowired
     private RequisitionMonthlyRepository requisitionMonthlyRepository;
 
+    @Autowired
+    private CommonRequisitionUtils commonRequisitionUtils;
+
     private static final String UPLOAD_DIR = "uploads/";
     private static final Logger logger = LoggerFactory.getLogger(SupplierProductController.class);
 
@@ -736,20 +739,39 @@ public class SupplierProductController {
             @RequestParam(required = false, defaultValue = "") String unit,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
+            // ✅ nếu muốn ưu tiên selected supplier thì mở dòng này
+             , @RequestParam(required = false, defaultValue = "") String requisitionId
     ) {
         try {
             Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.asc("price")));
-            if (currency.equals("EUR")){
+
+            if ("EUR".equalsIgnoreCase(currency)) {
                 currency = "EURO";
             }
-            Page<SupplierProduct> supplierProducts = supplierProductRepositoryCustom.findByFiltersWithPagination(
-                    sapCode, hanaSapCode, itemDescriptionVN, itemDescriptionEN, supplierName, currency, unit, pageable
-            );
+
+            Page<SupplierProduct> supplierProductsUnFilter =
+                    supplierProductRepositoryCustom.findByFiltersWithPagination(
+                            sapCode, hanaSapCode, itemDescriptionVN, itemDescriptionEN, supplierName, currency, unit, pageable
+                    );
+
+            // ✅ loại bỏ giá cũ nếu tồn tại 2 giá 1 nhà cung cấp lấy giá gần nhất
+            Optional<RequisitionMonthly> requisitionOptional = requisitionMonthlyRepository.findById(requisitionId);
+            String selectedSupplierId = requisitionOptional
+                    .map(RequisitionMonthly::getSupplierId)
+                    .orElse("");
+            // ✅ DEDUPE theo company (giữ newest + prefer selected nếu có)
+            List<SupplierProduct> deduped =
+                    commonRequisitionUtils.dedupeLatestByCompanyPreferSelected(
+                            supplierProductsUnFilter.getContent(),
+                            selectedSupplierId
+                    );
+            // End
 
             final String currencyFilter = currency != null ? currency.trim() : "";
             final String unitFilter = unit != null ? unit.trim() : "";
 
-            List<SupplierProductDTO> dtoList = supplierProducts.getContent().stream().map(product -> {
+            // ✅ map DTO từ LIST (không còn getContent())
+            List<SupplierProductDTO> dtoList = deduped.stream().map(product -> {
                 SupplierProductDTO dto = new SupplierProductDTO();
                 dto.setId(Objects.toString(product.getId(), ""));
                 dto.setSupplierCode(Objects.toString(product.getSupplierCode(), ""));
@@ -772,12 +794,16 @@ public class SupplierProductController {
                 if (product.getProductType1Id() != null && !product.getProductType1Id().isEmpty()) {
                     productType1Repository.findById(product.getProductType1Id())
                             .ifPresent(type1 -> dto.setProductType1Name(Objects.toString(type1.getName(), "")));
-                } else dto.setProductType1Name("");
+                } else {
+                    dto.setProductType1Name("");
+                }
 
                 if (product.getProductType2Id() != null && !product.getProductType2Id().isEmpty()) {
                     productType2Repository.findById(product.getProductType2Id())
                             .ifPresent(type2 -> dto.setProductType2Name(Objects.toString(type2.getName(), "")));
-                } else dto.setProductType2Name("");
+                } else {
+                    dto.setProductType2Name("");
+                }
 
                 // ✅ add last purchase (NO CACHE + 4-case search on requisitionMonthlyRepository)
                 applyLastPurchaseForSupplierProduct_NoCache(dto, product, currencyFilter, unitFilter);
@@ -801,8 +827,9 @@ public class SupplierProductController {
 
             dtoList.sort(supplierSort);
 
+            // ✅ totalElements: sau dedupe số lượng thay đổi => dùng dtoList.size()
             Page<SupplierProductDTO> sortedPage =
-                    new PageImpl<>(dtoList, pageable, supplierProducts.getTotalElements());
+                    new PageImpl<>(dtoList, pageable, dtoList.size());
 
             return ResponseEntity.ok(Map.of(
                     "message", "Supplier products filtered successfully",
@@ -814,6 +841,7 @@ public class SupplierProductController {
                     .body(Map.of("message", "Failed to filter supplier products: " + e.getMessage()));
         }
     }
+
 
 
     /**

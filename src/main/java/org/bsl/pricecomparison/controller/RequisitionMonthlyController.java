@@ -1244,7 +1244,6 @@ public class RequisitionMonthlyController {
         ));
     }
 
-    // ✅ UPDATED: chỉ đổi phần "last purchase" ở cuối fun (dùng chung getMonthlyLastPurchaseInfo)
     private MonthlyComparisonRequisitionDTO convertToComparisonDTO(
             RequisitionMonthly req,
             String groupCurrency,
@@ -1264,51 +1263,91 @@ public class RequisitionMonthlyController {
 
         final String cur = normText(groupCurrency) != null ? normText(groupCurrency) : "VND";
 
-        // ✅ ===== APPLY CASCADE SEARCH (SAP -> HANA -> VN -> EN) (NO CACHE) =====
-        if (!cur.isBlank()) {
+        // ✅ NEW: nếu statusBestPrice = Yes/No => đã finalize => chỉ GET dữ liệu đã lưu, không chạy search/compare nữa
+        String statusBestPrice = normText(req.getStatusBestPrice());
+        boolean isFinalized = statusBestPrice != null
+                && ("Yes".equalsIgnoreCase(statusBestPrice) || "No".equalsIgnoreCase(statusBestPrice));
 
-            String reqUnit = normText(unit);
-            if (reqUnit != null) {
+        if (isFinalized) {
+            // =========================================================
+            // ✅ LUỒNG 1: FINALIZED (chỉ GET supplierComparisonList + statusBestPrice)
+            // =========================================================
 
-                String sapCode  = normCode(req.getOldSAPCode());       // null if empty/new
-                String hanaCode = normCode(req.getHanaSAPCode());      // null if empty/new
-                String desVn    = normText(req.getItemDescriptionVN());
-                String desEn    = normText(req.getItemDescriptionEN());
+            // ⚠️ TODO: đổi đúng tên field bạn đang lưu supplier list trong DB
+            // Ví dụ: req.getSupplierComparisonList() / req.getSupplierComparisons() / req.getSupplierComparisonJson()...
+            // Ở đây mình giả định bạn đã lưu dạng list object có đủ: price, supplierName, supplierId, unit, goodType (nếu có)
+            if (req.getSupplierComparisonList() != null) {
+                supplierDTOs = req.getSupplierComparisonList().stream()
+                        .filter(Objects::nonNull)
+                        .map(x -> new MonthlyComparisonRequisitionDTO.SupplierDTO(
+                                x.getPrice(),
+                                x.getSupplierName(),
+                                (selectedSupplierId != null && selectedSupplierId.equals(x.getSupplierId())) ? 1 : 0,
+                                x.getUnit(),
+                                false
+                        ))
+                        .collect(Collectors.toList());
 
-                String keyword = null;
-                int searchMode = 0; // 1=sap, 2=hana, 3=vn, 4=en
+                supplierDTOs = supplierDTOs.stream()
+                        .sorted(Comparator.comparing(
+                                MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice,
+                                Comparator.nullsLast(BigDecimal::compareTo)))
+                        .collect(Collectors.toList());
+            }
 
-                if (sapCode != null) {
-                    keyword = sapCode;
-                    searchMode = 1;
-                } else if (hanaCode != null) {
-                    keyword = hanaCode;
-                    searchMode = 2;
-                } else if (desVn != null) {
-                    keyword = desVn;
-                    searchMode = 3;
-                } else if (desEn != null) {
-                    keyword = desEn;
-                    searchMode = 4;
-                }
+            // ✅ lấy unit/price/goodtype từ supplier selected trong data đã lưu (nếu có)
+            if (selectedSupplierId != null && req.getSupplierComparisonList() != null) {
+                Object selected = req.getSupplierComparisonList().stream()
+                        .filter(x -> selectedSupplierId.equals(x.getSupplierId()))
+                        .findFirst()
+                        .orElse(null);
 
-                if (keyword != null) {
+                if (selected != null) {
+                    // ⚠️ TODO: tùy class thật của supplierComparisonList mà cast đúng type
+                    // Ví dụ: SupplierComparison sc = (SupplierComparison) selected;
+                    // unit = sc.getUnit() != null ? sc.getUnit() : unit;
+                    // goodtype = sc.getGoodType() != null ? sc.getGoodType() : goodtype;
+                    // price = sc.getPrice();
 
-                    List<SupplierProduct> suppliers;
+                    // ✅ tạm thời: lấy price/unit qua SupplierDTO đã map
+                    MonthlyComparisonRequisitionDTO.SupplierDTO selectedDto = supplierDTOs.stream()
+                            .filter(s -> s.getIsSelected() != null && s.getIsSelected() == 1)
+                            .findFirst()
+                            .orElse(null);
 
-                    if (searchMode == 1) {
-                        suppliers = supplierProductRepository
-                                .findBySapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
-                    } else if (searchMode == 2) {
-                        suppliers = supplierProductRepository
-                                .findByHanaSapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
-                    } else if (searchMode == 3) {
-                        suppliers = supplierProductRepository
-                                .findByItemDescriptionVNContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
-                    } else {
-                        suppliers = supplierProductRepository
-                                .findByItemDescriptionENContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
+                    if (selectedDto != null) {
+                        unit = selectedDto.getUnit() != null ? selectedDto.getUnit() : unit;
+                        price = selectedDto.getPrice();
                     }
+                }
+            }
+
+            // ✅ fallback price từ requisition nếu data đã lưu thiếu
+            if (price == null && req.getPrice() != null) {
+                price = req.getPrice();
+            }
+
+        } else {
+            // =========================================================
+            // ✅ LUỒNG 2: NOT FINALIZED (logic cũ: search + compare)
+            // =========================================================
+
+            // ✅ ===== APPLY CASCADE SEARCH (SAP -> HANA -> VN -> EN) (NO CACHE) =====
+            if (!cur.isBlank()) {
+
+                String reqUnit = normText(unit);
+                if (reqUnit != null) {
+
+                    // ✅ dùng function chung (priority + unit + currency + prefer selected)
+                    List<SupplierProduct> suppliers = commonRequisitionUtils.searchSupplierProductsByPriority(
+                            req.getOldSAPCode(),
+                            req.getHanaSAPCode(),
+                            req.getItemDescriptionVN(),
+                            req.getItemDescriptionEN(),
+                            reqUnit,
+                            cur,
+                            selectedSupplierId
+                    );
 
                     if (suppliers != null && !suppliers.isEmpty()) {
 
@@ -1368,12 +1407,16 @@ public class RequisitionMonthlyController {
                     }
                 }
             }
+
+            // ✅ fallback price from requisition
+            if (price == null && req.getPrice() != null) {
+                price = req.getPrice();
+            }
         }
 
-        // ✅ fallback price from requisition
-        if (price == null && req.getPrice() != null) {
-            price = req.getPrice();
-        }
+        // =========================================================
+        // ✅ phần tính toán giữ nguyên
+        // =========================================================
 
         BigDecimal highestPrice = supplierDTOs.stream()
                 .map(MonthlyComparisonRequisitionDTO.SupplierDTO::getPrice)
@@ -1399,12 +1442,21 @@ public class RequisitionMonthlyController {
                 .min(BigDecimal::compareTo)
                 .orElse(null);
 
+        // =========================================================
+        // ✅ UPDATED: BestPrice theo 2 luồng
+        // - FINALIZED: lấy thẳng statusBestPrice (Yes/No) => không compare
+        // - NOT FINALIZED: logic cũ (EMPTY/null => compare, còn lại => lấy theo statusBestPrice)
+        // =========================================================
+
         Boolean isBestPrice;
-        String statusBestPrice = req.getStatusBestPrice();
-        if (statusBestPrice == null || statusBestPrice.trim().isEmpty() || "EMPTY".equalsIgnoreCase(statusBestPrice.trim())) {
-            isBestPrice = price != null && minPrice != null && price.compareTo(minPrice) == 0;
+        if (isFinalized) {
+            isBestPrice = "Yes".equalsIgnoreCase(statusBestPrice);
         } else {
-            isBestPrice = "Yes".equalsIgnoreCase(statusBestPrice.trim());
+            if (statusBestPrice == null || "EMPTY".equalsIgnoreCase(statusBestPrice.trim())) {
+                isBestPrice = price != null && minPrice != null && price.compareTo(minPrice) == 0;
+            } else {
+                isBestPrice = "Yes".equalsIgnoreCase(statusBestPrice.trim());
+            }
         }
 
         List<MonthlyComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests =
@@ -1474,6 +1526,7 @@ public class RequisitionMonthlyController {
 
         return dto;
     }
+
 
     private static String normText(String s) {
         if (s == null) return null;
@@ -1733,6 +1786,26 @@ public class RequisitionMonthlyController {
     }
 
     @Transactional
+    public void clearSupplierComparisonAndBestPrice(String groupId) {
+
+        List<UpdateRequisitionMonthlyDTO> dtoList = requisitionMonthlyRepository.findRequestByGroupId(groupId);
+        if (dtoList == null || dtoList.isEmpty()) return;
+
+        List<RequisitionMonthly> entities = dtoList.stream()
+                .map(dto -> requisitionMonthlyRepository.findById(dto.getId()).orElse(null))
+                .filter(Objects::nonNull)
+                .toList();
+
+        for (RequisitionMonthly rm : entities) {
+            rm.setSupplierComparisonList(Collections.emptyList()); // clear list
+            rm.setStatusBestPrice(""); // clear status
+        }
+
+        requisitionMonthlyRepository.saveAll(entities);
+    }
+
+
+    @Transactional
     public void autoSelectBestSupplierAndSave(String groupId, String currency) {
 
         List<UpdateRequisitionMonthlyDTO> dtoList = requisitionMonthlyRepository.findRequestByGroupId(groupId);
@@ -1748,36 +1821,54 @@ public class RequisitionMonthlyController {
                 ));
 
         for (UpdateRequisitionMonthlyDTO dto : dtoList) {
-            String searchKey = null;
-            boolean useSapCode = dto.getOldSAPCode() != null
-                    && !dto.getOldSAPCode().trim().isEmpty()
-                    && !"NEW".equalsIgnoreCase(dto.getOldSAPCode().trim());
 
-            if (useSapCode) {
-                searchKey = dto.getOldSAPCode().trim();
-            } else if (dto.getItemDescriptionVN() != null && !dto.getItemDescriptionVN().trim().isEmpty()) {
-                searchKey = dto.getItemDescriptionVN().trim();
-            } else {
+            // ✅ Search theo priority + unit + currency
+            // ✅ Dedup theo company (giữ createdAt mới nhất)
+            // ✅ Nếu trùng company thì ưu tiên giữ supplierId đã chọn (nếu có)
+            List<SupplierProduct> suppliers = commonRequisitionUtils.searchSupplierProductsByPriority(
+                    dto.getOldSAPCode(),
+                    dto.getSapCodeNewSAP(),
+                    dto.getItemDescriptionVN(),
+                    dto.getItemDescriptionEN(),
+                    dto.getUnit(),
+                    currency,
+                    dto.getSupplierId() // selectedSupplierId
+            );
+
+            if (suppliers == null || suppliers.isEmpty()) {
                 dto.setSupplierComparisonList(Collections.emptyList());
+                entityMap.get(dto.getId()).setSupplierComparisonList(Collections.emptyList());
                 continue;
             }
 
-            List<SupplierProduct> suppliers = new ArrayList<>();
-            if (useSapCode) {
-                suppliers = supplierProductRepository.findBySapCodeAndCurrencyIgnoreCase(searchKey, currency);
-            }
-            if (suppliers.isEmpty()) {
-                suppliers = supplierProductRepository.findByItemNoContainingIgnoreCaseAndCurrency(searchKey, currency);
-            }
-            if (suppliers.isEmpty()) {
-                dto.setSupplierComparisonList(Collections.emptyList());
-                continue;
+            // ✅ pick best = min price (tie => createdAt mới nhất)
+            SupplierProduct bestSp = null;
+            for (SupplierProduct sp : suppliers) {
+                if (sp == null || sp.getPrice() == null) continue;
+
+                if (bestSp == null) {
+                    bestSp = sp;
+                    continue;
+                }
+
+                int cmp = sp.getPrice().compareTo(bestSp.getPrice());
+                if (cmp < 0) {
+                    bestSp = sp;
+                } else if (cmp == 0) {
+                    Instant bt = commonRequisitionUtils.toInstantSafe(bestSp.getCreatedAt());
+                    Instant ct = commonRequisitionUtils.toInstantSafe(sp.getCreatedAt());
+
+                    // tie giá => lấy createdAt mới nhất
+                    if (bt == null && ct != null) bestSp = sp;
+                    else if (bt != null && ct != null && ct.isAfter(bt)) bestSp = sp;
+                }
             }
 
+            // Build list comparison để UI show (sort theo price asc)
             List<CompletedSupplierDTO> comparisonList = suppliers.stream()
-                    .filter(sp -> sp.getPrice() != null)
+                    .filter(sp -> sp != null && sp.getPrice() != null)
                     .map(sp -> new CompletedSupplierDTO(
-                            sp.getId(),
+                            sp.getId(),          // supplierId
                             sp.getSupplierName(),
                             sp.getPrice(),
                             sp.getUnit(),
@@ -1787,21 +1878,38 @@ public class RequisitionMonthlyController {
                     .sorted(Comparator.comparing(CompletedSupplierDTO::getPrice))
                     .collect(Collectors.toList());
 
-            if (comparisonList.isEmpty()) {
+            if (comparisonList.isEmpty() || bestSp == null || bestSp.getPrice() == null) {
                 dto.setSupplierComparisonList(Collections.emptyList());
+                entityMap.get(dto.getId()).setSupplierComparisonList(Collections.emptyList());
                 continue;
             }
 
+            // ✅ Mark best supplier trong list
+            String bestId = bestSp.getId();
+            for (CompletedSupplierDTO s : comparisonList) {
+                if (s == null) continue;
+
+                // ✅ nếu CompletedSupplierDTO getter là getId() thì đổi dòng dưới: String sid = s.getId();
+                String sid = s.getSupplierId();
+
+                if (sid != null && bestId != null && sid.equals(bestId)) {
+                    s.setIsSelected(1);
+                    s.setIsBestPrice(true);
+                    break;
+                }
+            }
+
+            // ✅ set statusBestPrice nếu empty (so với best price đã pick)
             String currentStatus = dto.getStatusBestPrice();
             if (currentStatus == null || currentStatus.trim().isEmpty()) {
-                BigDecimal bestPrice = comparisonList.get(0).getPrice();
+                BigDecimal bestPrice = bestSp.getPrice();
                 boolean isCurrentlyBest = dto.getPrice() != null
+                        && bestPrice != null
                         && dto.getPrice().compareTo(bestPrice) == 0;
+
                 entityMap.get(dto.getId()).setStatusBestPrice(isCurrentlyBest ? "Yes" : "No");
             }
 
-            comparisonList.get(0).setIsSelected(1);
-            comparisonList.get(0).setIsBestPrice(true);
             dto.setSupplierComparisonList(comparisonList);
             entityMap.get(dto.getId()).setSupplierComparisonList(comparisonList);
         }
@@ -3238,7 +3346,7 @@ public class RequisitionMonthlyController {
                     }
 
                     // ===== pick best (NEW RULE):
-                    SupplierProduct best = pickBestSupplierProductByLatestPerCompanyThenMinPrice(suppliers);
+                    SupplierProduct best = commonRequisitionUtils.pickBestSupplierProductByLatestPerCompanyThenMinPrice(suppliers);
 
                     if (best == null) {
                         skippedAllNullPrice++;
@@ -3371,145 +3479,4 @@ public class RequisitionMonthlyController {
         if (unit != null) d.put("unit", unit);
         return d;
     }
-
-
-    private SupplierProduct pickBestSupplierProductByLatestPerCompanyThenMinPrice(List<SupplierProduct> suppliers) {
-        if (suppliers == null || suppliers.isEmpty()) return null;
-
-        // 1) Filter: bỏ null + bỏ price null
-        List<SupplierProduct> valid = new ArrayList<>();
-        for (SupplierProduct sp : suppliers) {
-            if (sp == null) continue;
-            if (sp.getPrice() == null) continue;
-            valid.add(sp);
-        }
-        if (valid.isEmpty()) return null;
-
-        // 2) DEDUPE theo tên công ty: giữ record createdAt mới nhất
-        Map<String, SupplierProduct> latestByCompany = new LinkedHashMap<>();
-
-        for (SupplierProduct sp : valid) {
-            String key = normalizeCompanyNameStrong(sp.getSupplierName());
-
-            SupplierProduct existing = latestByCompany.get(key);
-            if (existing == null) {
-                latestByCompany.put(key, sp);
-                continue;
-            }
-
-            Instant eTime = toInstantSafe(existing.getCreatedAt());
-            Instant cTime = toInstantSafe(sp.getCreatedAt());
-
-            SupplierProduct keep;
-            if (eTime == null && cTime == null) {
-                keep = existing;
-            } else if (eTime == null) {
-                keep = sp;
-            } else if (cTime == null) {
-                keep = existing;
-            } else {
-                keep = cTime.isAfter(eTime) ? sp : existing;
-            }
-
-            latestByCompany.put(key, keep);
-
-            // DEBUG dễ nhìn:
-            // System.out.println("[DEDUP] " + key
-            //         + " | existing price=" + existing.getPrice() + " createdAt=" + existing.getCreatedAt()
-            //         + " | new price=" + sp.getPrice() + " createdAt=" + sp.getCreatedAt()
-            //         + " => KEEP price=" + keep.getPrice() + " createdAt=" + keep.getCreatedAt());
-        }
-
-        // 3) So giá giữa các công ty (đã dedupe)
-        SupplierProduct best = null;
-
-        for (SupplierProduct sp : latestByCompany.values()) {
-            if (best == null) {
-                best = sp;
-                continue;
-            }
-
-            int cmpPrice = sp.getPrice().compareTo(best.getPrice());
-            if (cmpPrice < 0) {
-                best = sp;
-            } else if (cmpPrice == 0) {
-                Instant bTime = toInstantSafe(best.getCreatedAt());
-                Instant cTime = toInstantSafe(sp.getCreatedAt());
-
-                // tie giá => lấy createdAt mới nhất
-                if (bTime == null && cTime == null) {
-                    // giữ best
-                } else if (bTime == null) {
-                    best = sp;
-                } else if (cTime == null) {
-                    // giữ best
-                } else if (cTime.isAfter(bTime)) {
-                    best = sp;
-                }
-            }
-        }
-
-        return best;
-    }
-
-    /**
-     * Normalize tên công ty mạnh hơn:
-     * - xử lý NBSP
-     * - normalize unicode
-     * - gộp whitespace
-     * - lowercase
-     */
-    private String normalizeCompanyNameStrong(String supplierName) {
-        if (supplierName == null) return "";
-        String s = supplierName;
-
-        // NBSP -> space
-        s = s.replace('\u00A0', ' ');
-
-        // Unicode normalize
-        s = Normalizer.normalize(s, Normalizer.Form.NFKC);
-
-        // trim + collapse spaces
-        s = s.trim().replaceAll("\\s+", " ");
-
-        return s.toLowerCase();
-    }
-
-    /**
-     * Convert createdAt về Instant an toàn.
-     * Bạn hãy chỉnh type theo thực tế getCreatedAt() của bạn:
-     * - Nếu getCreatedAt() là Instant => return luôn
-     * - Nếu là Date => date.toInstant()
-     * - Nếu là OffsetDateTime/ZonedDateTime => toInstant()
-     * - Nếu là LocalDateTime => assume UTC (hoặc zone của bạn)
-     */
-    private Instant toInstantSafe(Object createdAt) {
-        if (createdAt == null) return null;
-
-        if (createdAt instanceof Instant i) return i;
-        if (createdAt instanceof Date d) return d.toInstant();
-        if (createdAt instanceof OffsetDateTime odt) return odt.toInstant();
-        if (createdAt instanceof ZonedDateTime zdt) return zdt.toInstant();
-        if (createdAt instanceof LocalDateTime ldt) return ldt.toInstant(ZoneOffset.UTC);
-
-        // Nếu lỡ createdAt là String ISO
-        if (createdAt instanceof String s) {
-            try {
-                return OffsetDateTime.parse(s).toInstant();
-            } catch (Exception ignored) {
-                // try LocalDateTime parse nếu không có offset
-                try {
-                    return LocalDateTime.parse(s).toInstant(ZoneOffset.UTC);
-                } catch (Exception ignored2) {
-                    return null;
-                }
-            }
-        }
-
-        // Không biết type => chịu
-        return null;
-    }
-
-
-
 }

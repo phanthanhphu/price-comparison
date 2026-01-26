@@ -685,6 +685,7 @@ public class SummaryRequisitionController {
                     saved.getAmount(),
                     saved.getPrice(),
                     saved.getSupplierName(),
+                    saved.getSupplierId(),
                     saved.getCreatedDate(),
                     saved.getUpdatedDate(),
                     saved.getFullDescription(),
@@ -1502,58 +1503,113 @@ public class SummaryRequisitionController {
         BigDecimal selectedPrice = null;
         BigDecimal highestPrice = null;
         BigDecimal lowestPrice = null;
-        boolean isBestPrice = false;
 
         final String cur = (groupCurrency != null ? groupCurrency.trim() : "");
 
-        // ✅ NEW: SEARCH SUPPLIER FOLLOW 4 RULES (SAP -> HANA -> VN -> EN) + unit + currency
-        if (selectedSupplierId != null && !cur.isBlank()) {
+        // ✅ NEW: FINALIZED check: statusBestPrice = Yes/No
+        String statusBestPrice = normText(req.getStatusBestPrice());
+        boolean isFinalized = statusBestPrice != null
+                && ("Yes".equalsIgnoreCase(statusBestPrice) || "No".equalsIgnoreCase(statusBestPrice));
 
-            // ✅ unit is REQUIRED for search (same as auto-supplier)
-            String reqUnit = normText(unit);
-            if (reqUnit != null) {
+        boolean isBestPrice;
 
-                // fields
-                String sapCode  = normCode(req.getOldSapCode());   // null if empty/new
-                String hanaCode = normCode(req.getHanaSapCode());  // null if empty/new
-                String desVn    = normText(req.getVietnameseName());
-                String desEn    = normText(req.getEnglishName());
+        if (isFinalized) {
+            // =========================================================
+            // ✅ LUỒNG 1: FINALIZED -> chỉ GET data đã lưu (supplierComparisonList + statusBestPrice)
+            // =========================================================
 
-                // pick keyword
-                String keyword = null;
-                int searchMode = 0; // 1=sap, 2=hana, 3=vn, 4=en
+            RequisitionMonthly monthly = requisitionMonthlyRepository.findById(req.getId()).orElse(null);
 
-                if (sapCode != null) {
-                    keyword = sapCode;
-                    searchMode = 1;
-                } else if (hanaCode != null) {
-                    keyword = hanaCode;
-                    searchMode = 2;
-                } else if (desVn != null) {
-                    keyword = desVn;
-                    searchMode = 3;
-                } else if (desEn != null) {
-                    keyword = desEn;
-                    searchMode = 4;
+            if (monthly != null) {
+                // ⚠️ TODO: đổi đúng field bạn đang lưu supplierComparisonList trong monthly
+                // Ví dụ: monthly.getSupplierComparisonList()
+                if (monthly.getSupplierComparisonList() != null) {
+                    suppliers = monthly.getSupplierComparisonList().stream()
+                            .filter(Objects::nonNull)
+                            .map(x -> new ComparisonRequisitionDTO.SupplierDTO(
+                                    x.getPrice(),
+                                    x.getSupplierName(),
+                                    (selectedSupplierId != null && selectedSupplierId.equals(x.getSupplierId())) ? 1 : 0,
+                                    x.getUnit()
+                            ))
+                            .collect(Collectors.toList());
+
+                    // sort price asc (giữ như luồng cũ để UI ổn định)
+                    suppliers = suppliers.stream()
+                            .sorted(Comparator.comparing(
+                                    ComparisonRequisitionDTO.SupplierDTO::getPrice,
+                                    Comparator.nullsLast(BigDecimal::compareTo)))
+                            .collect(Collectors.toList());
+
+                    highestPrice = suppliers.stream()
+                            .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
+                            .filter(Objects::nonNull)
+                            .max(BigDecimal::compareTo)
+                            .orElse(null);
+
+                    lowestPrice = suppliers.stream()
+                            .map(ComparisonRequisitionDTO.SupplierDTO::getPrice)
+                            .filter(Objects::nonNull)
+                            .min(BigDecimal::compareTo)
+                            .orElse(null);
                 }
 
-                if (keyword != null) {
-                    List<SupplierProduct> supplierProducts;
+                // ✅ ưu tiên selected supplier từ data đã lưu
+                if (selectedSupplierId != null && monthly.getSupplierComparisonList() != null) {
+                    Object selected = monthly.getSupplierComparisonList().stream()
+                            .filter(x -> selectedSupplierId.equals(x.getSupplierId()))
+                            .findFirst()
+                            .orElse(null);
 
-                    // ✅ EXACT SEARCH FUNCTIONS (4 cases)
-                    if (searchMode == 1) {
-                        supplierProducts = supplierProductRepository
-                                .findBySapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
-                    } else if (searchMode == 2) {
-                        supplierProducts = supplierProductRepository
-                                .findByHanaSapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
-                    } else if (searchMode == 3) {
-                        supplierProducts = supplierProductRepository
-                                .findByItemDescriptionVNContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
-                    } else {
-                        supplierProducts = supplierProductRepository
-                                .findByItemDescriptionENContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, reqUnit, cur);
+                    if (selected != null) {
+                        // Nếu item có goodType thì set ở đây theo class thật
+                        // SupplierComparison sc = (SupplierComparison) selected;
+                        // goodType = sc.getGoodType();
+                        // unit = sc.getUnit() != null ? sc.getUnit() : unit;
+                        // selectedPrice = sc.getPrice();
+
+                        // ✅ fallback nhanh từ suppliers DTO đã map
+                        ComparisonRequisitionDTO.SupplierDTO selectedDto = suppliers.stream()
+                                .filter(s -> s.getIsSelected() != null && s.getIsSelected() == 1)
+                                .findFirst()
+                                .orElse(null);
+
+                        if (selectedDto != null) {
+                            unit = selectedDto.getUnit() != null ? selectedDto.getUnit() : unit;
+                            selectedPrice = selectedDto.getPrice();
+                        }
                     }
+                }
+
+                // ✅ fallback nếu data đã lưu thiếu
+                if (selectedPrice == null && monthly.getPrice() != null) {
+                    selectedPrice = monthly.getPrice();
+                }
+            }
+
+            // ✅ FINALIZED: best price lấy thẳng từ statusBestPrice (không compare)
+            isBestPrice = "Yes".equalsIgnoreCase(statusBestPrice);
+
+        } else {
+            // =========================================================
+            // ✅ LUỒNG 2: NOT FINALIZED -> logic cũ: search supplier + compare
+            // =========================================================
+
+            // ✅ SEARCH SUPPLIER FOLLOW 4 RULES (SAP -> HANA -> VN -> EN) + unit + currency
+            if (selectedSupplierId != null && !cur.isBlank()) {
+
+                String reqUnit = normText(unit);
+                if (reqUnit != null) {
+
+                    List<SupplierProduct> supplierProducts = commonRequisitionUtils.searchSupplierProductsByPriority(
+                            req.getOldSapCode(),
+                            req.getHanaSapCode(),
+                            req.getVietnameseName(),
+                            req.getEnglishName(),
+                            reqUnit,
+                            cur,
+                            req.getSupplierId()
+                    );
 
                     if (supplierProducts != null && !supplierProducts.isEmpty()) {
 
@@ -1561,12 +1617,11 @@ public class SummaryRequisitionController {
                                 .map(sp -> new ComparisonRequisitionDTO.SupplierDTO(
                                         sp.getPrice(),
                                         sp.getSupplierName(),
-                                        selectedSupplierId.equals(sp.getId()) ? 1 : 0, // ✅ mark selected
+                                        selectedSupplierId.equals(sp.getId()) ? 1 : 0,
                                         sp.getUnit()
                                 ))
                                 .collect(Collectors.toList());
 
-                        // ✅ remove duplicate supplier logic giữ nguyên
                         if (removeDuplicateSuppliers) {
                             Map<String, ComparisonRequisitionDTO.SupplierDTO> unique = new LinkedHashMap<>();
                             for (ComparisonRequisitionDTO.SupplierDTO s : allSuppliers) {
@@ -1590,14 +1645,12 @@ public class SummaryRequisitionController {
                             suppliers = allSuppliers;
                         }
 
-                        // sort price asc
                         suppliers = suppliers.stream()
                                 .sorted(Comparator.comparing(
                                         ComparisonRequisitionDTO.SupplierDTO::getPrice,
                                         Comparator.nullsLast(BigDecimal::compareTo)))
                                 .collect(Collectors.toList());
 
-                        // ✅ find selected supplier in list
                         SupplierProduct selectedSupplier = supplierProducts.stream()
                                 .filter(sp -> selectedSupplierId.equals(sp.getId()))
                                 .findFirst()
@@ -1622,6 +1675,13 @@ public class SummaryRequisitionController {
                                 .orElse(null);
                     }
                 }
+            }
+
+            // ✅ best price logic cũ
+            if (statusBestPrice == null || "EMPTY".equalsIgnoreCase(statusBestPrice)) {
+                isBestPrice = selectedPrice != null && lowestPrice != null && selectedPrice.compareTo(lowestPrice) == 0;
+            } else {
+                isBestPrice = "Yes".equalsIgnoreCase(statusBestPrice);
             }
         }
 
@@ -1649,13 +1709,6 @@ public class SummaryRequisitionController {
         BigDecimal percentage = BigDecimal.ZERO;
         if (amt.compareTo(BigDecimal.ZERO) != 0) {
             percentage = amtDifference.divide(amt, 6, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100));
-        }
-
-        String statusBestPrice = req.getStatusBestPrice();
-        if (statusBestPrice == null || statusBestPrice.trim().isEmpty() || "EMPTY".equalsIgnoreCase(statusBestPrice.trim())) {
-            isBestPrice = selectedPrice != null && lowestPrice != null && selectedPrice.compareTo(lowestPrice) == 0;
-        } else {
-            isBestPrice = "Yes".equalsIgnoreCase(statusBestPrice.trim());
         }
 
         List<ComparisonRequisitionDTO.DepartmentRequestDTO> departmentRequests =
@@ -1803,13 +1856,6 @@ public class SummaryRequisitionController {
         return "new".equalsIgnoreCase(t) ? null : t;
     }
 
-    private static String pickCodeKey_SapFirst(String oldSap, String hana) {
-        String sap = normCode(oldSap);
-        if (sap != null) return sap.trim();
-        String h = normCode(hana);
-        return (h != null) ? h.trim() : null;
-    }
-
     private String getType1Name(String type1Id) {
         if (type1Id == null || type1Id.isBlank()) return "";
         ProductType1 t1 = productType1Service.getById(type1Id.trim());
@@ -1830,13 +1876,10 @@ public class SummaryRequisitionController {
     }
 
     @PatchMapping("/mark-completed")
-    @Operation(
-            summary = "Mark multiple requisitions as completed",
-            description = "Updates isCompleted=true, completedDate=now, updatedDate=now + set completedByEmail/updatedByEmail. FAIL if any requisition has no supplierId."
-    )
     public ResponseEntity<?> markAsCompleted(
             @RequestBody MarkCompletedRequest request,
-            @RequestParam("email") String email
+            @RequestParam("email") String email,
+            @RequestParam("groupId") String groupId
     ) {
         try {
             if (request.getRequisitionIds() == null || request.getRequisitionIds().isEmpty()) {
@@ -1849,58 +1892,21 @@ public class SummaryRequisitionController {
             }
 
             String emailNorm = email.trim().toLowerCase();
-            LocalDateTime now = LocalDateTime.now();
+            GroupSummaryRequisition group = groupSummaryRequisitionService.getGroupSummaryRequisitionById(groupId)
+                    .orElseThrow(() -> new IllegalArgumentException("Group not found with id: " + groupId));
 
-            List<RequisitionMonthly> requisitions =
-                    requisitionMonthlyRepository.findAllById(request.getRequisitionIds());
+            List<RequisitionMonthly> saved = commonRequisitionUtils.markCompletedAndAutoSelectBestSupplier(
+                    request.getRequisitionIds(),
+                    emailNorm,
+                    group.getCurrency() // hoặc request.getCurrency()
+            );
 
-            if (requisitions.isEmpty()) {
+            if (saved.isEmpty()) {
                 return ResponseEntity.ok(Map.of(
                         "message", "No requisitions found with provided IDs",
                         "updatedCount", 0
                 ));
             }
-
-            // ✅ FAIL-FAST: thiếu supplierId => show DesVN/DesEN
-            Optional<RequisitionMonthly> missingSupplier = requisitions.stream()
-                    .filter(r -> r.getSupplierId() == null || r.getSupplierId().trim().isEmpty())
-                    .findFirst();
-
-            if (missingSupplier.isPresent()) {
-                RequisitionMonthly bad = missingSupplier.get();
-
-                String desVN = bad.getItemDescriptionVN();
-                String desEN = bad.getItemDescriptionEN();
-
-                String displayName =
-                        (desVN != null && !desVN.trim().isEmpty())
-                                ? desVN.trim()
-                                : ((desEN != null && !desEN.trim().isEmpty()) ? desEN.trim() : "(no description)");
-
-                String displayType =
-                        (desVN != null && !desVN.trim().isEmpty()) ? "Des VN" : "Des EN";
-
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of(
-                                "message", displayType + " '" + displayName + "' does not have a supplier assigned, therefore it cannot be completed.",
-                                "requisitionId", bad.getId(),
-                                "itemDescriptionVN", desVN,
-                                "itemDescriptionEN", desEN
-                        ));
-            }
-
-            requisitions.forEach(req -> {
-                req.setIsCompleted(true);
-                req.setCompletedDate(now);
-                req.setUpdatedDate(now);
-
-                req.setCompletedByEmail(emailNorm);
-                req.setUpdatedByEmail(emailNorm);
-
-                req.setUncompletedByEmail(null);
-            });
-
-            List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);
 
             return ResponseEntity.ok(Map.of(
                     "message", "Successfully marked as completed",
@@ -1909,6 +1915,9 @@ public class SummaryRequisitionController {
                     "completedByEmail", emailNorm
             ));
 
+        } catch (IllegalArgumentException e) {
+            // thiếu supplierId hoặc email invalid trong service sẽ vào đây
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Failed to update requisitions: " + e.getMessage()));
@@ -1985,6 +1994,9 @@ public class SummaryRequisitionController {
                 req.setUpdatedByEmail(emailNorm);
 
                 req.setCompletedByEmail(null);
+
+                req.setSupplierComparisonList(Collections.emptyList()); // clear list
+                req.setStatusBestPrice(""); // clear status
             });
 
             List<RequisitionMonthly> saved = requisitionMonthlyRepository.saveAll(requisitions);

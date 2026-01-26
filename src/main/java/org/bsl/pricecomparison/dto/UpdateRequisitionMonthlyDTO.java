@@ -26,6 +26,7 @@ public class UpdateRequisitionMonthlyDTO {
     private BigDecimal amount;
     private BigDecimal price;
     private String supplierName;
+    private String supplierId;
 
     private LocalDateTime createdDate;
     private LocalDateTime updatedDate;
@@ -40,7 +41,7 @@ public class UpdateRequisitionMonthlyDTO {
 
     private List<CompletedSupplierDTO> supplierComparisonList;
 
-    public UpdateRequisitionMonthlyDTO(String id, String groupId, String productType1Name, String productType2Name, String itemDescriptionEN, String itemDescriptionVN, String oldSAPCode, String sapCodeNewSAP, String unit, List<DepartmentRequisitionMonthly> departmentRequisitions, BigDecimal confirmedMedQuantity, BigDecimal totalRequestQty, BigDecimal orderQty, BigDecimal amount, BigDecimal price, String supplierName, LocalDateTime createdDate, LocalDateTime updatedDate, String fullDescription, String reason, String remark, String remarkComparison, List<String> imageUrls, String statusBestPrice, CompletedSupplierDTO selectedSupplier, List<CompletedSupplierDTO> supplierComparisonList) {
+    public UpdateRequisitionMonthlyDTO(String id, String groupId, String productType1Name, String productType2Name, String itemDescriptionEN, String itemDescriptionVN, String oldSAPCode, String sapCodeNewSAP, String unit, List<DepartmentRequisitionMonthly> departmentRequisitions, BigDecimal confirmedMedQuantity, BigDecimal totalRequestQty, BigDecimal orderQty, BigDecimal amount, BigDecimal price, String supplierName, String supplierId, LocalDateTime createdDate, LocalDateTime updatedDate, String fullDescription, String reason, String remark, String remarkComparison, List<String> imageUrls, String statusBestPrice, CompletedSupplierDTO selectedSupplier, List<CompletedSupplierDTO> supplierComparisonList) {
         this.id = id;
         this.groupId = groupId;
         this.productType1Name = productType1Name;
@@ -57,6 +58,7 @@ public class UpdateRequisitionMonthlyDTO {
         this.amount = amount;
         this.price = price;
         this.supplierName = supplierName;
+        this.supplierId = supplierId;
         this.createdDate = createdDate;
         this.updatedDate = updatedDate;
         this.fullDescription = fullDescription;
@@ -195,6 +197,14 @@ public class UpdateRequisitionMonthlyDTO {
 
     public void setSupplierName(String supplierName) {
         this.supplierName = supplierName;
+    }
+
+    public String getSupplierId() {
+        return supplierId;
+    }
+
+    public void setSupplierId(String supplierId) {
+        this.supplierId = supplierId;
     }
 
     public LocalDateTime getCreatedDate() {

@@ -1,9 +1,13 @@
 package org.bsl.pricecomparison.common;
 
+import org.bsl.pricecomparison.dto.CompletedSupplierDTO;
 import org.bsl.pricecomparison.model.DepartmentRequisitionMonthly;
 import org.bsl.pricecomparison.model.RequisitionMonthly;
+import org.bsl.pricecomparison.model.SupplierProduct;
 import org.bsl.pricecomparison.repository.RequisitionMonthlyRepository;
+import org.bsl.pricecomparison.repository.SupplierProductRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -11,8 +15,10 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
+import java.text.Normalizer;
+import java.time.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 public class CommonRequisitionUtils {
@@ -21,8 +27,11 @@ public class CommonRequisitionUtils {
 
     private final RequisitionMonthlyRepository requisitionMonthlyRepository;
 
-    public CommonRequisitionUtils(RequisitionMonthlyRepository requisitionMonthlyRepository) {
+    private final SupplierProductRepository supplierProductRepository;
+
+    public CommonRequisitionUtils(RequisitionMonthlyRepository requisitionMonthlyRepository, SupplierProductRepository supplierProductRepository) {
         this.requisitionMonthlyRepository = requisitionMonthlyRepository;
+        this.supplierProductRepository = supplierProductRepository;
     }
 
     public static String normText(String s) {
@@ -396,5 +405,452 @@ public class CommonRequisitionUtils {
         req.setUpdatedDate(LocalDateTime.now());
         return req;
     }
+
+    public List<SupplierProduct> searchSupplierProductsByPriority(
+            String sapCode,
+            String hanaCode,
+            String vnName,
+            String enName,
+            String unit,
+            String currency,
+            String selectedSupplierId // ✅ supplierId đã chọn trong requisition (có thể null)
+    ) {
+        String cur = normText(currency);
+        String reqUnit = normText(unit);
+
+        // ✅ guard
+        if (cur == null || cur.isBlank()) return Collections.emptyList();
+        if (reqUnit == null || reqUnit.isBlank()) return Collections.emptyList();
+
+        // ✅ normalize input
+        String sap = normCode(sapCode);
+        String hana = normCode(hanaCode);
+        String vn = normText(vnName);
+        String en = normText(enName);
+
+        List<SupplierProduct> found = Collections.emptyList();
+
+        // ✅ Priority search: SAP -> HANA -> VN -> EN
+        if (sap != null) {
+            found = supplierProductRepository
+                    .findBySapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(sap, reqUnit, cur);
+        } else if (hana != null) {
+            found = supplierProductRepository
+                    .findByHanaSapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(hana, reqUnit, cur);
+        } else if (vn != null) {
+            found = supplierProductRepository
+                    .findByItemDescriptionVNContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(vn, reqUnit, cur);
+        } else if (en != null) {
+            found = supplierProductRepository
+                    .findByItemDescriptionENContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(en, reqUnit, cur);
+        }
+
+    /*
+     ✅ Rule output:
+     - Mỗi công ty chỉ giữ record createdAt mới nhất
+     - Nếu selectedSupplierId thuộc công ty đó và KHÁC newest => giữ thêm selected
+     - Nếu selected == newest => không add thêm
+    */
+        return dedupeLatestByCompanyPreferSelected(found, selectedSupplierId);
+    }
+
+    public List<SupplierProduct> dedupeLatestByCompanyPreferSelected(
+            List<SupplierProduct> suppliers,
+            String selectedSupplierId
+    ) {
+        if (suppliers == null || suppliers.isEmpty()) return Collections.emptyList();
+
+        String selectedId = normText(selectedSupplierId);
+
+        // ✅ group theo company name (normalize mạnh)
+        Map<String, List<SupplierProduct>> byCompany = new LinkedHashMap<>();
+        for (SupplierProduct sp : suppliers) {
+            if (sp == null) continue;
+
+            String key = normalizeCompanyNameStrong(sp.getSupplierName());
+            if (key == null) key = "";
+            byCompany.computeIfAbsent(key, k -> new ArrayList<>()).add(sp);
+        }
+
+        List<SupplierProduct> result = new ArrayList<>();
+
+        for (List<SupplierProduct> companyList : byCompany.values()) {
+            if (companyList == null || companyList.isEmpty()) continue;
+
+            // 1) ✅ newest record của công ty (createdAt mới nhất)
+            SupplierProduct newest = null;
+            Instant newestTime = null;
+
+            for (SupplierProduct sp : companyList) {
+                if (sp == null) continue;
+
+                Instant t = toInstantSafe(sp.getCreatedAt());
+                if (newest == null) {
+                    newest = sp;
+                    newestTime = t;
+                    continue;
+                }
+
+                // ưu tiên có createdAt, và lấy createdAt mới hơn
+                if (newestTime == null && t != null) {
+                    newest = sp;
+                    newestTime = t;
+                } else if (newestTime != null && t != null && t.isAfter(newestTime)) {
+                    newest = sp;
+                    newestTime = t;
+                }
+            }
+
+            if (newest != null) {
+                result.add(newest); // ✅ luôn giữ newest
+            }
+
+            // 2) ✅ nếu có selectedSupplierId trong cùng công ty:
+            //    - nếu selected KHÁC newest => giữ thêm selected
+            //    - nếu selected TRÙNG newest => khỏi add
+            if (selectedId != null) {
+                SupplierProduct selected = null;
+
+                for (SupplierProduct sp : companyList) {
+                    if (sp == null) continue;
+                    if (selectedId.equals(normText(sp.getId()))) {
+                        selected = sp;
+                        break;
+                    }
+                }
+
+                if (selected != null) {
+                    boolean selectedIsNewest = newest != null
+                            && Objects.equals(normText(newest.getId()), normText(selected.getId()));
+
+                    if (!selectedIsNewest) {
+                        result.add(selected);
+                    }
+                }
+            }
+        }
+
+        // 3) ✅ fallback: đảm bảo list trả về có selectedSupplierId nếu nó tồn tại trong input list
+        // (phòng trường hợp normalize company key lệch làm selected không rơi vào group đúng)
+        if (selectedId != null) {
+            boolean hasSelected = result.stream()
+                    .filter(Objects::nonNull)
+                    .anyMatch(x -> selectedId.equals(normText(x.getId())));
+
+            if (!hasSelected) {
+                SupplierProduct selectedObj = suppliers.stream()
+                        .filter(Objects::nonNull)
+                        .filter(x -> selectedId.equals(normText(x.getId())))
+                        .findFirst()
+                        .orElse(null);
+
+                if (selectedObj != null) {
+                    result.add(selectedObj);
+                }
+            }
+        }
+
+        // 4) (Optional) ✅ sort để output giống ví dụ: createdAt DESC (mới nhất lên trước)
+        result.sort((a, b) -> {
+            Instant ta = toInstantSafe(a != null ? a.getCreatedAt() : null);
+            Instant tb = toInstantSafe(b != null ? b.getCreatedAt() : null);
+
+            if (ta == null && tb == null) return 0;
+            if (ta == null) return 1;
+            if (tb == null) return -1;
+            return tb.compareTo(ta); // DESC
+        });
+
+        return result;
+    }
+
+    public SupplierProduct pickBestSupplierProductByLatestPerCompanyThenMinPrice(List<SupplierProduct> suppliers) {
+        if (suppliers == null || suppliers.isEmpty()) return null;
+
+        // 1) Filter: bỏ null + bỏ price null
+        List<SupplierProduct> valid = new ArrayList<>();
+        for (SupplierProduct sp : suppliers) {
+            if (sp == null) continue;
+            if (sp.getPrice() == null) continue;
+            valid.add(sp);
+        }
+        if (valid.isEmpty()) return null;
+
+        // 2) DEDUPE theo tên công ty: giữ record createdAt mới nhất
+        Map<String, SupplierProduct> latestByCompany = new LinkedHashMap<>();
+
+        for (SupplierProduct sp : valid) {
+            String key = normalizeCompanyNameStrong(sp.getSupplierName());
+
+            SupplierProduct existing = latestByCompany.get(key);
+            if (existing == null) {
+                latestByCompany.put(key, sp);
+                continue;
+            }
+
+            Instant eTime = toInstantSafe(existing.getCreatedAt());
+            Instant cTime = toInstantSafe(sp.getCreatedAt());
+
+            SupplierProduct keep;
+            if (eTime == null && cTime == null) {
+                keep = existing;
+            } else if (eTime == null) {
+                keep = sp;
+            } else if (cTime == null) {
+                keep = existing;
+            } else {
+                keep = cTime.isAfter(eTime) ? sp : existing;
+            }
+
+            latestByCompany.put(key, keep);
+
+            // DEBUG dễ nhìn:
+            // System.out.println("[DEDUP] " + key
+            //         + " | existing price=" + existing.getPrice() + " createdAt=" + existing.getCreatedAt()
+            //         + " | new price=" + sp.getPrice() + " createdAt=" + sp.getCreatedAt()
+            //         + " => KEEP price=" + keep.getPrice() + " createdAt=" + keep.getCreatedAt());
+        }
+
+        // 3) So giá giữa các công ty (đã dedupe)
+        SupplierProduct best = null;
+
+        for (SupplierProduct sp : latestByCompany.values()) {
+            if (best == null) {
+                best = sp;
+                continue;
+            }
+
+            int cmpPrice = sp.getPrice().compareTo(best.getPrice());
+            if (cmpPrice < 0) {
+                best = sp;
+            } else if (cmpPrice == 0) {
+                Instant bTime = toInstantSafe(best.getCreatedAt());
+                Instant cTime = toInstantSafe(sp.getCreatedAt());
+
+                // tie giá => lấy createdAt mới nhất
+                if (bTime == null && cTime == null) {
+                    // giữ best
+                } else if (bTime == null) {
+                    best = sp;
+                } else if (cTime == null) {
+                    // giữ best
+                } else if (cTime.isAfter(bTime)) {
+                    best = sp;
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /**
+     * Normalize tên công ty mạnh hơn:
+     * - xử lý NBSP
+     * - normalize unicode
+     * - gộp whitespace
+     * - lowercase
+     */
+    public String normalizeCompanyNameStrong(String supplierName) {
+        if (supplierName == null) return "";
+        String s = supplierName;
+
+        // NBSP -> space
+        s = s.replace('\u00A0', ' ');
+
+        // Unicode normalize
+        s = Normalizer.normalize(s, Normalizer.Form.NFKC);
+
+        // trim + collapse spaces
+        s = s.trim().replaceAll("\\s+", " ");
+
+        return s.toLowerCase();
+    }
+
+    /**
+     * Convert createdAt về Instant an toàn.
+     * Bạn hãy chỉnh type theo thực tế getCreatedAt() của bạn:
+     * - Nếu getCreatedAt() là Instant => return luôn
+     * - Nếu là Date => date.toInstant()
+     * - Nếu là OffsetDateTime/ZonedDateTime => toInstant()
+     * - Nếu là LocalDateTime => assume UTC (hoặc zone của bạn)
+     */
+    public Instant toInstantSafe(Object createdAt) {
+        if (createdAt == null) return null;
+
+        if (createdAt instanceof Instant i) return i;
+        if (createdAt instanceof Date d) return d.toInstant();
+        if (createdAt instanceof OffsetDateTime odt) return odt.toInstant();
+        if (createdAt instanceof ZonedDateTime zdt) return zdt.toInstant();
+        if (createdAt instanceof LocalDateTime ldt) return ldt.toInstant(ZoneOffset.UTC);
+
+        // Nếu lỡ createdAt là String ISO
+        if (createdAt instanceof String s) {
+            try {
+                return OffsetDateTime.parse(s).toInstant();
+            } catch (Exception ignored) {
+                // try LocalDateTime parse nếu không có offset
+                try {
+                    return LocalDateTime.parse(s).toInstant(ZoneOffset.UTC);
+                } catch (Exception ignored2) {
+                    return null;
+                }
+            }
+        }
+
+        // Không biết type => chịu
+        return null;
+    }
+
+    @Transactional
+    public List<RequisitionMonthly> markCompletedAndAutoSelectBestSupplier(
+            List<String> reqIds,
+            String email,
+            String currency
+    ) {
+        if (reqIds == null || reqIds.isEmpty()) return Collections.emptyList();
+        if (email == null || email.trim().isEmpty()) {
+            throw new IllegalArgumentException("email is required and cannot be empty");
+        }
+
+        String emailNorm = email.trim().toLowerCase();
+        LocalDateTime now = LocalDateTime.now();
+
+        // ✅ fetch 1 lần
+        List<RequisitionMonthly> requisitions = requisitionMonthlyRepository.findAllById(reqIds);
+        if (requisitions.isEmpty()) return Collections.emptyList();
+
+        // ✅ currency fallback
+        if (currency == null || currency.isBlank()) {
+            currency = requisitions.stream()
+                    .map(RequisitionMonthly::getCurrency)
+                    .filter(c -> c != null && !c.isBlank())
+                    .findFirst()
+                    .orElse("VND");
+        }
+
+        // ✅ 1 vòng duy nhất trên requisitions:
+        // - FAIL FAST thiếu supplierId
+        // - set completed fields
+        // - autoSelect supplierComparisonList + statusBestPrice
+        for (RequisitionMonthly rm : requisitions) {
+            if (rm.getSupplierId() == null || rm.getSupplierId().trim().isEmpty()) {
+                String desVN = rm.getItemDescriptionVN();
+                String desEN = rm.getItemDescriptionEN();
+
+                String displayName =
+                        (desVN != null && !desVN.trim().isEmpty())
+                                ? desVN.trim()
+                                : ((desEN != null && !desEN.trim().isEmpty()) ? desEN.trim() : "(no description)");
+
+                String displayType =
+                        (desVN != null && !desVN.trim().isEmpty()) ? "Des VN" : "Des EN";
+
+                // bạn muốn trả về requisitionId + desVN/desEN như controller cũ thì ném custom exception cũng được
+                throw new IllegalArgumentException(
+                        displayType + " '" + displayName + "' does not have a supplier assigned, therefore it cannot be completed."
+                );
+            }
+
+            // ✅ set completed luôn trong fun (đỡ 1 loop ở controller)
+            rm.setIsCompleted(true);
+            rm.setCompletedDate(now);
+            rm.setUpdatedDate(now);
+
+            rm.setCompletedByEmail(emailNorm);
+            rm.setUpdatedByEmail(emailNorm);
+
+            rm.setUncompletedByEmail(null);
+
+            // ===== auto-select logic (giữ y như bạn đang có) =====
+            String oldSAPCode = rm.getOldSAPCode();
+            String sapCodeNewSAP = rm.getHanaSAPCode();
+            String itemDescriptionVN = rm.getItemDescriptionVN();
+            String itemDescriptionEN = rm.getItemDescriptionEN();
+            String unit = rm.getUnit();
+            String selectedSupplierId = rm.getSupplierId();
+
+            List<SupplierProduct> suppliers = searchSupplierProductsByPriority(
+                    oldSAPCode,
+                    sapCodeNewSAP,
+                    itemDescriptionVN,
+                    itemDescriptionEN,
+                    unit,
+                    currency,
+                    selectedSupplierId
+            );
+
+            if (suppliers == null || suppliers.isEmpty()) {
+                rm.setSupplierComparisonList(Collections.emptyList());
+                continue;
+            }
+
+            SupplierProduct bestSp = null;
+            for (SupplierProduct sp : suppliers) {
+                if (sp == null || sp.getPrice() == null) continue;
+
+                if (bestSp == null) {
+                    bestSp = sp;
+                    continue;
+                }
+
+                int cmp = sp.getPrice().compareTo(bestSp.getPrice());
+                if (cmp < 0) {
+                    bestSp = sp;
+                } else if (cmp == 0) {
+                    Instant bt = toInstantSafe(bestSp.getCreatedAt());
+                    Instant ct = toInstantSafe(sp.getCreatedAt());
+
+                    if (bt == null && ct != null) bestSp = sp;
+                    else if (bt != null && ct != null && ct.isAfter(bt)) bestSp = sp;
+                }
+            }
+
+            List<CompletedSupplierDTO> comparisonList = suppliers.stream()
+                    .filter(sp -> sp != null && sp.getPrice() != null)
+                    .map(sp -> new CompletedSupplierDTO(
+                            sp.getId(),
+                            sp.getSupplierName(),
+                            sp.getPrice(),
+                            sp.getUnit(),
+                            0,
+                            false
+                    ))
+                    .sorted(Comparator.comparing(CompletedSupplierDTO::getPrice))
+                    .toList();
+
+            if (comparisonList.isEmpty() || bestSp == null || bestSp.getPrice() == null) {
+                rm.setSupplierComparisonList(Collections.emptyList());
+                continue;
+            }
+
+            String bestId = bestSp.getId();
+            for (CompletedSupplierDTO s : comparisonList) {
+                if (s == null) continue;
+
+                String sid = s.getSupplierId();
+                if (sid != null && bestId != null && sid.equals(bestId)) {
+                    s.setIsSelected(1);
+                    s.setIsBestPrice(true);
+                    break;
+                }
+            }
+
+            String currentStatus = rm.getStatusBestPrice();
+            if (currentStatus == null || currentStatus.trim().isEmpty()) {
+                BigDecimal bestPrice = bestSp.getPrice();
+                boolean isCurrentlyBest = rm.getPrice() != null
+                        && bestPrice != null
+                        && rm.getPrice().compareTo(bestPrice) == 0;
+
+                rm.setStatusBestPrice(isCurrentlyBest ? "Yes" : "No");
+            }
+
+            rm.setSupplierComparisonList(comparisonList);
+        }
+
+        // ✅ save 1 lần
+        return requisitionMonthlyRepository.saveAll(requisitions);
+    }
+
 
 }
