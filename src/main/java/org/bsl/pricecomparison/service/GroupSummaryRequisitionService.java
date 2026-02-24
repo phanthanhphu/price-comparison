@@ -147,51 +147,32 @@ public class GroupSummaryRequisitionService {
             String newStatus,
             String userId) {
 
-        // 1. Find the existing group
         GroupSummaryRequisition group = groupSummaryRequisitionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Group not found with ID: " + id));
 
-        // 2. Validate new status is not null/empty
         if (newStatus == null || newStatus.trim().isEmpty()) {
             throw new IllegalArgumentException("New status cannot be empty");
         }
-
         String trimmedStatus = newStatus.trim();
 
-        // 3. Kiểm tra role của user (ADMIN hoặc LEADER)
-        boolean isAdminOrLeader = false;
+        // Chỉ ADMIN mới được quyền
+        boolean isAdmin = false;
         if (userId != null && !userId.isBlank()) {
             Optional<User> userOpt = userService.findById(userId);
             if (userOpt.isPresent()) {
                 String role = userOpt.get().getRole();
-                isAdminOrLeader = "ADMIN".equalsIgnoreCase(role) || "LEADER".equalsIgnoreCase(role);
+                isAdmin = "ADMIN".equalsIgnoreCase(role);
             }
         }
 
-        // 4. CASE ĐẶC BIỆT: Chỉ Admin/Leader mới được chuyển sang COMPLETED
-        if ("COMPLETED".equalsIgnoreCase(trimmedStatus) && !isAdminOrLeader) {
-            throw new IllegalArgumentException(
-                    "Only users with role ADMIN or LEADER are allowed to change status to COMPLETED");
+        if (group.getStatus().equalsIgnoreCase("Completed") && !isAdmin) {
+            throw new IllegalArgumentException("This request has already been completed. If you need to change the status, please contact the administrator."
+            );
         }
 
-        // 5. Với user thường (không phải Admin/Leader) → vẫn phải tuân thủ quy tắc transition
-        if (!isAdminOrLeader) {
-            String currentStatus = group.getStatus();
-            if (currentStatus == null) {
-                throw new IllegalArgumentException("Current status is null for group ID: " + id);
-            }
-            if (!isValidStatusTransition(currentStatus, trimmedStatus)) {
-                throw new IllegalArgumentException(
-                        "Invalid status transition from '" + currentStatus + "' to '" + trimmedStatus + "'");
-            }
-        }
-        // Admin/Leader được bỏ qua transition rule (như cũ)
 
-        // 6. Apply the new status
         group.setStatus(trimmedStatus);
-
-        // 7. Save and return
         GroupSummaryRequisition saved = groupSummaryRequisitionRepository.save(group);
         return Optional.of(saved);
     }
