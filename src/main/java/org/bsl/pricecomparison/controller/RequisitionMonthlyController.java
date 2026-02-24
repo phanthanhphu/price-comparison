@@ -2126,9 +2126,11 @@ public class RequisitionMonthlyController {
             for (ImportRow row : rawRows) {
                 String key = buildMatchKey(row);
                 if (key == null) {
-                    result.warnings.add("Skip row " + row.debugRowNo + " because key fields are empty (old/hana/vn/en).");
+                    result.warnings.add("Skip row " + row.debugRowNo
+                            + " because key fields are empty (old/hana/vn/en).");
                     continue;
                 }
+
                 ImportRow existing = mergedRows.get(key);
                 if (existing == null) {
                     mergedRows.put(key, row);
@@ -2139,10 +2141,25 @@ public class RequisitionMonthlyController {
 
                 // Calculate total request quantity from departments
                 BigDecimal totalRequestQty = row.sumDeptQty();
+                if (totalRequestQty == null) totalRequestQty = BigDecimal.ZERO;
+
                 // Compare daily MED quantity with total request quantity
                 BigDecimal dailyMedInventory = row.dailyMedInventoryQty;
+                if (dailyMedInventory == null) dailyMedInventory = BigDecimal.ZERO;
+
                 if (dailyMedInventory.compareTo(totalRequestQty) > 0) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "The daily MED quantity is greater than the total request quantity."));
+                    // ==== Build detailed item display ====
+                    String itemDisplay = buildItemDisplayForError(row);
+
+                    // (Optional) show chosen key too if you want:
+                    // String matchKey = buildMatchKey(row);
+
+                    String message =
+                            "Row " + row.debugRowNo + " - " + itemDisplay
+                                    + ": Daily MED quantity (" + dailyMedInventory + ") "
+                                    + "is greater than total request quantity (" + totalRequestQty + ").";
+
+                    return ResponseEntity.badRequest().body(Map.of("message", message));
                 }
             }
 
@@ -2192,6 +2209,64 @@ public class RequisitionMonthlyController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Unexpected error: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Ưu tiên hiển thị item để debug:
+     * 1) SAP
+     * 2) HANA
+     * 3) VN
+     * 4) EN
+     * Nếu muốn đẹp hơn, có thể ghép cả tên + code.
+     */
+    private String buildItemDisplayForError(ImportRow row) {
+        if (row == null) return "Unknown item";
+
+        String sap = safeTrim(row.oldSapCode);
+        String hana = safeTrim(row.hanaSapCode);
+        String vn = safeTrim(row.descriptionVN);
+        String en = safeTrim(row.descriptionEN);
+
+        // Helper check NEW (ignore case)
+        boolean sapUsable = sap != null && !sap.equalsIgnoreCase("NEW");
+        boolean hanaUsable = hana != null && !hana.equalsIgnoreCase("NEW");
+
+        // 1️⃣ SAP usable
+        if (sapUsable) {
+            return (vn != null ? vn + " (SAP: " + sap + ")" : "SAP: " + sap);
+        }
+
+        // 2️⃣ HANA usable
+        if (hanaUsable) {
+            return (vn != null ? vn + " (HANA: " + hana + ")" : "HANA: " + hana);
+        }
+
+        // 3️⃣ Fallback VN
+        if (vn != null) {
+            return "Item VN: " + vn;
+        }
+
+        // 4️⃣ Fallback EN
+        if (en != null) {
+            return "Item EN: " + en;
+        }
+
+        return "Unknown item";
+    }
+
+    /**
+     * Nếu fen KHÔNG muốn dùng reflection thì xoá hàm này và gọi trực tiếp row.oldSapCode...
+     * Tui dùng reflection để code chạy được dù field name có khác (nhưng an toàn: fail => null).
+     */
+    private String getStringField(Object obj, String fieldName) {
+        try {
+            var f = obj.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            Object v = f.get(obj);
+            return (v instanceof String) ? (String) v : null;
+        } catch (Exception ignore) {
+            return null;
         }
     }
 
@@ -2990,15 +3065,63 @@ public class RequisitionMonthlyController {
         // ================= LOAD DB DATA (SAME GROUP) =================
         List<RequisitionMonthly> allInDb = requisitionMonthlyRepository.findByGroupId(groupId);
 
-        Set<String> existingKeys = allInDb.stream()
-                .map(CommonRequisitionUtils::buildExistingKeyFromDb)
-                .filter(k -> k != null && !k.isBlank())
-                .collect(Collectors.toSet());
+        // ✅ NEW (fix DB check): build existing deptRowKey set từ TẤT CẢ dept đang có trong DB
+        //    (giữ nguyên logic fail-fast: nếu DB đã có deptRowKey => reject)
+        Set<String> existingKeys = new HashSet<>();
+        if (allInDb != null && !allInDb.isEmpty()) {
+            for (RequisitionMonthly rm : allInDb) {
+                if (rm == null) continue;
+
+                String baseItemKey = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                        rm.getUnit(),
+                        rm.getOldSAPCode(),
+                        rm.getHanaSAPCode(),
+                        rm.getItemDescriptionVN(),
+                        rm.getItemDescriptionEN()
+                );
+                if (baseItemKey == null || baseItemKey.isBlank()) continue;
+
+                List<DepartmentRequisitionMonthly> drs = rm.getDepartmentRequisitions();
+                if (drs == null || drs.isEmpty()) {
+                    // dept null -> "NONE"
+                    existingKeys.add(baseItemKey + "|DEPT|NONE");
+                    continue;
+                }
+
+                for (DepartmentRequisitionMonthly dr : drs) {
+                    String deptName = (dr != null) ? dr.getName() : null;
+                    String deptPart = (deptName == null || deptName.trim().isEmpty())
+                            ? "NONE"
+                            : deptName.trim().toLowerCase();
+                    existingKeys.add(baseItemKey + "|DEPT|" + deptPart);
+                }
+            }
+        }
+
+        // ✅ NEW: map DB theo itemKey (không dept) để seed item cũ vào merge-map khi upload lần sau
+        Map<String, RequisitionMonthly> dbByItemKey = new LinkedHashMap<>();
+        if (allInDb != null && !allInDb.isEmpty()) {
+            for (RequisitionMonthly rm : allInDb) {
+                if (rm == null) continue;
+
+                String k = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                        rm.getUnit(),
+                        rm.getOldSAPCode(),
+                        rm.getHanaSAPCode(),
+                        rm.getItemDescriptionVN(),
+                        rm.getItemDescriptionEN()
+                );
+                if (k == null || k.isBlank()) continue;
+
+                // nếu data bẩn trùng itemKey => giữ cái đầu, không đổi behavior
+                dbByItemKey.putIfAbsent(k, rm);
+            }
+        }
 
         // ✅ merge theo itemKey (không có dept) -> 1 request có nhiều phòng
         Map<String, RequisitionMonthly> mergedByItemKey = new LinkedHashMap<>();
 
-        // ✅ check duplicate theo rowKey có dept
+        // ✅ check duplicate theo rowKey có dept (trong file)
         Set<String> fileDeptKeys = new HashSet<>();
 
         try (InputStream is = file.getInputStream()) {
@@ -3016,7 +3139,6 @@ public class RequisitionMonthlyController {
             final int START_ROW = 8;
 
             // ===== Column indexes (0-based) =====
-
             final int COL_ITEM_VN   = 1;   // B
             final int COL_ITEM_EN   = 2;   // C
             final int COL_OLD_SAP   = 3;   // D
@@ -3115,6 +3237,7 @@ public class RequisitionMonthlyController {
                 }
 
                 // ================= FAIL-FAST DUPLICATE =================
+                // ✅ giữ logic cũ: nếu DB đã có rowKey (deptRowKey) => reject
                 if (existingKeys.contains(rowKey)) {
                     return badRequest(
                             "Row " + (i + 1) +
@@ -3122,6 +3245,7 @@ public class RequisitionMonthlyController {
                     );
                 }
 
+                // ✅ giữ logic cũ: nếu file trùng rowKey => reject
                 if (fileDeptKeys.contains(rowKey)) {
                     return badRequest(
                             "Row " + (i + 1) +
@@ -3167,6 +3291,13 @@ public class RequisitionMonthlyController {
                             if (url != null) imageUrls.add(url);
                         }
                     }
+                }
+
+                // ================= NEW CASE (giống API cũ): DB đã có itemKey => merge thêm phòng vào item đó =================
+                // (chỉ xảy ra khi rowKey chưa tồn tại vì đã fail-fast phía trên)
+                RequisitionMonthly existingItemInDb = dbByItemKey.get(itemKey);
+                if (existingItemInDb != null) {
+                    mergedByItemKey.putIfAbsent(itemKey, existingItemInDb);
                 }
 
                 // ================= CREATE OR MERGE ENTITY (USING SHARED FUNCTION) =================

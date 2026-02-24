@@ -1050,15 +1050,61 @@ public class SummaryRequisitionController {
         List<RequisitionMonthly> allInDb =
                 requisitionMonthlyRepository.findByGroupId(groupId);
 
-        Set<String> existingKeys = allInDb.stream()
-                .map(CommonRequisitionUtils::buildExistingKeyFromDb)
-                .filter(k -> k != null && !k.isBlank())
-                .collect(Collectors.toSet());
+        // ✅ NEW (fix): build existing deptRowKey set từ TẤT CẢ dept trong DB
+        Set<String> existingDeptKeys = new HashSet<>();
+        if (allInDb != null && !allInDb.isEmpty()) {
+            for (RequisitionMonthly rm : allInDb) {
+                if (rm == null) continue;
+
+                String baseItemKey = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                        rm.getUnit(),
+                        rm.getOldSAPCode(),
+                        rm.getHanaSAPCode(),
+                        rm.getItemDescriptionVN(),
+                        rm.getItemDescriptionEN()
+                );
+                if (baseItemKey == null || baseItemKey.isBlank()) continue;
+
+                List<DepartmentRequisitionMonthly> drs = rm.getDepartmentRequisitions();
+                if (drs == null || drs.isEmpty()) {
+                    // dept null -> "NONE" (giữ đúng rule buildRowKeyWithUnitByPriority overload)
+                    existingDeptKeys.add(baseItemKey + "|DEPT|NONE");
+                    continue;
+                }
+
+                for (DepartmentRequisitionMonthly dr : drs) {
+                    String deptName = (dr != null) ? dr.getName() : null;
+                    String d = (deptName == null || deptName.trim().isEmpty())
+                            ? "NONE"
+                            : deptName.trim().toLowerCase();
+                    existingDeptKeys.add(baseItemKey + "|DEPT|" + d);
+                }
+            }
+        }
+
+        // ✅ NEW: map DB theo itemKey (không dept) => để merge thêm phòng vào item đã tồn tại
+        Map<String, RequisitionMonthly> dbByItemKey = new LinkedHashMap<>();
+        if (allInDb != null && !allInDb.isEmpty()) {
+            for (RequisitionMonthly rm : allInDb) {
+                if (rm == null) continue;
+                String k = CommonRequisitionUtils.buildRowKeyWithUnitByPriority(
+                        rm.getUnit(),
+                        rm.getOldSAPCode(),
+                        rm.getHanaSAPCode(),
+                        rm.getItemDescriptionVN(),
+                        rm.getItemDescriptionEN()
+                );
+                if (k == null || k.isBlank()) continue;
+                // nếu data bẩn trùng itemKey => giữ cái đầu, không thay đổi behavior
+                dbByItemKey.putIfAbsent(k, rm);
+            }
+        }
 
         // ✅ merge theo itemKey (không có dept) -> 1 request có nhiều phòng
+        // NOTE: map này sẽ chứa cả item mới từ file + item cũ từ DB (khi cần merge)
         Map<String, RequisitionMonthly> mergedByItemKey = new LinkedHashMap<>();
 
-        // ✅ check duplicate theo rowKey có dept
+        // ✅ check duplicate theo rowKey có dept (trong file)
         Set<String> fileDeptKeys = new HashSet<>();
 
         try (InputStream is = file.getInputStream()) {
@@ -1152,13 +1198,15 @@ public class SummaryRequisitionController {
                 }
 
                 // ================= FAIL-FAST DUPLICATE (PER-DEPT) =================
-                if (existingKeys.contains(deptRowKey)) {
+                // ✅ giữ y chang logic: nếu DB đã có đúng deptRowKey => reject
+                if (existingDeptKeys.contains(deptRowKey)) {
                     return badRequest(
                             "Row " + (i + 1) +
                                     ": Duplicate record exists in this group with key = " + deptRowKey
                     );
                 }
 
+                // ✅ giữ y chang logic: nếu file trùng deptRowKey => reject
                 if (fileDeptKeys.contains(deptRowKey)) {
                     return badRequest(
                             "Row " + (i + 1) +
@@ -1204,6 +1252,14 @@ public class SummaryRequisitionController {
                     }
                 }
 
+                // ================= NEW CASE: DB đã có item theo itemKey => merge thêm phòng vào item đó =================
+                // (chỉ xảy ra khi deptRowKey chưa tồn tại vì đã fail-fast phía trên)
+                RequisitionMonthly existingItemInDb = dbByItemKey.get(itemKey);
+                if (existingItemInDb != null) {
+                    // seed item DB vào map để upsertMergedRequisition merge thẳng vào entity DB
+                    mergedByItemKey.putIfAbsent(itemKey, existingItemInDb);
+                }
+
                 // ================= CREATE OR MERGE ENTITY (USING SHARED FUNCTION) =================
                 commonRequisitionUtils.upsertMergedRequisition(
                         mergedByItemKey,
@@ -1221,7 +1277,7 @@ public class SummaryRequisitionController {
                         deptNameFromDb,
                         reason,
                         imageUrls,
-                        groupCurrency             // ✅ row6 API không set currency từ group (giữ behavior cũ)
+                        groupCurrency
                 );
             }
 
@@ -1231,6 +1287,9 @@ public class SummaryRequisitionController {
 
             List<RequisitionMonthly> requisitions = new ArrayList<>(mergedByItemKey.values());
 
+            // vẫn saveAll như cũ:
+            // - item mới => insert
+            // - item đã seed từ DB => update (merge dept + totals)
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(requisitionMonthlyRepository.saveAll(requisitions));
 
@@ -1249,12 +1308,6 @@ public class SummaryRequisitionController {
 
     private boolean isUsableKey(String v) {
         return v != null && !v.trim().isEmpty() && !"NEW".equalsIgnoreCase(v.trim());
-    }
-
-    private String safeTrimLower(String v) {
-        if (v == null) return null;
-        String t = v.trim();
-        return t.isEmpty() ? null : t.toLowerCase();
     }
 
     private ResponseEntity<List<RequisitionMonthly>> badRequest(String message) {
