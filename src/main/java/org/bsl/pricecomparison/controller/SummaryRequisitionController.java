@@ -276,7 +276,7 @@ public class SummaryRequisitionController {
             summary.setType(RequisitionType.WEEKLY);
             summary.setCreatedAt(LocalDateTime.now());
             summary.setUpdatedAt(LocalDateTime.now());
-
+            summary.setUnit(request.getUnit());
             try {
                 RequisitionMonthly monthly = buildRequisitionMonthly(summary, request, deptList, imageUrls);
 
@@ -329,6 +329,7 @@ public class SummaryRequisitionController {
         monthly.setType(RequisitionType.WEEKLY);
         monthly.setCreatedDate(LocalDateTime.now());
         monthly.setUpdatedDate(LocalDateTime.now());
+        monthly.setUnit(summary.getUnit());
 
         // === SUPPLIER ===
         if (request.getSupplierId() != null && !request.getSupplierId().isEmpty()) {

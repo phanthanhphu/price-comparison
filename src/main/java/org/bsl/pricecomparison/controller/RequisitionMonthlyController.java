@@ -3366,6 +3366,236 @@ public class RequisitionMonthlyController {
         return null;
     }
 
+//    @PatchMapping("/requisition-monthly/auto-supplier/by-group")
+//    @Transactional
+//    public ResponseEntity<?> autoUpdateSupplierByGroup(
+//            @RequestParam("groupId") String groupId,
+//            @RequestParam("email") String email
+//    ) {
+//        try {
+//            if (groupId == null || groupId.isBlank()) {
+//                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+//                        .body(Map.of("message", "groupId is required"));
+//            }
+//            if (email == null || email.isBlank()) {
+//                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+//                        .body(Map.of("message", "email is required"));
+//            }
+//
+//            List<RequisitionMonthly> reqList = requisitionMonthlyRepository.findByGroupId(groupId);
+//            if (reqList == null || reqList.isEmpty()) {
+//                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+//                        "message", "No requisitions found for groupId: " + groupId,
+//                        "groupId", groupId
+//                ));
+//            }
+//
+//            int total = reqList.size();
+//            int updated = 0;
+//
+//            int skippedAlreadyHasSupplier = 0;
+//            int skippedNoKey = 0;
+//            int skippedNoUnit = 0;
+//            int skippedNoSupplier = 0;
+//            int skippedAllNullPrice = 0;
+//
+//            List<Map<String, Object>> details = new ArrayList<>();
+//
+//            for (RequisitionMonthly req : reqList) {
+//                try {
+//                    // ===== currency: used for filter (default VND) =====
+//                    String currency = safeTrim(req.getCurrency());
+//                    if (currency == null) currency = "VND";
+//
+//                    // ===== SKIP: already selected supplier =====
+//                    String existingSupplierId = safeTrim(req.getSupplierId());
+//                    if (existingSupplierId != null) {
+//                        skippedAlreadyHasSupplier++;
+//                        details.add(makeDetail(req.getId(), "SKIP_ALREADY_HAS_SUPPLIER", existingSupplierId, 0, currency, safeTrim(req.getUnit())));
+//                        continue;
+//                    }
+//
+//                    // ===== unit: REQUIRED =====
+//                    String unit = safeTrim(req.getUnit());
+//                    if (unit == null) {
+//                        skippedNoUnit++;
+//                        details.add(makeDetail(req.getId(), "SKIP_NO_UNIT", null, 0, currency, null));
+//                        continue;
+//                    }
+//
+//                    // ===== get fields for cascade keyword rule =====
+//                    String sapCode  = normalizeNew(safeTrim(req.getOldSAPCode()));   // null / "NEW" / value
+//                    String hanaCode = normalizeNew(safeTrim(req.getHanaSAPCode()));  // null / "NEW" / value
+//                    String desVn    = safeTrim(req.getItemDescriptionVN());
+//                    String desEn    = safeTrim(req.getItemDescriptionEN());
+//
+//                    // ===== CASCADE PICK keyword: SAP -> HANA -> VN -> EN =====
+//                    String keyword = null;
+//                    int searchMode = 0; // 1=sap, 2=hana, 3=desVn, 4=desEn
+//
+//                    if (isUsableKey(sapCode)) {
+//                        keyword = sapCode;
+//                        searchMode = 1;
+//                    } else if (isUsableKey(hanaCode)) {
+//                        keyword = hanaCode;
+//                        searchMode = 2;
+//                    } else if (desVn != null && !desVn.isBlank()) {
+//                        keyword = desVn;
+//                        searchMode = 3;
+//                    } else if (desEn != null && !desEn.isBlank()) {
+//                        keyword = desEn;
+//                        searchMode = 4;
+//                    }
+//
+//                    if (keyword == null || keyword.isBlank()) {
+//                        skippedNoKey++;
+//                        details.add(makeDetail(req.getId(), "SKIP_NO_KEY", null, 0, currency, unit));
+//                        continue;
+//                    }
+//
+//                    // ===== SEARCH: keyword + unit + currency =====
+//                    List<SupplierProduct> suppliers;
+//
+//                    if (searchMode == 1) {
+//                        suppliers = supplierProductRepository
+//                                .findBySapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
+//                    } else if (searchMode == 2) {
+//                        suppliers = supplierProductRepository
+//                                .findByHanaSapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
+//                    } else if (searchMode == 3) {
+//                        suppliers = supplierProductRepository
+//                                .findByItemDescriptionVNContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
+//                    } else {
+//                        suppliers = supplierProductRepository
+//                                .findByItemDescriptionENContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
+//                    }
+//
+//                    if (suppliers == null || suppliers.isEmpty()) {
+//                        skippedNoSupplier++;
+//                        details.add(makeDetail(req.getId(), "SKIP_NO_SUPPLIER", keyword, searchMode, currency, unit));
+//                        continue;
+//                    }
+//
+//                    // ===== pick best (NEW RULE):
+//                    SupplierProduct best = commonRequisitionUtils.pickBestSupplierProductByLatestPerCompanyThenMinPrice(suppliers);
+//
+//                    if (best == null) {
+//                        skippedAllNullPrice++;
+//                        details.add(makeDetail(req.getId(), "SKIP_ALL_NULL_PRICE", keyword, searchMode, currency, unit));
+//                        continue;
+//                    }
+//
+//                    // ===== update requisition supplier fields =====
+//                    req.setSupplierId(best.getId());
+//                    req.setSupplierName(best.getSupplierName());
+//
+//                    req.setPrice(best.getPrice() != null ? best.getPrice() : BigDecimal.ZERO);
+//                    req.setGoodType(best.getGoodType() != null ? best.getGoodType() : "");
+//
+//                    req.setCurrency(best.getCurrency() != null && !best.getCurrency().isBlank()
+//                            ? best.getCurrency()
+//                            : currency);
+//
+//                    req.setProductType1Id(best.getProductType1Id());
+//                    req.setProductType2Id(best.getProductType2Id());
+//
+//                    // ===== SYNC BACK item codes/descriptions by searchMode =====
+//                    // NOTE: normalize NEW => "NEW" (case-insensitive)
+//                    String spSap  = normalizeNew(safeTrim(best.getSapCode()));
+//                    String spHana = normalizeNew(safeTrim(best.getHanaSapCode()));
+//                    String spVn   = safeTrim(best.getItemDescriptionVN());
+//                    String spEn   = safeTrim(best.getItemDescriptionEN());
+//
+//                    if (searchMode == 1) {
+//                        // 1) search by SAP => update hana + desVN + desEN from supplier
+//                        req.setHanaSAPCode(spHana);
+//                        req.setItemDescriptionVN(spVn);
+//                        req.setItemDescriptionEN(spEn);
+//                        // oldSAP giữ nguyên (đang search bằng sap)
+//                        // req.setOldSAPCode(req.getOldSAPCode());
+//                    } else if (searchMode == 2) {
+//                        // 2) search by HANA => update sap + desVN + desEN
+//                        req.setOldSAPCode(spSap);
+//                        req.setItemDescriptionVN(spVn);
+//                        req.setItemDescriptionEN(spEn);
+//                        // hana giữ nguyên (đang search bằng hana)
+//                    } else if (searchMode == 3) {
+//                        // 3) search by DES VN => update oldSAP + hana + desEN
+//                        req.setOldSAPCode(spSap);
+//                        req.setHanaSAPCode(spHana);
+//                        req.setItemDescriptionEN(spEn);
+//                        // desVN giữ nguyên (đang search theo desVN)
+//                    } else if (searchMode == 4) {
+//                        // 4) search by DES EN => update oldSAP + hana + desVN
+//                        req.setOldSAPCode(spSap);
+//                        req.setHanaSAPCode(spHana);
+//                        req.setItemDescriptionVN(spVn);
+//                        // desEN giữ nguyên (đang search theo desEN)
+//                    }
+//
+//                    // ===== amount =====
+//                    BigDecimal orderQty = req.getOrderQty() != null
+//                            ? req.getOrderQty()
+//                            : (req.getDailyMedInventory() != null ? req.getDailyMedInventory() : BigDecimal.ZERO);
+//
+//                    BigDecimal price = req.getPrice() != null ? req.getPrice() : BigDecimal.ZERO;
+//                    req.setAmount(price.multiply(orderQty));
+//
+//                    req.setUpdatedByEmail(email);
+//                    req.setUpdatedDate(LocalDateTime.now());
+//
+//                    requisitionMonthlyRepository.save(req);
+//                    updated++;
+//
+//                    // details UPDATED
+//                    Map<String, Object> d = new LinkedHashMap<>();
+//                    d.put("requisitionId", req.getId());
+//                    d.put("status", "UPDATED");
+//                    d.put("searchMode", searchMode);
+//                    d.put("keyword", keyword);
+//                    d.put("unit", unit);
+//                    d.put("currency", currency);
+//                    d.put("pickedSupplierId", best.getId());
+//                    d.put("pickedSupplierName", best.getSupplierName());
+//                    d.put("pickedPrice", best.getPrice());
+//                    d.put("pickedCreatedAt", best.getCreatedAt());
+//
+//                    // log sync back
+//                    d.put("syncedOldSap", req.getOldSAPCode());
+//                    d.put("syncedHana", req.getHanaSAPCode());
+//                    d.put("syncedDesVn", req.getItemDescriptionVN());
+//                    d.put("syncedDesEn", req.getItemDescriptionEN());
+//
+//                    details.add(d);
+//
+//                } catch (Exception perItemEx) {
+//                    Map<String, Object> d = new LinkedHashMap<>();
+//                    d.put("requisitionId", req.getId());
+//                    d.put("status", "ERROR");
+//                    d.put("error", perItemEx.getMessage());
+//                    details.add(d);
+//                }
+//            }
+//
+//            return ResponseEntity.ok(Map.of(
+//                    "message", "Batch auto supplier completed",
+//                    "groupId", groupId,
+//                    "total", total,
+//                    "updated", updated,
+//                    "skippedAlreadyHasSupplier", skippedAlreadyHasSupplier,
+//                    "skippedNoUnit", skippedNoUnit,
+//                    "skippedNoKey", skippedNoKey,
+//                    "skippedNoSupplier", skippedNoSupplier,
+//                    "skippedAllNullPrice", skippedAllNullPrice,
+//                    "details", details
+//            ));
+//
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+//                    .body(Map.of("message", "Unexpected error: " + e.getMessage()));
+//        }
+//    }
     @PatchMapping("/requisition-monthly/auto-supplier/by-group")
     @Transactional
     public ResponseEntity<?> autoUpdateSupplierByGroup(
@@ -3381,7 +3611,6 @@ public class RequisitionMonthlyController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body(Map.of("message", "email is required"));
             }
-
             List<RequisitionMonthly> reqList = requisitionMonthlyRepository.findByGroupId(groupId);
             if (reqList == null || reqList.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
@@ -3389,50 +3618,52 @@ public class RequisitionMonthlyController {
                         "groupId", groupId
                 ));
             }
-
             int total = reqList.size();
             int updated = 0;
-
             int skippedAlreadyHasSupplier = 0;
             int skippedNoKey = 0;
             int skippedNoUnit = 0;
             int skippedNoSupplier = 0;
             int skippedAllNullPrice = 0;
-
             List<Map<String, Object>> details = new ArrayList<>();
-
             for (RequisitionMonthly req : reqList) {
                 try {
                     // ===== currency: used for filter (default VND) =====
                     String currency = safeTrim(req.getCurrency());
-                    if (currency == null) currency = "VND";
+                    if (currency == null || currency.isBlank()) {
+                        currency = "VND";
+                    }
 
                     // ===== SKIP: already selected supplier =====
                     String existingSupplierId = safeTrim(req.getSupplierId());
-                    if (existingSupplierId != null) {
+                    if (existingSupplierId != null && !existingSupplierId.isBlank()) {
                         skippedAlreadyHasSupplier++;
-                        details.add(makeDetail(req.getId(), "SKIP_ALREADY_HAS_SUPPLIER", existingSupplierId, 0, currency, safeTrim(req.getUnit())));
+                        details.add(makeDetail(
+                                req.getId(),
+                                "SKIP_ALREADY_HAS_SUPPLIER",
+                                existingSupplierId,
+                                0,
+                                currency,
+                                safeTrim(req.getUnit())
+                        ));
                         continue;
                     }
 
                     // ===== unit: REQUIRED =====
                     String unit = safeTrim(req.getUnit());
-                    if (unit == null) {
+                    if (unit == null || unit.isBlank()) {
                         skippedNoUnit++;
                         details.add(makeDetail(req.getId(), "SKIP_NO_UNIT", null, 0, currency, null));
                         continue;
                     }
-
                     // ===== get fields for cascade keyword rule =====
-                    String sapCode  = normalizeNew(safeTrim(req.getOldSAPCode()));   // null / "NEW" / value
-                    String hanaCode = normalizeNew(safeTrim(req.getHanaSAPCode()));  // null / "NEW" / value
+                    String sapCode  = normalizeNew(safeTrim(req.getOldSAPCode()));
+                    String hanaCode = normalizeNew(safeTrim(req.getHanaSAPCode()));
                     String desVn    = safeTrim(req.getItemDescriptionVN());
                     String desEn    = safeTrim(req.getItemDescriptionEN());
-
                     // ===== CASCADE PICK keyword: SAP -> HANA -> VN -> EN =====
                     String keyword = null;
-                    int searchMode = 0; // 1=sap, 2=hana, 3=desVn, 4=desEn
-
+                    int searchMode = 0;
                     if (isUsableKey(sapCode)) {
                         keyword = sapCode;
                         searchMode = 1;
@@ -3446,16 +3677,13 @@ public class RequisitionMonthlyController {
                         keyword = desEn;
                         searchMode = 4;
                     }
-
                     if (keyword == null || keyword.isBlank()) {
                         skippedNoKey++;
                         details.add(makeDetail(req.getId(), "SKIP_NO_KEY", null, 0, currency, unit));
                         continue;
                     }
-
                     // ===== SEARCH: keyword + unit + currency =====
                     List<SupplierProduct> suppliers;
-
                     if (searchMode == 1) {
                         suppliers = supplierProductRepository
                                 .findBySapCodeIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
@@ -3469,14 +3697,12 @@ public class RequisitionMonthlyController {
                         suppliers = supplierProductRepository
                                 .findByItemDescriptionENContainingIgnoreCaseAndUnitIgnoreCaseAndCurrencyIgnoreCase(keyword, unit, currency);
                     }
-
-                    if (suppliers == null || suppliers.isEmpty()) {
+                    if (suppliers.isEmpty()) {
                         skippedNoSupplier++;
                         details.add(makeDetail(req.getId(), "SKIP_NO_SUPPLIER", keyword, searchMode, currency, unit));
                         continue;
                     }
-
-                    // ===== pick best (NEW RULE):
+                    // ===== pick best =====
                     SupplierProduct best = commonRequisitionUtils.pickBestSupplierProductByLatestPerCompanyThenMinPrice(suppliers);
 
                     if (best == null) {
@@ -3484,59 +3710,45 @@ public class RequisitionMonthlyController {
                         details.add(makeDetail(req.getId(), "SKIP_ALL_NULL_PRICE", keyword, searchMode, currency, unit));
                         continue;
                     }
-
-                    // ===== update requisition supplier fields =====
+                    // ===== update supplier fields =====
                     req.setSupplierId(best.getId());
                     req.setSupplierName(best.getSupplierName());
-
                     req.setPrice(best.getPrice() != null ? best.getPrice() : BigDecimal.ZERO);
                     req.setGoodType(best.getGoodType() != null ? best.getGoodType() : "");
-
                     req.setCurrency(best.getCurrency() != null && !best.getCurrency().isBlank()
-                            ? best.getCurrency()
-                            : currency);
-
+                                    ? best.getCurrency()
+                                    : currency);
                     req.setProductType1Id(best.getProductType1Id());
                     req.setProductType2Id(best.getProductType2Id());
-
-                    // ===== SYNC BACK item codes/descriptions by searchMode =====
-                    // NOTE: normalize NEW => "NEW" (case-insensitive)
+                    // ===== SYNC BACK item info (KHÔNG override field đang search) =====
                     String spSap  = normalizeNew(safeTrim(best.getSapCode()));
                     String spHana = normalizeNew(safeTrim(best.getHanaSapCode()));
                     String spVn   = safeTrim(best.getItemDescriptionVN());
                     String spEn   = safeTrim(best.getItemDescriptionEN());
-
                     if (searchMode == 1) {
-                        // 1) search by SAP => update hana + desVN + desEN from supplier
                         req.setHanaSAPCode(spHana);
                         req.setItemDescriptionVN(spVn);
                         req.setItemDescriptionEN(spEn);
-                        // oldSAP giữ nguyên (đang search bằng sap)
-                        // req.setOldSAPCode(req.getOldSAPCode());
                     } else if (searchMode == 2) {
-                        // 2) search by HANA => update sap + desVN + desEN
                         req.setOldSAPCode(spSap);
                         req.setItemDescriptionVN(spVn);
                         req.setItemDescriptionEN(spEn);
-                        // hana giữ nguyên (đang search bằng hana)
                     } else if (searchMode == 3) {
-                        // 3) search by DES VN => update oldSAP + hana + desEN
                         req.setOldSAPCode(spSap);
                         req.setHanaSAPCode(spHana);
                         req.setItemDescriptionEN(spEn);
-                        // desVN giữ nguyên (đang search theo desVN)
                     } else if (searchMode == 4) {
-                        // 4) search by DES EN => update oldSAP + hana + desVN
                         req.setOldSAPCode(spSap);
                         req.setHanaSAPCode(spHana);
                         req.setItemDescriptionVN(spVn);
-                        // desEN giữ nguyên (đang search theo desEN)
                     }
 
                     // ===== amount =====
                     BigDecimal orderQty = req.getOrderQty() != null
                             ? req.getOrderQty()
-                            : (req.getDailyMedInventory() != null ? req.getDailyMedInventory() : BigDecimal.ZERO);
+                            : (req.getDailyMedInventory() != null
+                            ? req.getDailyMedInventory()
+                            : BigDecimal.ZERO);
 
                     BigDecimal price = req.getPrice() != null ? req.getPrice() : BigDecimal.ZERO;
                     req.setAmount(price.multiply(orderQty));
@@ -3546,8 +3758,6 @@ public class RequisitionMonthlyController {
 
                     requisitionMonthlyRepository.save(req);
                     updated++;
-
-                    // details UPDATED
                     Map<String, Object> d = new LinkedHashMap<>();
                     d.put("requisitionId", req.getId());
                     d.put("status", "UPDATED");
@@ -3559,15 +3769,11 @@ public class RequisitionMonthlyController {
                     d.put("pickedSupplierName", best.getSupplierName());
                     d.put("pickedPrice", best.getPrice());
                     d.put("pickedCreatedAt", best.getCreatedAt());
-
-                    // log sync back
                     d.put("syncedOldSap", req.getOldSAPCode());
                     d.put("syncedHana", req.getHanaSAPCode());
                     d.put("syncedDesVn", req.getItemDescriptionVN());
                     d.put("syncedDesEn", req.getItemDescriptionEN());
-
                     details.add(d);
-
                 } catch (Exception perItemEx) {
                     Map<String, Object> d = new LinkedHashMap<>();
                     d.put("requisitionId", req.getId());
@@ -3576,7 +3782,6 @@ public class RequisitionMonthlyController {
                     details.add(d);
                 }
             }
-
             return ResponseEntity.ok(Map.of(
                     "message", "Batch auto supplier completed",
                     "groupId", groupId,
